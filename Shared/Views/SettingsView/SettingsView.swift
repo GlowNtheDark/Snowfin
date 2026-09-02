@@ -137,7 +137,7 @@ struct SettingsView: View {
             }
         } learnMore: {
             LabeledContent(
-                L10n.swiftfin,
+                L10n.applicationBrand,
                 value: L10n.playerSwiftfinDescription
             )
             LabeledContent(

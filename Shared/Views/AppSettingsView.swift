@@ -59,7 +59,7 @@ struct AppSettingsView: View {
     var body: some View {
         Form(image: .jellyfinBlobBlue) {
 
-            Section(L10n.swiftfin) {
+            Section(L10n.applicationBrand) {
                 ChevronButton(L10n.about) {
                     router.route(to: .aboutApp)
                 }
@@ -114,7 +114,7 @@ struct AppSettingsView: View {
             Section {
                 Toggle(L10n.signoutClose, isOn: $signOutOnClose)
             } footer: {
-                Text(L10n.signoutCloseFooter)
+                Text(L10n.applicationBranded(L10n.signoutCloseFooter))
             }
 
             Section {
@@ -124,7 +124,7 @@ struct AppSettingsView: View {
                     HourMinutePicker(title: L10n.duration, interval: $backgroundSignOutInterval)
                 }
             } footer: {
-                Text(L10n.signoutBackgroundFooter)
+                Text(L10n.applicationBranded(L10n.signoutBackgroundFooter))
             }
 
             ChevronButton(L10n.logs) {

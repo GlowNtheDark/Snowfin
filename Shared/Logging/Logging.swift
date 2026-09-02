@@ -12,7 +12,11 @@ import Logging
 extension Logger {
 
     static func swiftfin() -> Logger {
+        #if os(tvOS)
+        Logger(label: "com.snowfin.tvos")
+        #else
         Logger(label: "org.jellyfin.swiftfin")
+        #endif
     }
 }
 

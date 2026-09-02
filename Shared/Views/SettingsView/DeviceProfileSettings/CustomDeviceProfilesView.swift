@@ -76,12 +76,12 @@ struct CustomDeviceProfilesView: View {
         } learnMore: {
             LabeledContent(
                 L10n.add,
-                value: L10n.customDeviceProfileAdd
+                value: L10n.applicationBranded(L10n.customDeviceProfileAdd)
             )
 
             LabeledContent(
                 L10n.replace,
-                value: L10n.customDeviceProfileReplace
+                value: L10n.applicationBranded(L10n.customDeviceProfileReplace)
             )
         }
     }
