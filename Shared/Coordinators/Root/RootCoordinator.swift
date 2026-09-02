@@ -94,6 +94,10 @@ final class RootCoordinator: ObservableObject {
         appearanceCancellable?.cancel()
         splashScreenCancellable?.cancel()
 
+        #if os(tvOS)
+        migrateLegacyAccentColorIfNeeded()
+        #endif
+
         accentColorCancellable = Task {
             applyAccentColor(Defaults[.userAccentColor])
 
@@ -119,7 +123,7 @@ final class RootCoordinator: ObservableObject {
         splashScreenCancellable?.cancel()
 
         accentColorCancellable = Task {
-            applyAccentColor(.jellyfinPurple)
+            applyAccentColor(.applicationDefaultAccent)
         }
         .asAnyCancellable()
 
@@ -150,6 +154,14 @@ final class RootCoordinator: ObservableObject {
         UIApplication.shared.setAccentColor(color.uiColor)
         #endif
     }
+
+    #if os(tvOS)
+    private func migrateLegacyAccentColorIfNeeded() {
+        guard Defaults[.userAccentColor].isLegacyJellyfinPurple else { return }
+
+        Defaults[.userAccentColor] = .snowfinIceBlue
+    }
+    #endif
 
     @MainActor
     private func applyAppearance(_ appearance: AppAppearance) {

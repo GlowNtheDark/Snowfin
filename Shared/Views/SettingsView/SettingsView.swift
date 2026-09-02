@@ -35,7 +35,24 @@ struct SettingsView: View {
 
     // MARK: - Body
 
+    @ViewBuilder
     var body: some View {
+        #if os(tvOS)
+        Form {
+            serverSection
+            videoPlayerSection
+            customizeSection
+            diagnosticsSection
+        } image: {
+            Image(.snowfinTvOSMark)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: 400)
+        }
+        .background {
+            SnowfinSettingsBackground()
+        }
+        #else
         Form(image: .jellyfinBlobBlue) {
             serverSection
             videoPlayerSection
@@ -47,6 +64,7 @@ struct SettingsView: View {
         .navigationBarCloseButton {
             router.dismiss()
         }
+        #endif
         #endif
     }
 
@@ -192,3 +210,26 @@ struct SettingsView: View {
         }
     }
 }
+
+#if os(tvOS)
+private struct SnowfinSettingsBackground: View {
+
+    var body: some View {
+        ZStack {
+            Color.snowfinDeepNavy
+
+            RadialGradient(
+                colors: [
+                    Color.snowfinIceBlue.opacity(0.14),
+                    Color.clear,
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 900
+            )
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+}
+#endif

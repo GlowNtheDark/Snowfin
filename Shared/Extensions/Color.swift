@@ -12,6 +12,28 @@ extension Color {
 
     static let jellyfinPurple = Color(red: 172 / 255, green: 92 / 255, blue: 195 / 255, opacity: 1)
 
+    #if os(tvOS)
+    static let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255, opacity: 1)
+    static let snowfinDeepNavy = Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255, opacity: 1)
+
+    var isLegacyJellyfinPurple: Bool {
+        let components = rgbaComponents
+
+        return Int((components.red * 255).rounded()) == 172 &&
+            Int((components.green * 255).rounded()) == 92 &&
+            Int((components.blue * 255).rounded()) == 195 &&
+            Int((components.alpha * 255).rounded()) == 255
+    }
+    #endif
+
+    static var applicationDefaultAccent: Color {
+        #if os(tvOS)
+        snowfinIceBlue
+        #else
+        jellyfinPurple
+        #endif
+    }
+
     var uiColor: UIColor {
         UIColor(self)
     }
