@@ -367,6 +367,20 @@ extension Defaults.Keys {
             }
         }
 
+        enum Segments {
+            static var introBehavior: Key<SnowfinIntroBehavior> {
+                UserKey("snowfinIntroBehavior", default: .showSkipButton)
+            }
+
+            static var creditsBehavior: Key<SnowfinCreditsBehavior> {
+                UserKey("snowfinCreditsBehavior", default: .showNextEpisode)
+            }
+
+            static var countdownDuration: Key<SnowfinAutoplayCountdownDuration> {
+                UserKey("snowfinAutoplayCountdownDuration", default: .ten)
+            }
+        }
+
         enum Subtitle {
 
             static var configuration: Key<SubtitleConfiguration> {

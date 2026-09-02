@@ -12,6 +12,11 @@ extension VideoPlayer.PlaybackControls {
 
     func handlePressEvent(_ press: VideoPlayer.UIVideoPlayerContainerViewController.PressEvent) {
 
+        if containerState.isPresentingSegmentOverlay {
+            press.resolve(.fallback)
+            return
+        }
+
         if !containerState.isPresentingOverlay {
             containerState.isPresentingOverlay = true
             press.resolve(.handled)

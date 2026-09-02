@@ -53,8 +53,17 @@ struct VideoPlayer: View {
         } playbackControls: {
             PlaybackControls()
         }
+        .overlay {
+            #if os(tvOS)
+            SnowfinPlaybackSegmentOverlay(
+                coordinator: manager.snowfinSegmentCoordinator,
+                containerState: containerState
+            )
+            #endif
+        }
         .onAppear {
             manager.proxy = proxy
+            manager.snowfinSegmentCoordinator.prepare(for: manager.playbackItem)
             manager.start()
         }
         .prefersStatusBarHidden(!containerState.isPresentingOverlay)

@@ -77,16 +77,16 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             .store(in: &cancellables)
     }
 
-    private func endPlaybackSession() {
+    private func endPlaybackSession(seconds: Duration? = nil) {
         guard let item else { return }
-        sendStopReport(for: item, seconds: manager?.seconds)
+        sendStopReport(for: item, seconds: seconds ?? manager?.seconds)
     }
 
     private func playbackItemDidChange(_ newItem: MediaPlayerItem?) {
         timer.poke()
 
         if let item, newItem !== item {
-            endPlaybackSession()
+            endPlaybackSession(seconds: manager?.previousItemStopSecondsOverride)
             self.item = newItem
             self.hasSentStart = false
             sendReport()

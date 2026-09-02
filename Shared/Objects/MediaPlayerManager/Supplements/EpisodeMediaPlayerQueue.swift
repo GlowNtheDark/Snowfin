@@ -76,7 +76,16 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
                 self.hasPreviousItem = false
             }
 
-            try await self.getAdjacentEpisodes(for: newItem?.baseItem)
+            do {
+                try await self.getAdjacentEpisodes(for: newItem?.baseItem)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.logResolution(
+                    current: newItem?.baseItem,
+                    successor: nil,
+                    detail: "request failed: \(error.localizedDescription)"
+                )
+            }
         }
         .asAnyCancellable()
     }
@@ -93,31 +102,36 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
         let request = Paths.getEpisodes(seriesID: seriesID, parameters: parameters)
         let response = try await send(request)
 
-        // 4 possible states:
-        //  1 - only current episode
-        //  2 - two episodes with next episode
-        //  3 - two episodes with previous episode
-        //  4 - three episodes with current in middle
-
-        // 1
-        guard let items = response.value.items, items.count > 1 else { return }
-
-        var previousItem: BaseItemDto?
-        var nextItem: BaseItemDto?
-
-        if items.count == 2 {
-            if items[0].id == item.id {
-                // 2
-                nextItem = items[1]
-
-            } else {
-                // 3
-                previousItem = items[0]
-            }
-        } else {
-            nextItem = items[2]
-            previousItem = items[0]
+        let items = response.value.items ?? []
+        let currentIndex = items.firstIndex { $0.id == item.id }
+        let previousItem = currentIndex.flatMap { index in
+            index > items.startIndex ? items[items.index(before: index)] : nil
         }
+        var nextItem = currentIndex.flatMap { index in
+            let nextIndex = items.index(after: index)
+            return nextIndex < items.endIndex ? items[nextIndex] : nil
+        }
+
+        if nextItem?.isPlayable != true {
+            let fallbackParameters = try Paths.GetEpisodesParameters(
+                userID: authenticatedUser.id,
+                startItemID: item.id,
+                enableUserData: true
+            )
+            let fallbackRequest = Paths.getEpisodes(seriesID: seriesID, parameters: fallbackParameters)
+            let fallbackResponse = try await send(fallbackRequest)
+            let remainingItems = fallbackResponse.value.items ?? []
+
+            nextItem = remainingItems.first {
+                $0.id != item.id && $0.type == .episode && $0.isPlayable
+            }
+        }
+
+        logResolution(
+            current: item,
+            successor: nextItem,
+            detail: nextItem == nil ? "none" : "Jellyfin series ordering"
+        )
 
         var nextProvider: MediaPlayerItemProvider?
         var previousProvider: MediaPlayerItemProvider?
@@ -145,11 +159,29 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
         guard !Task.isCancelled else { return }
 
         await MainActor.run {
+            guard self.manager?.playbackItem?.baseItem.id == item.id else { return }
             self.nextItem = nextProvider
             self.previousItem = previousProvider
             self.hasNextItem = nextProvider != nil
             self.hasPreviousItem = previousProvider != nil
         }
+    }
+
+    private func logResolution(current: BaseItemDto?, successor: BaseItemDto?, detail: String) {
+        manager?.logger.debug(
+            "Episode queue: next episode resolution",
+            metadata: [
+                "currentSeries": .stringConvertible(current?.seriesName ?? "Unknown"),
+                "currentSeriesID": .stringConvertible(current?.seriesID ?? "Unknown"),
+                "currentSeason": .stringConvertible(current?.parentIndexNumber ?? -1),
+                "currentEpisode": .stringConvertible(current?.indexNumber ?? -1),
+                "currentItemID": .stringConvertible(current?.id ?? "Unknown"),
+                "resolvedSeason": .stringConvertible(successor?.parentIndexNumber ?? -1),
+                "resolvedEpisode": .stringConvertible(successor?.indexNumber ?? -1),
+                "resolvedItemID": .stringConvertible(successor?.id ?? "none"),
+                "resolution": .stringConvertible(detail),
+            ]
+        )
     }
 }
 

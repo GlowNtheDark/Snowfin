@@ -850,6 +850,8 @@ extension VideoPlayer {
         }
 
         private func handlePlayPauseEnded() {
+            guard !containerState.isPresentingSegmentOverlay else { return }
+
             if containerState.isScrubbing {
                 containerState.cancelScrub()
                 containerState.timer.poke()
@@ -874,6 +876,11 @@ extension VideoPlayer {
         }
 
         private func handleSelectEnded(_ press: UIPress, event: UIPressesEvent?) {
+            if containerState.isPresentingSegmentOverlay {
+                forwardPressesEnded([press], event: event)
+                return
+            }
+
             if !containerState.isPresentingOverlay {
                 containerState.isPresentingOverlay = true
                 containerState.timer.poke()
