@@ -148,7 +148,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		535870602669D21600D05A09 /* Swiftfin tvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Swiftfin tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		535870602669D21600D05A09 /* Snowfin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Snowfin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5362E4A7267D4067000E2F71 /* GoogleCast.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GoogleCast.framework; path = "../../Downloads/GoogleCastSDK-ios-4.6.0_dynamic/GoogleCast.framework"; sourceTree = "<group>"; };
 		5362E4AA267D40AD000E2F71 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		5362E4AC267D40B1000E2F71 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
@@ -216,7 +216,7 @@
 			membershipExceptions = (
 				Resources/Assets.xcassets,
 			);
-			target = 5358705F2669D21600D05A09 /* Swiftfin tvOS */;
+			target = 5358705F2669D21600D05A09 /* Snowfin tvOS */;
 		};
 		E14565D92DFCAE6E008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -236,14 +236,14 @@
 				ViewModels/QuickConnectAuthorizeViewModel.swift,
 				Views/VideoPlayer/Components/Toolbar/ActionButtons/GestureLockActionButton.swift,
 			);
-			target = 5358705F2669D21600D05A09 /* Swiftfin tvOS */;
+			target = 5358705F2669D21600D05A09 /* Snowfin tvOS */;
 		};
 		E14567272DFCAEFD008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Resources/Info.plist,
 			);
-			target = 5358705F2669D21600D05A09 /* Swiftfin tvOS */;
+			target = 5358705F2669D21600D05A09 /* Snowfin tvOS */;
 		};
 		E1BE3EDA2FE9DAE800327990 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -259,7 +259,7 @@
 				DevelopmentTeam.xcconfig,
 				Shared.xcconfig,
 			);
-			target = 5358705F2669D21600D05A09 /* Swiftfin tvOS */;
+			target = 5358705F2669D21600D05A09 /* Snowfin tvOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -419,7 +419,7 @@
 			isa = PBXGroup;
 			children = (
 				5377CBF1263B596A003A4E83 /* Swiftfin iOS.app */,
-				535870602669D21600D05A09 /* Swiftfin tvOS.app */,
+				535870602669D21600D05A09 /* Snowfin.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -485,9 +485,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5358705F2669D21600D05A09 /* Swiftfin tvOS */ = {
+		5358705F2669D21600D05A09 /* Snowfin tvOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Swiftfin tvOS" */;
+			buildConfigurationList = 535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Snowfin tvOS" */;
 			buildPhases = (
 				4EC71FBD2D1620AF00D0B3A8 /* Alphabetize Strings */,
 				6286F0A3271C0ABA00C40ED5 /* Run Swiftgen.swift */,
@@ -508,7 +508,7 @@
 				E1456FC82DFCB323008FF700 /* Translations */,
 				E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */,
 			);
-			name = "Swiftfin tvOS";
+			name = "Snowfin tvOS";
 			packageProductDependencies = (
 				E13DD3CC27164CA7009D4DAF /* CoreStore */,
 				E12186DD2718F1C50010884C /* Defaults */,
@@ -536,8 +536,8 @@
 				E1BE3EBD2FE8DEAA00327990 /* FactoryKit */,
 				E12CDBC02FFB593800828742 /* CollectionVGrid */,
 			);
-			productName = "JellyfinPlayer tvOS";
-			productReference = 535870602669D21600D05A09 /* Swiftfin tvOS.app */;
+			productName = Snowfin;
+			productReference = 535870602669D21600D05A09 /* Snowfin.app */;
 			productType = "com.apple.product-type.application";
 		};
 		5377CBF0263B596A003A4E83 /* Swiftfin iOS */ = {
@@ -734,7 +734,7 @@
 			projectRoot = "";
 			targets = (
 				5377CBF0263B596A003A4E83 /* Swiftfin iOS */,
-				5358705F2669D21600D05A09 /* Swiftfin tvOS */,
+				5358705F2669D21600D05A09 /* Snowfin tvOS */,
 			);
 		};
 /* End PBXProject section */
@@ -953,7 +953,7 @@
 				);
 				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.snowfin.tvos;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Snowfin;
 				SDKROOT = appletvos;
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -987,7 +987,7 @@
 				);
 				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.snowfin.tvos;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Snowfin;
 				SDKROOT = appletvos;
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -1211,7 +1211,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Swiftfin tvOS" */ = {
+		535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Snowfin tvOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				535870722669D21700D05A09 /* Debug */,
