@@ -33,6 +33,14 @@ extension ItemView {
             return false
         }
 
+        private var playedTint: Color {
+            #if os(tvOS)
+            .snowfinIceBlue
+            #else
+            .jellyfinPurple
+            #endif
+        }
+
         @ViewBuilder
         private func materialLabel(
             _ title: String,
@@ -91,7 +99,7 @@ extension ItemView {
                             L10n.played,
                             systemImage: "checkmark",
                             isHighlighted: isPlayed,
-                            tint: .jellyfinPurple,
+                            tint: playedTint,
                             foregroundColor: .primary
                         )
                     }

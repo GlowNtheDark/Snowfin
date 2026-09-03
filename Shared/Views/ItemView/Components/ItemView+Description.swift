@@ -29,6 +29,10 @@ extension ItemView {
                     if let firstTagline = item.taglines?.first(where: \.isNotEmpty) {
                         Text(firstTagline)
                             .fontWeight(.bold)
+                        #if os(tvOS)
+                            .font(.title3)
+                            .foregroundStyle(.white)
+                        #endif
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
                     }
@@ -45,8 +49,10 @@ extension ItemView {
                             .buttonStyle(.plain)
                         } tvOSView: {
                             Text(itemOverview)
-                                .font(.footnote)
-                                .lineLimit(3)
+                                .font(.body)
+                                .foregroundStyle(.white.opacity(0.82))
+                                .lineSpacing(4)
+                                .lineLimit(4)
                         }
                     }
                 }

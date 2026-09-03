@@ -33,9 +33,13 @@ extension ItemView {
                     Text(seasonEpisodeLabel)
                 }
             }
-            .font(.caption)
+            .font(UIDevice.isTV ? .callout : .caption)
             .fontWeight(.semibold)
-            .foregroundStyle(.secondary)
+            #if os(tvOS)
+                .foregroundStyle(.white.opacity(0.78))
+            #else
+                .foregroundStyle(.secondary)
+            #endif
         }
     }
 }

@@ -41,7 +41,7 @@ extension ItemView {
 
                     Text(provider.item.displayTitle)
                         .font(.largeTitle)
-                        .fontWeight(.semibold)
+                        .fontWeight(UIDevice.isTV ? .bold : .semibold)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
 
@@ -85,7 +85,7 @@ extension ItemView {
 
                             ItemView.ActionButtonHStack(provider: provider)
                         }
-                        .frame(maxWidth: UIDevice.isTV ? 450 : 300, alignment: .leading)
+                        .frame(maxWidth: UIDevice.isTV ? 520 : 300, alignment: .leading)
 
                         ItemView.AttributesHStack(
                             attributes: attributes,

@@ -159,6 +159,20 @@ extension SeriesEpisodeContentGroup {
         private var artworkButton: some View {
             let button = Button(action: artworkAction) {
                 artwork
+                #if os(tvOS)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(
+                            Color.snowfinIceBlue.opacity(focusedElement == .artwork ? 0.9 : 0),
+                            lineWidth: 3
+                        )
+                }
+                .shadow(
+                    color: focusedElement == .artwork ? Color.snowfinIceBlue.opacity(0.38) : .clear,
+                    radius: focusedElement == .artwork ? 22 : 0
+                )
+                .animation(.easeOut(duration: 0.16), value: focusedElement)
+                #endif
             }
             .foregroundStyle(.primary, .secondary)
             .buttonStyle(.card)
@@ -257,14 +271,20 @@ extension SeriesEpisodeContentGroup {
                         style: .continuous
                     )
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(
+                            Color.snowfinIceBlue.opacity(isFocused ? 0.85 : 0),
+                            lineWidth: 3
+                        )
+                }
                 .scaleEffect(isFocused ? 1.05 : 1)
                 .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .brightness(isFocused ? 0.04 : 0)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .shadow(
-                    color: .black.opacity(isFocused ? 0.3 : 0),
-                    radius: isFocused ? 18 : 0,
-                    y: isFocused ? 10 : 0
+                    color: isFocused ? Color.snowfinIceBlue.opacity(0.3) : .clear,
+                    radius: isFocused ? 20 : 0
                 )
                 .animation(.easeInOut(duration: 0.2), value: showsMaterial)
                 .animation(.easeOut(duration: 0.15), value: isFocused)

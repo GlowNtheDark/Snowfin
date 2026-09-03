@@ -27,6 +27,22 @@ struct PlayButton: View {
         return provider.mediaPlayerItemProvider?.mediaSource?.displayTitle
     }
 
+    private var primaryTint: Color {
+        #if os(tvOS)
+        .snowfinIceBlue
+        #else
+        accentColor
+        #endif
+    }
+
+    private var primaryForeground: Color {
+        #if os(tvOS)
+        .snowfinDeepNavy
+        #else
+        accentColor.overlayColor
+        #endif
+    }
+
     private var mediaSourceSelection: Binding<MediaSourceInfo?> {
         Binding(
             get: { provider.mediaPlayerItemProvider?.mediaSource },
@@ -128,29 +144,33 @@ struct PlayButton: View {
                     }
                 }
             }
-            .font(.callout)
+            .font(UIDevice.isTV ? .title3 : .callout)
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .backport
             .glassEffect(
                 .regular.selection(
-                    tint: accentColor,
-                    foregroundColor: accentColor.overlayColor
+                    tint: primaryTint,
+                    foregroundColor: primaryForeground
                 ),
                 in: .capsule
             )
         }
         .buttonBorderShape(.capsule)
-        .buttonStyle(BasicHoverButtonStyle())
-        .coordinatedFocus(ItemView.Component.play)
-        .contextMenu {
-            if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
-                Button(L10n.playFromBeginning, systemImage: "gobackward") {
-                    play(fromBeginning: true)
+        #if os(tvOS)
+            .buttonStyle(SnowfinPrimaryPlayButtonStyle())
+        #else
+            .buttonStyle(BasicHoverButtonStyle())
+        #endif
+            .coordinatedFocus(ItemView.Component.play)
+            .contextMenu {
+                if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
+                    Button(L10n.playFromBeginning, systemImage: "gobackward") {
+                        play(fromBeginning: true)
+                    }
                 }
             }
-        }
-        .disabled(provider.mediaPlayerItemProvider == nil)
+            .disabled(provider.mediaPlayerItemProvider == nil)
     }
 
     var body: some View {
@@ -162,3 +182,24 @@ struct PlayButton: View {
         .frame(height: UIDevice.isTV ? 75 : 44)
     }
 }
+
+#if os(tvOS)
+private struct SnowfinPrimaryPlayButtonStyle: ButtonStyle {
+
+    @Environment(\.isFocused)
+    private var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .isSelected(isFocused)
+            .scaleEffect(configuration.isPressed ? 0.97 : isFocused ? 1.045 : 1)
+            .brightness(isFocused ? 0.04 : 0)
+            .shadow(
+                color: isFocused ? Color.snowfinIceBlue.opacity(0.42) : .clear,
+                radius: isFocused ? 24 : 0
+            )
+            .animation(.easeOut(duration: 0.16), value: isFocused)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif

@@ -43,7 +43,7 @@ extension ItemView {
             #endif
 
             private var logoHeight: CGFloat {
-                UIDevice.isTV ? 100 : 70
+                UIDevice.isTV ? 120 : 70
             }
 
             @ViewBuilder
@@ -86,6 +86,11 @@ extension ItemView {
                             }
 
                             logo
+
+                            #if os(tvOS)
+                            MetadataHStack(item: provider.item)
+                                .padding(.top, 8)
+                            #endif
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -95,7 +100,7 @@ extension ItemView {
 
                         ItemView.ActionButtonHStack(provider: provider)
                     }
-                    .frame(width: UIDevice.isTV ? 450 : 300)
+                    .frame(width: UIDevice.isTV ? 520 : 300)
 
                     VStack(alignment: .leading, spacing: 10) {
                         ItemView.Description(item: provider.item)
@@ -108,7 +113,9 @@ extension ItemView {
                                 alignment: .leading
                             )
 
+                            #if !os(tvOS)
                             MetadataHStack(item: provider.item)
+                            #endif
                         }
                         .foregroundStyle(.secondary)
                     }
