@@ -11,6 +11,9 @@ import SwiftUI
 
 #if os(tvOS)
 struct SnowfinPlaybackSegmentOverlay: View {
+    private let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255)
+    private let snowfinDeepNavy = Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255)
+
     private enum FocusedAction: Hashable {
         case intro
         case keepWatching
@@ -36,7 +39,9 @@ struct SnowfinPlaybackSegmentOverlay: View {
                     }
                     .focused($focusedAction, equals: .intro)
                     .buttonStyle(.borderedProminent)
+                    .tint(snowfinIceBlue)
                     .controlSize(.large)
+                    .shadow(color: snowfinIceBlue.opacity(0.35), radius: 18)
                     .padding(80)
 
                 case .nextEpisode, .countdown:
@@ -109,6 +114,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         }
                         .focused($focusedAction, equals: .playNext)
                         .buttonStyle(.borderedProminent)
+                        .tint(snowfinIceBlue)
 
                         if presentation.remainingSeconds != nil {
                             Button("Keep Watching") {
@@ -122,7 +128,15 @@ struct SnowfinPlaybackSegmentOverlay: View {
                 .frame(width: 430, alignment: .leading)
             }
             .padding(28)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+            .background {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(snowfinDeepNavy.opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(snowfinIceBlue.opacity(0.45), lineWidth: 2)
+                    }
+                    .shadow(color: snowfinIceBlue.opacity(0.22), radius: 24)
+            }
         }
     }
 }

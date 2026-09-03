@@ -56,6 +56,20 @@ extension VideoPlayer {
                     )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .background(alignment: .bottom) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255).opacity(0.72), location: 0.58),
+                        .init(color: Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255).opacity(0.96), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 430)
+                .allowsHitTesting(false)
+                .isVisible(containerState.isPresentingOverlay || containerState.isScrubbing)
+            }
             .edgePadding(.horizontal)
             .focusSection()
             .animation(.easeInOut(duration: 0.25), value: containerState.isPresentingSupplement)
