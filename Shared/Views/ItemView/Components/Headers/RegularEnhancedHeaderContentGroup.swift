@@ -77,7 +77,7 @@ extension ItemView {
             }
 
             @ViewBuilder
-            private var overlay: some View {
+            private var standardOverlay: some View {
                 HStack(alignment: .bottom, spacing: EdgeInsets.edgePadding) {
                     VStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 5) {
                         VStack(alignment: .leading) {
@@ -139,6 +139,68 @@ extension ItemView {
                 #endif
             }
 
+            #if os(tvOS)
+            private var snowfinMediaOverlay: some View {
+                HStack(alignment: .top, spacing: 70) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        PosterImage(
+                            item: provider.item,
+                            type: .portrait,
+                            size: .medium,
+                            contentMode: .fit
+                        )
+                        .posterBorder()
+                        .subtleShadow()
+                        .frame(width: 310, height: 465)
+
+                        if provider.item.presentPlayButton {
+                            PlayButton(provider: provider)
+                        }
+
+                        ItemView.ActionButtonHStack(provider: provider)
+                    }
+                    .frame(width: 620, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 22) {
+                        Text(provider.item.displayTitle)
+                            .font(.system(size: 56, weight: .bold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        MetadataHStack(item: provider.item)
+
+                        ItemView.Description(item: provider.item)
+
+                        ItemView.AttributesHStack(
+                            attributes: attributes,
+                            item: provider.item,
+                            selectedMediaSource: provider.mediaPlayerItemProvider?.mediaSource,
+                            alignment: .leading
+                        )
+                        .foregroundStyle(.secondary)
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                .padding(.top, EdgeInsets.edgePadding)
+                .focusSection()
+            }
+
+            @ViewBuilder
+            private var overlay: some View {
+                if provider.item.type == .movie || provider.item.type == .series {
+                    snowfinMediaOverlay
+                } else {
+                    standardOverlay
+                }
+            }
+            #else
+            private var overlay: some View {
+                standardOverlay
+            }
+            #endif
+
             #if !os(tvOS)
             private func resolveColor(from image: UIImage, binding: Binding<Color>) {
                 Task.detached(priority: .utility) {
@@ -153,7 +215,9 @@ extension ItemView {
 
             var body: some View {
                 #if os(tvOS)
-                CinematicContentGroupContainer {
+                CinematicContentGroupContainer(
+                    preferredHeight: provider.item.type == .movie || provider.item.type == .series ? 680 : nil
+                ) {
                     overlay
                         .edgePadding(.horizontal)
                         .frame(maxWidth: .infinity)

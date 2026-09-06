@@ -16,16 +16,12 @@ struct CinematicSelectionContentGroup: ContentGroup {
     let viewModel: CinematicSelectionContentGroupViewModel
 
     var _shouldBeResolved: Bool {
-        viewModel.hasContent
+        viewModel.hasResumeItems
     }
 
-    init(
-        resumeLibrary: ResumeItemsLibrary,
-        recentlyAddedLibrary: RecentlyAddedLibrary
-    ) {
+    init(resumeLibrary: ResumeItemsLibrary) {
         self.viewModel = CinematicSelectionContentGroupViewModel(
-            resumeLibrary: resumeLibrary,
-            recentlyAddedLibrary: recentlyAddedLibrary
+            resumeLibrary: resumeLibrary
         )
     }
 
@@ -35,86 +31,28 @@ struct CinematicSelectionContentGroup: ContentGroup {
 
     private struct SelectionView: View {
 
-        @Environment(\.frameForParentView)
-        private var frameForParentView
-
         @ObservedObject
         var viewModel: CinematicSelectionContentGroupViewModel
 
         @Router
         private var router
 
-        private var parentFrame: CGRect {
-            frameForParentView[.scrollView, default: .zero].frame
-        }
-
-        private func itemSelectorImageSource(for item: BaseItemDto) -> ImageSource {
-            if item.type == .episode {
-                item.imageSource(
-                    itemID: item.seriesID,
-                    .logo,
-                    tag: item.parentLogoImageTag,
-                    environment: ImageSourceOptions(
-                        maxWidth: CinematicSelectionLayout.logoMaxWidth,
-                        maxHeight: CinematicSelectionLayout.logoMaxHeight
-                    )
-                )
-            } else {
-                item.imageSource(
-                    .logo,
-                    environment: ImageSourceOptions(
-                        maxWidth: CinematicSelectionLayout.logoMaxWidth,
-                        maxHeight: CinematicSelectionLayout.logoMaxHeight
-                    )
-                )
-            }
-        }
-
         var body: some View {
-            let items = viewModel.hasResumeItems ? viewModel.resumeViewModel.elements.elements : viewModel.recentlyAddedViewModel.elements
-                .elements
-
-            CinematicItemSelector(
-                items: items
-            ) { item in
-                router.route(to: .item(item: item))
-            } topContent: { item in
-                ImageView(itemSelectorImageSource(for: item))
-                    .placeholder { _ in
-                        EmptyView()
-                    }
-                    .failure {
-                        Text(item.displayTitle)
-                            .font(.largeTitle)
-                            .fontWeight(.semibold)
-                    }
-                    .edgePadding(.leading)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: CinematicSelectionLayout.logoMaxHeight, alignment: .bottomLeading)
-                    .frame(maxWidth: CinematicSelectionLayout.logoMaxWidth)
+            ContentGroupSection {
+                CinematicItemSelector(
+                    items: viewModel.continueItems
+                ) { item in
+                    router.route(to: .item(item: item))
+                }
+            } header: {
+                Text(viewModel.resumeViewModel.library.parent.displayTitle)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .edgePadding(.horizontal)
+                    .accessibilityAddTraits(.isHeader)
             }
-            .preference(
-                key: ContentGroupCustomizationKey.self,
-                value: .ignoreSafeAreaTop
-            )
         }
-    }
-}
-
-struct CinematicRecentlyAddedContentGroup: ContentGroup {
-
-    let id = "cinematic-recently-added"
-    let viewModel: CinematicSelectionContentGroupViewModel
-
-    var _shouldBeResolved: Bool {
-        viewModel.hasResumeItems && viewModel.recentlyAddedViewModel.elements.isNotEmpty
-    }
-
-    func body(with viewModel: CinematicSelectionContentGroupViewModel) -> some View {
-        PosterHStackLibrarySection(
-            viewModel: viewModel.recentlyAddedViewModel,
-            group: viewModel.recentlyAddedGroup
-        )
     }
 }
 
@@ -122,12 +60,7 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
 
     typealias Background = CinematicSelectionContentGroupViewModel
 
-    let recentlyAddedGroup: PosterGroup<RecentlyAddedLibrary>
     let resumeViewModel: PagingLibraryViewModel<ResumeItemsLibrary>
-
-    var recentlyAddedViewModel: PagingLibraryViewModel<RecentlyAddedLibrary> {
-        recentlyAddedGroup.viewModel
-    }
 
     var background: CinematicSelectionContentGroupViewModel {
         get { self }
@@ -135,26 +68,30 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
     }
 
     var hasResumeItems: Bool {
-        resumeViewModel.elements.isNotEmpty
+        continueItems.isNotEmpty
     }
 
-    var hasContent: Bool {
-        hasResumeItems || recentlyAddedViewModel.elements.isNotEmpty
+    var continueItems: [BaseItemDto] {
+        Self.deduplicatedContinueItems(Array(resumeViewModel.elements))
     }
 
-    init(
-        resumeLibrary: ResumeItemsLibrary,
-        recentlyAddedLibrary: RecentlyAddedLibrary
-    ) {
+    init(resumeLibrary: ResumeItemsLibrary) {
         self.resumeViewModel = PagingLibraryViewModel(library: resumeLibrary, pageSize: 20)
-        self.recentlyAddedGroup = PosterGroup(library: recentlyAddedLibrary)
 
         super.init()
 
         resumeViewModel.objectWillChange
-            .merge(with: recentlyAddedViewModel.objectWillChange)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        resumeViewModel.$elements
+            .dropFirst()
+            .sink { elements in
+                ScreenTopShelfSnapshotWriter.update(
+                    items: Self.deduplicatedContinueItems(Array(elements))
+                )
             }
             .store(in: &cancellables)
     }
@@ -166,15 +103,27 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
     }
 
     func refresh() async {
-        async let resume: Void = resumeViewModel.refresh()
-        async let recentlyAdded: Void = recentlyAddedViewModel.refresh()
-
-        _ = await (resume, recentlyAdded)
+        await resumeViewModel.refresh()
     }
-}
 
-private enum CinematicSelectionLayout {
+    private static func deduplicatedContinueItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        var seenSeries = Set<String>()
 
-    static let logoMaxHeight: CGFloat = 100
-    static let logoMaxWidth: CGFloat = 450
+        return items.filter { item in
+            guard item.type == .episode else { return true }
+
+            let seriesKey: String? = if let seriesID = item.seriesID, seriesID.isNotEmpty {
+                "id:\(seriesID)"
+            } else if let seriesName = item.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      seriesName.isNotEmpty
+            {
+                "name:\(seriesName.lowercased())"
+            } else {
+                nil
+            }
+
+            guard let seriesKey else { return true }
+            return seenSeries.insert(seriesKey).inserted
+        }
+    }
 }

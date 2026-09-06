@@ -1,37 +1,67 @@
-# Snowfin tvOS UI Roadmap
+# Snowfin tvOS Redesign Roadmap
 
-Snowfin's visual system keeps media artwork dominant. Deep navy establishes structure, Snowfin Ice Blue (`#2EA8FF`) indicates focus and action, and snow or aurora effects remain subtle atmosphere. The Snowfin mark appears at identity moments rather than on every screen. Motion should be restrained and respect Reduce Motion.
+This roadmap replaces the earlier incremental polish plan. The redesign prioritizes a quieter, sharper television interface with fixed deep-navy surfaces, square geometry, direct navigation, and media-first layouts. Snowfin Ice Blue (`#2EA8FF`) communicates focus and action.
 
-## Roadmap
+## Locked design rules
 
-1. **Playback controls and overlays** — Refine transport controls, progress, skip actions, chapters, track selection, and Up Next without obscuring video.
-2. **Media details** — Improve hierarchy, metadata, synopsis readability, primary actions, episode selection, and backdrop gradients.
-3. **Home focus states** — Introduce restrained ice-blue focus borders, glow, and elevation while keeping unfocused artwork neutral.
-4. **Settings refinement** — Improve atmospheric depth, section contrast, focused rows, and the balance around the Option A mark.
-5. **Login and user selection** — Polish first-run, server entry, errors, and avatar focus states with the Snowfin visual language.
-6. **Loading, empty, and error states** — Establish reusable indicators, concise messages, recovery actions, and subtle identity treatment.
-7. **Subtitle and audio menus** — Clarify language, forced/SDH status, codec, channels, and default selection.
-8. **Accessibility** — Verify focus visibility, contrast, Reduce Motion, VoiceOver, text scaling, and television safe areas.
+- Do not change backgrounds in response to focused movies or shows.
+- Use square corners for Snowfin-owned artwork, buttons, cards, menus, panels, search controls, overlays, and progress surfaces.
+- Use Ice Blue outlines, restrained glow, elevation, and scale to communicate focus.
+- Treat section headings as labels, not navigation links. Users enter content directly through the visible titles.
+- Remove Next Up from Home. Any remaining Next Up heading is a non-interactive label above its items.
+- Keep profile and account information out of the main menu and routine content screens.
+- Preserve the iOS target and shared internals, but keep Snowfin product changes tvOS-only.
 
-## Completed initial passes
+## Phase 1: Visual foundation
 
-### 1. Playback controls and overlays
+- [x] Replace focused-poster and color-changing backgrounds with fixed deep navy.
+- [x] Remove rounded geometry from shared tvOS components.
+- [x] Establish the square Ice Blue focus treatment.
+- [x] Convert linked collection headings into labels.
+- Audit remote focus paths after the shared-style changes.
 
-- Add a cinematic deep-navy readability surface behind controls.
-- Use Ice Blue for active progress and focused actions.
-- Keep video content unobstructed when controls are hidden.
-- Unify Skip Intro and Up Next with the same visual system.
-- Preserve current playback behavior and keep the implementation tvOS-only.
+## Phase 2: Navigation and Home
 
-### 2. Media details
+- [x] Build a fixed Plex-style sidebar that may collapse.
+- Allow customization of shortcuts shown while collapsed.
+- [x] Hide profile and account information.
+- [x] Remove Next Up from Home.
+- [x] Add Popular Movies to Home.
 
-- Add an edge-to-edge deep-navy foundation and layered backdrop gradients for reliable readability.
-- Strengthen title, logo, metadata, tagline, and synopsis hierarchy at television distance.
-- Make Play or Resume the dominant Ice Blue action with a visible focus glow.
-- Use Snowfin Ice Blue for played-state identity and focused episode artwork/details.
-- Preserve existing navigation, playback behavior, and iOS presentation.
+## Phase 3: Search and libraries
 
-## Next focus: Home focus states
+- [x] Add Plex-style letter navigation.
+- [x] Add movie sorting controls.
+- [x] Left-align Suggested on Search.
+- Keep directional focus inside the search controls instead of jumping to the sidebar.
 
-- Introduce restrained Ice Blue focus borders, glow, and elevation.
-- Keep unfocused artwork neutral and media-first.
+## Phase 4: Movie and TV details
+
+- [x] Redesign movie details as a simple two-column page: artwork and compact actions on the left, title and description on the right.
+- [x] Include Play, Play From Beginning, and Mark Watched without an overflow menu.
+- Implement Watch Together with a functional Jellyfin SyncPlay flow.
+- [x] Remove Recommended from movie details.
+- [x] Put TV year, genre, season and episode, runtime, and rating on one metadata line.
+- [x] Remove the TV-show About section.
+
+## Phase 5: Player
+
+- Reorganize progress, playback settings, information, and technical details around a Plex-like tab structure.
+- Open the tabs with a Down press on the remote.
+- Shift the playing video upward to reveal the tabs instead of placing a swipe-down menu over it.
+- Preserve Snowfin intro, credits, and episode-transition behavior.
+
+## Phase 6: Apple TV Top Shelf
+
+- Replace static promotional Top Shelf artwork with dynamic Continue Watching content.
+- Add the required TV Services extension and a safe shared-data path for the active server session.
+- Keep artwork, titles, and progress useful when the main app is not running.
+
+## Phase 7: Typography and accessibility
+
+- Compare television-readable system and bundled font options before selecting a final family.
+- Verify contrast, focus visibility, Reduce Motion, VoiceOver, overscan-safe layout, and long-title behavior.
+
+## Current focus
+
+Validate Phases 1-4 on a physical Apple TV, especially focus movement and overscan. Then continue with Phase 5: Player.

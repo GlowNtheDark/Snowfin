@@ -19,7 +19,11 @@ extension VideoPlayer.PlaybackControls {
             if #available(iOS 26.0, *), UIDevice.supportsLiquidGlass {
                 content
                     .buttonStyle(OverlayGlassButtonStyle(onPressed: onPressed))
+                #if os(tvOS)
+                    .buttonBorderShape(.roundedRectangle(radius: 0))
+                #else
                     .buttonBorderShape(.circle)
+                #endif
             } else {
                 content
                     .buttonStyle(OverlayButtonStyle(onPressed: onPressed))
@@ -108,7 +112,7 @@ extension VideoPlayer.PlaybackControls {
                         tint: snowfinIceBlue,
                         foregroundColor: snowfinDeepNavy
                     ),
-                    in: .circle
+                    in: .rect
                 )
                 .isSelected(isFocused)
                 .scaleEffect(configuration.isPressed ? 0.90 : isFocused ? 1.1 : 1)

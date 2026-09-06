@@ -23,6 +23,9 @@ struct LetterPickerBar: PlatformView {
     @ObservedObject
     var viewModel: FilterViewModel
 
+    let preferredLetter: ItemLetter?
+    let onLetterFocused: ((ItemLetter) -> Void)?
+
     @State
     private var letterSize: CGSize = .zero
     @State
@@ -90,11 +93,15 @@ struct LetterPickerBar: PlatformView {
     }
 
     private func toggleLetter(_ letter: ItemLetter) {
+        #if os(tvOS)
+        onLetterFocused?(letter)
+        #else
         if viewModel.currentFilters.letter.contains(letter) {
             viewModel.currentFilters.letter = []
         } else {
             viewModel.currentFilters.letter = [letter]
         }
+        #endif
     }
 
     private var letterBar: some View {
@@ -183,11 +190,15 @@ struct LetterPickerBar: PlatformView {
             .focusSection()
             .defaultFocus(
                 $focusedLetter,
-                selectedLetter ?? letters.first ?? "#",
+                preferredLetter ?? selectedLetter ?? letters.first ?? "#",
                 priority: focusedLetter == nil ? .userInitiated : .automatic
             )
             .offset(x: edge == .leading ? -EdgeInsets.edgePadding / 1.5 : EdgeInsets.edgePadding / 1.5)
             .focusSection()
+            .onChange(of: focusedLetter) { _, letter in
+                guard let letter else { return }
+                onLetterFocused?(letter)
+            }
             .task(id: focusedLetter) {
                 activeLetter = focusedLetter
                 guard focusedLetter != nil else { return }

@@ -17,6 +17,27 @@ extension ItemView {
 
         var body: some View {
             DotHStack {
+                #if os(tvOS)
+                if let premiereYear = item.premiereDateYear {
+                    Text(premiereYear)
+                }
+
+                if let firstGenre = item.genres?.first {
+                    Text(firstGenre)
+                }
+
+                if let seasonEpisodeLabel = item.seasonEpisodeLabel {
+                    Text(seasonEpisodeLabel)
+                }
+
+                if let runtime = item.runtime {
+                    Text(runtime, format: .hourMinuteAbbreviated)
+                }
+
+                if let officialRating = item.officialRating, officialRating.isNotEmpty {
+                    Text(officialRating)
+                }
+                #else
                 if let firstGenre = item.genres?.first {
                     Text(firstGenre)
                 }
@@ -32,6 +53,7 @@ extension ItemView {
                 if let seasonEpisodeLabel = item.seasonEpisodeLabel {
                     Text(seasonEpisodeLabel)
                 }
+                #endif
             }
             .font(UIDevice.isTV ? .callout : .caption)
             .fontWeight(.semibold)

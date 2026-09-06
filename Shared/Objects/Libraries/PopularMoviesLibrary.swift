@@ -8,19 +8,14 @@
 
 import JellyfinAPI
 
-struct RecentlyAddedLibrary: BaseItemKindLibrary {
+/// Movies with the highest server play count, with rating used to keep ties stable.
+struct PopularMoviesLibrary: BaseItemKindLibrary {
 
-    let libraryItemTypes: [BaseItemKind]
-    let parent: TitledLibraryParent
-
-    init(
-        itemTypes: [BaseItemKind] = [.movie, .series],
-        title: String = L10n.recentlyAdded.localizedCapitalized,
-        id: String = "recently-added"
-    ) {
-        self.libraryItemTypes = itemTypes
-        self.parent = .init(displayTitle: title, id: id)
-    }
+    let libraryItemTypes: [BaseItemKind] = [.movie]
+    let parent: TitledLibraryParent = .init(
+        displayTitle: String(localized: "popularMovies", defaultValue: "Popular Movies"),
+        id: "popular-movies"
+    )
 
     func retrievePage(
         environment: Empty,
@@ -28,10 +23,10 @@ struct RecentlyAddedLibrary: BaseItemKindLibrary {
     ) async throws -> [BaseItemDto] {
         var parameters = Paths.GetItemsParameters()
         parameters.enableUserData = true
-        parameters.includeItemTypes = libraryItemTypes
+        parameters.includeItemTypes = [.movie]
         parameters.isRecursive = true
         parameters.limit = pageState.pageSize
-        parameters.sortBy = [.dateCreated]
+        parameters.sortBy = [.playCount, .communityRating]
         parameters.sortOrder = [.descending]
         parameters.startIndex = pageState.pageOffset
         parameters.userID = pageState.userSession.user.id

@@ -279,10 +279,17 @@ struct SelectUserView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
+                #if os(tvOS)
+                Image(.screenTvOSMark)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 100)
+                #else
                 Image(.jellyfinBlobBlue)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: UIDevice.isTV ? 100 : 30)
+                    .frame(width: 30)
+                #endif
             }
 
             #if os(iOS)

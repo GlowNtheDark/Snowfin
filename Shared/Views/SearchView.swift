@@ -19,6 +19,11 @@ struct SearchView: View {
     @FocusState
     private var isSearchFocused: Bool
 
+    #if os(tvOS)
+    @FocusState
+    private var focusedSuggestionID: String?
+    #endif
+
     @State
     private var searchQuery = ""
 
@@ -32,7 +37,7 @@ struct SearchView: View {
 
     @ViewBuilder
     private var suggestionsView: some View {
-        VStack(spacing: 20) {
+        VStack(alignment: .leading, spacing: 20) {
             ForEach(viewModel.suggestions) { item in
                 Button(item.displayTitle) {
                     searchQuery = item.displayTitle
@@ -40,10 +45,31 @@ struct SearchView: View {
                 #if os(tvOS)
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .focused(
+                    $focusedSuggestionID,
+                    equals: item.id ?? item.displayTitle
+                )
                 #endif
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .edgePadding()
+        .focusSection()
     }
+
+    #if os(tvOS)
+    private func focusSearchContent() {
+        isSearchFocused = false
+
+        if viewModel.canSearch,
+           let firstGroup = viewModel.itemContentGroupViewModel.groups.first
+        {
+            focusCoordinator.focus(firstGroup.id)
+        } else if let firstSuggestion = viewModel.suggestions.first {
+            focusedSuggestionID = firstSuggestion.id ?? firstSuggestion.displayTitle
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var resultsView: some View {
@@ -54,6 +80,7 @@ struct SearchView: View {
             .edgePadding(.vertical)
         }
         .scrollIndicators(.hidden)
+        .focusSection()
     }
 
     var body: some View {
@@ -99,6 +126,11 @@ struct SearchView: View {
         .environmentObject(focusCoordinator)
         #if os(tvOS)
             .edgePadding(.top)
+            .focusSection()
+            .onMoveCommand { direction in
+                guard direction == .down, isSearchFocused else { return }
+                focusSearchContent()
+            }
         #else
             .navigationBarFilterDrawer(
                 viewModel: viewModel.filterViewModel,

@@ -163,7 +163,7 @@ private struct VideoPlayerSliderContent: SliderContentView {
                         .offset(x: tickOffset(for: visibleTickProgress, in: proxy.size.width))
                 }
             }
-            .clipShape(Capsule())
+            .clipShape(Rectangle())
         }
         .onChange(of: sliderState.isFocused) {
             if !sliderState.isFocused {

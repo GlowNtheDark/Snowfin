@@ -71,16 +71,20 @@ struct AboutItemGroup: ContentGroup {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .backport
-                    .glassEffect(
-                        in: .rect(
-                            cornerRadius: 20,
-                            style: .continuous
+                    #if os(tvOS)
+                        .glassEffect(in: .rect)
+                    #else
+                        .glassEffect(
+                            in: .rect(
+                                cornerRadius: 20,
+                                style: .continuous
+                            )
                         )
-                    )
+                    #endif
                 }
                 .foregroundStyle(.primary, .secondary)
                 .buttonStyle(.card)
-                .buttonBorderShape(.roundedRectangle(radius: 20))
+                .buttonBorderShape(.roundedRectangle(radius: UIDevice.isTV ? 0 : 20))
             }
         }
 

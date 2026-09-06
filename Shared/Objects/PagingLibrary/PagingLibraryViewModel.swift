@@ -78,6 +78,8 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     var searchElements: IdentifiedArrayOf<Element>
     @Published
     var searchQuery: String = ""
+    @Published
+    var letterScrollTarget: ItemLetter?
 
     let library: Library
     let pageSize: Int
@@ -263,7 +265,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
         guard !Task.isCancelled else { return }
 
-        hasNextPage = !(nextPageElements.count < pageSize)
+        hasNextPage = !library.loadsEntireCollection && !(nextPageElements.count < pageSize)
         elements.append(contentsOf: nextPageElements)
     }
 
@@ -272,7 +274,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
         guard !Task.isCancelled else { return }
 
-        hasNextPage = !(newElements.count < pageSize)
+        hasNextPage = !library.loadsEntireCollection && !(newElements.count < pageSize)
         elements = IdentifiedArray(newElements, uniquingIDsWith: { existing, _ in existing })
     }
 

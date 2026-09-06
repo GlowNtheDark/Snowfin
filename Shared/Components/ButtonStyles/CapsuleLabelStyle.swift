@@ -58,6 +58,15 @@ struct CapsuleLabelStyle: LabelStyle {
         if let tint {
             content
                 .backport
+            #if os(tvOS)
+                .glassEffect(
+                    .regular.selection(
+                        tint: tint,
+                        foregroundColor: tint.overlayColor
+                    ),
+                    in: .rect
+                )
+            #else
                 .glassEffect(
                     .regular.selection(
                         tint: tint,
@@ -65,10 +74,15 @@ struct CapsuleLabelStyle: LabelStyle {
                     ),
                     in: .capsule
                 )
+            #endif
         } else {
             content
                 .backport
+            #if os(tvOS)
+                .glassEffect(in: .rect)
+            #else
                 .glassEffect(in: .capsule)
+            #endif
         }
     }
 }

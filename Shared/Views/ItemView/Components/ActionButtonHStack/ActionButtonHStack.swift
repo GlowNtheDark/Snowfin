@@ -74,6 +74,34 @@ extension ItemView {
         }
 
         var body: some View {
+            #if os(tvOS)
+            if provider.item.type == .movie, provider.item.canBePlayed {
+                let isPlayed = provider.item.userData?.isPlayed == true
+
+                Button {
+                    Task { await provider.toggleIsPlayed() }
+                } label: {
+                    materialLabel(
+                        L10n.played,
+                        systemImage: "checkmark",
+                        isHighlighted: isPlayed,
+                        tint: playedTint,
+                        foregroundColor: .primary
+                    )
+                }
+                .frame(height: 64)
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(BasicHoverButtonStyle())
+                .font(.headline)
+                .fontWeight(.semibold)
+            } else if (UIDevice.isTV && provider.item.canEdit) ||
+                provider.item.canBePlayed ||
+                provider.item.canBeFavorited ||
+                hasTrailers
+            {
+                contentView
+            }
+            #else
             if (UIDevice.isTV && provider.item.canEdit) ||
                 provider.item.canBePlayed ||
                 provider.item.canBeFavorited ||
@@ -81,6 +109,7 @@ extension ItemView {
             {
                 contentView
             }
+            #endif
         }
 
         @ViewBuilder

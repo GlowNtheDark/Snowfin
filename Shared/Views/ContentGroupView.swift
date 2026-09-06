@@ -58,9 +58,19 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             }
             .onReceive(tabItemSelected) { event in
                 if event.isRepeat, event.isRoot {
+                    #if os(tvOS)
+                    proxy.scrollTo("top", anchor: .top)
+
+                    if let firstGroup = viewModel.groups.first {
+                        DispatchQueue.main.async {
+                            focusCoordinator.focus(firstGroup.id)
+                        }
+                    }
+                    #else
                     withAnimation {
                         proxy.scrollTo("top", anchor: .top)
                     }
+                    #endif
                 }
             }
         }

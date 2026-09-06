@@ -23,6 +23,7 @@ struct ImageView<_Image: View, Placeholder: View, Failure: View>: View {
     private var image: (UIImage) -> _Image
     private var pipeline: ImagePipeline
     private var placeholder: (ImageSource) -> Placeholder
+    private var priority: ImageRequest.Priority
     private var failure: Failure
 
     var body: some View {
@@ -44,6 +45,7 @@ struct ImageView<_Image: View, Placeholder: View, Failure: View>: View {
                 }
             }
             .pipeline(pipeline)
+            .priority(priority)
             .onDisappear(.lowerPriority)
         } else {
             failure
@@ -63,6 +65,7 @@ extension ImageView where _Image == Image, Placeholder == DefaultPlaceholderView
             image: { Image(uiImage: $0).resizable() },
             pipeline: .shared,
             placeholder: { DefaultPlaceholderView(blurHash: $0.blurHash) },
+            priority: .normal,
             failure: EmptyView()
         )
     }
@@ -92,6 +95,7 @@ extension ImageView {
             image: content,
             pipeline: pipeline,
             placeholder: placeholder,
+            priority: priority,
             failure: failure
         )
     }
@@ -104,12 +108,17 @@ extension ImageView {
             image: { content(Image(uiImage: $0).resizable()) },
             pipeline: pipeline,
             placeholder: placeholder,
+            priority: priority,
             failure: failure
         )
     }
 
     func pipeline(_ pipeline: ImagePipeline) -> Self {
         copy(modifying: \.pipeline, with: pipeline)
+    }
+
+    func priority(_ priority: ImageRequest.Priority) -> Self {
+        copy(modifying: \.priority, with: priority)
     }
 
     func placeholder<NewPlaceholder: View>(
@@ -120,6 +129,7 @@ extension ImageView {
             image: image,
             pipeline: pipeline,
             placeholder: content,
+            priority: priority,
             failure: failure
         )
     }
@@ -132,6 +142,7 @@ extension ImageView {
             image: image,
             pipeline: pipeline,
             placeholder: placeholder,
+            priority: priority,
             failure: content()
         )
     }

@@ -52,6 +52,7 @@ struct PosterImage<Element: Poster>: View {
             } content: {
                 ImageView(imageSources)
                     .pipeline(pipeline)
+                    .priority(.high)
                     .image { image in
                         element.transform(image: image, displayType: displayType)
                     }

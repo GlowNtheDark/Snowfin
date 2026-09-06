@@ -118,7 +118,7 @@ extension SeriesEpisodeContentGroup {
                     .fontWeight(.semibold)
                     .padding(CapsuleLabelStyle.defaultInsets)
                     .backport
-                    .glassEffect(glass, in: .capsule)
+                    .glassEffect(glass, in: .rect)
             }
         }
 

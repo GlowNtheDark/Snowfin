@@ -44,7 +44,7 @@ struct SettingsView: View {
             customizeSection
             diagnosticsSection
         } image: {
-            Image(.snowfinTvOSMark)
+            Image(.screenTvOSMark)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: 400)

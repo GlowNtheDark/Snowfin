@@ -15,6 +15,8 @@ struct LetterPickerBarModifier: ViewModifier {
     private var letterPickerOrientation
 
     let viewModel: FilterViewModel?
+    let preferredLetter: ItemLetter?
+    let onLetterFocused: ((ItemLetter) -> Void)?
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -25,15 +27,21 @@ struct LetterPickerBarModifier: ViewModifier {
                 .focusSection()
                 .ignoresSafeArea(.all, edges: edge == .leading ? .trailing : .leading)
                 .safeAreaInset(edge: edge, alignment: .center, spacing: 0) {
-                    LetterPickerBar(viewModel: viewModel)
+                    LetterPickerBar(
+                        viewModel: viewModel,
+                        preferredLetter: preferredLetter,
+                        onLetterFocused: onLetterFocused
+                    )
                 }
                 .overlayPreferenceValue(LetterPickerActiveLetterKey.self) { letter in
+                    #if os(iOS)
                     ZStack {
                         if let letter {
                             LetterPickerBar.LetterPickerCallout(letter: letter)
-                                .font(.system(size: UIDevice.isTV ? 128 : 64, design: .rounded).weight(.bold))
+                                .font(.system(size: 64, design: .rounded).weight(.bold))
                         }
                     }
+                    #endif
                 }
         } else {
             content

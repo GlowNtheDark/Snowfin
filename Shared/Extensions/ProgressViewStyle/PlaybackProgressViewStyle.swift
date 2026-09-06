@@ -28,37 +28,54 @@ struct PlaybackProgressViewStyle: ProgressViewStyle {
         let normalizedProgress = progress.isFinite ? clamp(progress, min: 0, max: 1) : 0
 
         Rectangle()
+        #if !os(tvOS)
             .cornerRadius(
                 cornerStyle == .round ? height / 2 : 0,
                 corners: [.topLeft, .bottomLeft]
             )
+        #endif
             .frame(width: width * normalizedProgress + height)
-            .offset(x: -height)
+                .offset(x: -height)
     }
 
     func makeBody(configuration: Configuration) -> some View {
+        #if os(tvOS)
+        Rectangle()
+            .foregroundStyle(.secondary)
+            .opacity(0.2)
+            .overlay(alignment: .leading) {
+                progressContent(configuration)
+            }
+            .trackingSize($contentSize)
+            .mask { Rectangle() }
+        #else
         Capsule()
             .foregroundStyle(.secondary)
             .opacity(0.2)
             .overlay(alignment: .leading) {
-                ZStack(alignment: .leading) {
-
-                    if let secondaryProgress,
-                       secondaryProgress > 0
-                    {
-                        buildCapsule(for: secondaryProgress)
-                            .foregroundStyle(.tertiary)
-                    }
-
-                    if let fractionCompleted = configuration.fractionCompleted {
-                        buildCapsule(for: fractionCompleted)
-                            .foregroundStyle(.primary)
-                    }
-                }
+                progressContent(configuration)
             }
             .trackingSize($contentSize)
             .mask {
                 Capsule()
             }
+        #endif
+    }
+
+    @ViewBuilder
+    private func progressContent(_ configuration: Configuration) -> some View {
+        ZStack(alignment: .leading) {
+            if let secondaryProgress,
+               secondaryProgress > 0
+            {
+                buildCapsule(for: secondaryProgress)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if let fractionCompleted = configuration.fractionCompleted {
+                buildCapsule(for: fractionCompleted)
+                    .foregroundStyle(.primary)
+            }
+        }
     }
 }

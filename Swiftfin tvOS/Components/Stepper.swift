@@ -86,11 +86,11 @@ struct Stepper<
                         .frame(minWidth: 100)
                         .padding(.horizontal, 24)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            Rectangle()
                                 .fill(.white.opacity(0.08))
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            Rectangle()
                                 .strokeBorder(.white.opacity(0.18), lineWidth: 1)
                         )
 

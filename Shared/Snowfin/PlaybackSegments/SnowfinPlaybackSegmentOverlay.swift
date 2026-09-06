@@ -129,10 +129,10 @@ struct SnowfinPlaybackSegmentOverlay: View {
             }
             .padding(28)
             .background {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                Rectangle()
                     .fill(snowfinDeepNavy.opacity(0.92))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        Rectangle()
                             .stroke(snowfinIceBlue.opacity(0.45), lineWidth: 2)
                     }
                     .shadow(color: snowfinIceBlue.opacity(0.22), radius: 24)

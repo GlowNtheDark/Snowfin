@@ -30,6 +30,16 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     @StateObject
     private var gridProxy = CollectionVGridProxy()
+    #if os(tvOS)
+    @StateObject
+    private var gridScrollCoordinator = CollectionVGridScrollCoordinator()
+
+    @FocusState
+    private var isElementsFocused: Bool
+
+    @State
+    private var isLetterRestorePending: Bool = false
+    #endif
     @StateObject
     private var viewModel: PagingLibraryViewModel<Library>
 
@@ -99,16 +109,30 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 }
             }
             .proxy(gridProxy)
-            .ignoresSafeArea(edges: .vertical)
+            #if os(tvOS)
+                .background {
+                    CollectionVGridLocator(coordinator: gridScrollCoordinator)
+                }
+            #endif
+                .ignoresSafeArea(edges: .vertical)
         }
         .scrollIndicators(.hidden)
         .withViewContext(.isListRowSeparatorVisible)
         .withViewContext(.isThumb)
-        .onReceive(tabItemSelected) { event in
-            if event.isRepeat, event.isRoot {
-                gridProxy.scrollToTop(animated: true)
+        #if os(tvOS)
+            .focusSection()
+            .focused($isElementsFocused)
+        #endif
+            .onReceive(tabItemSelected) { event in
+                if event.isRepeat, event.isRoot {
+                    #if os(tvOS)
+                    gridProxy.scrollToTop(animated: false)
+                    requestElementsFocus()
+                    #else
+                    gridProxy.scrollToTop(animated: true)
+                    #endif
+                }
             }
-        }
     }
 
     @ViewBuilder
@@ -172,21 +196,170 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 gridProxy.layout()
             }
         }
-        .onReceive(viewModel.events) { event in
-            switch event {
-            case let .gotRandomItem(element):
-                element.libraryDidSelectElement(router: router, in: namespace)
+        #if os(tvOS)
+        .onChange(of: viewModel.letterScrollTarget) { _, letter in
+            isLetterRestorePending = false
+            _ = scrollToLetter(letter)
+        }
+        .onChange(of: viewModel.elements) {
+            restoreLetterPositionIfNeeded()
+        }
+        .onAppear {
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
+
+            DispatchQueue.main.async {
+                restoreLetterPositionIfNeeded()
             }
         }
-        .onFirstAppear {
-            viewModel.refresh()
-        }
-        #if os(iOS)
-        .navigationBarMenuButton(
-            isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
-        ) {
-            menuContent
+        .onDisappear {
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
         }
         #endif
+        .onReceive(viewModel.events) { event in
+                switch event {
+                case let .gotRandomItem(element):
+                    element.libraryDidSelectElement(router: router, in: namespace)
+                }
+            }
+            .onFirstAppear {
+                viewModel.refresh()
+            }
+        #if os(iOS)
+            .navigationBarMenuButton(
+                isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
+            ) {
+                menuContent
+            }
+        #endif
+    }
+
+    #if os(tvOS)
+    private func requestElementsFocus() {
+        isElementsFocused = false
+
+        DispatchQueue.main.async {
+            isElementsFocused = true
+        }
+    }
+
+    private func restoreLetterPositionIfNeeded() {
+        guard isLetterRestorePending,
+              let letter = viewModel.letterScrollTarget,
+              let index = indexOfFirstElement(for: letter)
+        else { return }
+
+        isLetterRestorePending = false
+        requestElementsFocus()
+
+        // Let focus restoration finish before restoring the collection offset.
+        // Otherwise tvOS can immediately scroll the grid back to its focused item.
+        DispatchQueue.main.async {
+            gridScrollCoordinator.scrollToItem(at: index)
+        }
+    }
+
+    @discardableResult
+    private func scrollToLetter(_ letter: ItemLetter?) -> Bool {
+        guard let letter,
+              let index = indexOfFirstElement(for: letter)
+        else { return false }
+
+        gridScrollCoordinator.scrollToItem(at: index)
+        return true
+    }
+
+    private func indexOfFirstElement(for letter: ItemLetter) -> Int? {
+        let target = letter.value.uppercased()
+
+        return viewModel.displayedElements.firstIndex { element in
+            let title = element.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let first = title.first else { return false }
+            let initial = String(first).uppercased()
+
+            if target == "#" {
+                return initial.range(of: "^[A-Z]$", options: .regularExpression) == nil
+            }
+
+            return initial == target
+        }
+    }
+    #endif
+}
+
+#if os(tvOS)
+private final class CollectionVGridScrollCoordinator: ObservableObject {
+
+    weak var collectionView: UICollectionView? {
+        didSet {
+            applyPendingScroll()
+        }
+    }
+
+    private var pendingIndex: Int?
+
+    func scrollToItem(at index: Int) {
+        pendingIndex = index
+        applyPendingScroll()
+    }
+
+    private func applyPendingScroll() {
+        guard let collectionView,
+              let index = pendingIndex,
+              index >= 0,
+              index < collectionView.numberOfItems(inSection: 0)
+        else { return }
+
+        collectionView.layoutIfNeeded()
+        collectionView.scrollToItem(
+            at: IndexPath(item: index, section: 0),
+            at: .top,
+            animated: false
+        )
+        pendingIndex = nil
     }
 }
+
+private struct CollectionVGridLocator: UIViewRepresentable {
+
+    let coordinator: CollectionVGridScrollCoordinator
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            coordinator.collectionView = findCollectionView(near: uiView)
+        }
+    }
+
+    private func findCollectionView(near view: UIView) -> UICollectionView? {
+        var ancestor = view.superview
+
+        while let current = ancestor {
+            if let collectionView = firstCollectionView(in: current) {
+                return collectionView
+            }
+            ancestor = current.superview
+        }
+
+        return nil
+    }
+
+    private func firstCollectionView(in view: UIView) -> UICollectionView? {
+        if let collectionView = view as? UICollectionView {
+            return collectionView
+        }
+
+        for subview in view.subviews {
+            if let collectionView = firstCollectionView(in: subview) {
+                return collectionView
+            }
+        }
+
+        return nil
+    }
+}
+#endif

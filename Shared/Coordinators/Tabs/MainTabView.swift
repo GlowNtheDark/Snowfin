@@ -19,6 +19,14 @@ struct MainTabView: View {
     @StateObject
     private var tabCoordinator: TabCoordinator
 
+    #if os(tvOS)
+    @Namespace
+    private var sidebarFocusNamespace
+
+    @FocusState
+    private var focusedSidebarTabID: String?
+    #endif
+
     init() {
         _tabCoordinator = StateObject(wrappedValue: Self.defaultTabCoordinator)
     }
@@ -59,7 +67,7 @@ struct MainTabView: View {
         }
     }
 
-    @ViewBuilder
+    #if os(iOS)
     private func tabContent() -> some View {
         TabView(selection: $tabCoordinator.selectedTabID) {
             ForEach(tabCoordinator.tabs, id: \.item.id) { tab in
@@ -71,13 +79,11 @@ struct MainTabView: View {
                         coordinator: tab.coordinator
                     ) {
                         tab.item.content
-                        #if os(iOS)
                             .if(tabCoordinator.tabs.first?.item.id == tab.item.id) { view in
                                 view.topBarTrailing {
                                     FirstTabSettingsBarButton()
                                 }
                             }
-                        #endif
                     }
                     .environmentObject(tabCoordinator)
                     .environment(\.tabItemSelected, tab.publisher)
@@ -90,10 +96,154 @@ struct MainTabView: View {
                 }
             }
         }
-        #if os(tvOS)
-        .tabViewStyle(.sidebarAdaptable)
-        #endif
     }
+    #else
+    private var isSidebarExpanded: Bool {
+        focusedSidebarTabID != nil
+    }
+
+    private func selectSidebarTab(_ tab: TabCoordinator.TabData) {
+        tabCoordinator.selectedTabID = tab.item.id
+    }
+
+    private func activateSidebarTab(_ tab: TabCoordinator.TabData) {
+        focusedSidebarTabID = nil
+
+        // Let the sidebar relinquish focus before delivering the repeated-tab
+        // event that asks the destination to focus its primary content.
+        DispatchQueue.main.async {
+            selectSidebarTab(tab)
+        }
+    }
+
+    @ViewBuilder
+    private func selectedTabContent() -> some View {
+        if let tab = tabCoordinator.tabs.first(where: { $0.item.id == tabCoordinator.selectedTabID }) {
+            NavigationInjectionView(
+                coordinator: tab.coordinator
+            ) {
+                tab.item.content
+            }
+            .environmentObject(tabCoordinator)
+            .environment(\.tabItemSelected, tab.publisher)
+            .id(tab.item.id)
+        }
+    }
+
+    private func sidebarButton(for tab: TabCoordinator.TabData) -> some View {
+        let isSelected = tab.item.id == tabCoordinator.selectedTabID
+        let isFocused = tab.item.id == focusedSidebarTabID
+
+        return Button {
+            activateSidebarTab(tab)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: tab.item.systemImage)
+                    .font(.system(size: 26, weight: .semibold))
+                    .frame(width: 38, height: 38)
+
+                if isSidebarExpanded {
+                    Text(tab.item.displayTitle)
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+            }
+            .foregroundStyle(isFocused ? Color.black : Color.white)
+            .padding(.horizontal, isSidebarExpanded ? 14 : 11)
+            .frame(width: isSidebarExpanded ? nil : 60, alignment: .leading)
+            .frame(minHeight: 64, alignment: .leading)
+            .frame(maxWidth: isSidebarExpanded ? .infinity : nil, alignment: .leading)
+            .background {
+                if isFocused {
+                    Rectangle()
+                        .fill(Color.snowfinIceBlue)
+                } else if isSelected {
+                    Rectangle()
+                        .fill(Color.snowfinIceBlue.opacity(0.22))
+                        .overlay {
+                            Rectangle()
+                                .stroke(Color.snowfinIceBlue.opacity(0.8), lineWidth: 2)
+                        }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SnowfinSidebarButtonStyle())
+        .focused($focusedSidebarTabID, equals: tab.item.id)
+        .onMoveCommand { direction in
+            guard direction == .right else { return }
+            activateSidebarTab(tab)
+        }
+        .prefersDefaultFocus(isSelected, in: sidebarFocusNamespace)
+        .accessibilityLabel(tab.item.displayTitle)
+        .padding(.horizontal, 8)
+    }
+
+    private func tabContent() -> some View {
+        ZStack(alignment: .leading) {
+            selectedTabContent()
+                .padding(.leading, 84)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .focusSection()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    Image("screen-tvOS-mark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 46, height: 46)
+
+                    if isSidebarExpanded {
+                        Text(L10n.applicationBrand)
+                            .font(.title3.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .frame(height: 66)
+                .padding(.horizontal, 14)
+
+                ForEach(tabCoordinator.tabs, id: \.item.id) { tab in
+                    sidebarButton(for: tab)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 30)
+            .frame(width: isSidebarExpanded ? 292 : 84)
+            .background {
+                Rectangle()
+                    .fill(Color.snowfinDeepNavy.opacity(0.98))
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(Color.snowfinIceBlue.opacity(0.2))
+                            .frame(width: 1)
+                    }
+            }
+            .focusScope(sidebarFocusNamespace)
+            .focusSection()
+            .clipped()
+            .zIndex(1)
+            .onChange(of: focusedSidebarTabID) { _, tabID in
+                guard let tabID,
+                      let tab = tabCoordinator.tabs.first(where: { $0.item.id == tabID }),
+                      tabCoordinator.selectedTabID != tabID
+                else { return }
+
+                selectSidebarTab(tab)
+            }
+        }
+        .background(Color.snowfinDeepNavy)
+        .transaction(value: isSidebarExpanded) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
+    }
+    #endif
 
     var body: some View {
         tabContent()
@@ -112,6 +262,17 @@ struct MainTabView: View {
         #endif
     }
 }
+
+#if os(tvOS)
+private struct SnowfinSidebarButtonStyle: ButtonStyle {
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif
 
 #if os(iOS)
 private struct FirstTabSettingsBarButton: View {

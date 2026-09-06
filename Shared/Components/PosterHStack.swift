@@ -7,6 +7,7 @@
 //
 
 import CollectionHStack
+import Nuke
 import SwiftUI
 
 enum PosterHStackMetrics {
@@ -23,6 +24,16 @@ enum PosterHStackMetrics {
 struct PosterHStack<
     Data: Collection
 >: View where Data.Element: Poster, Data.Index == Int {
+
+    @Environment(\.self)
+    private var environment
+
+    @State
+    private var imagePrefetcher = ImagePrefetcher(
+        pipeline: .Swiftfin.posters,
+        destination: .memoryCache,
+        maxConcurrentRequestCount: 2
+    )
 
     let elements: Data
     let displayType: PosterDisplayType
@@ -88,6 +99,28 @@ struct PosterHStack<
         #endif
     }
 
+    private func prefetchRequests(for elements: [Data.Element]) -> [ImageRequest] {
+        elements.compactMap { element -> ImageRequest? in
+            var resolvedEnvironment = element.resolveEnvironment(environment)
+
+            if var viewContextEnvironment = resolvedEnvironment as? WithViewContext {
+                viewContextEnvironment.viewContext.insert(.isThumb)
+                resolvedEnvironment = viewContextEnvironment as! Data.Element.Environment
+            }
+
+            let url = element.imageSources(
+                for: displayType,
+                size: size,
+                environment: resolvedEnvironment
+            )
+            .first?
+            .url
+
+            guard let url else { return nil }
+            return ImageRequest(url: url)
+        }
+    }
+
     var body: some View {
         CollectionHStack(
             uniqueElements: elements,
@@ -104,6 +137,16 @@ struct PosterHStack<
         .clipsToBounds(false)
         .insets(horizontal: horizontalInset)
         .itemSpacing(PosterHStackMetrics.itemSpacing)
+        .onPrefetchingElements { elements in
+            imagePrefetcher.startPrefetching(
+                with: prefetchRequests(for: elements)
+            )
+        }
+        .onCancelPrefetchingElements { elements in
+            imagePrefetcher.stopPrefetching(
+                with: prefetchRequests(for: elements)
+            )
+        }
         .scrollBehavior(.continuousLeadingEdge)
         .withViewContext(.isThumb)
     }

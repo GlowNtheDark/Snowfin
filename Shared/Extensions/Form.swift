@@ -136,7 +136,7 @@ private struct PlatformForm<Image: View, Content: View>: PlatformView {
                     lineWidth: 1
                 )
         )
-        .containerShape(RoundedRectangle(cornerRadius: 20))
+        .containerShape(Rectangle())
         .padding()
     }
 }

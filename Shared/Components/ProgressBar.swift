@@ -16,7 +16,19 @@ struct ProgressBar: View {
 
     let progress: CGFloat
 
+    @ViewBuilder
     var body: some View {
+        #if os(tvOS)
+        Rectangle()
+            .foregroundStyle(.secondary)
+            .opacity(0.2)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .frame(width: contentSize.width * progress)
+                    .foregroundStyle(.primary)
+            }
+            .trackingSize($contentSize)
+        #else
         Capsule()
             .foregroundStyle(.secondary)
             .opacity(0.2)
@@ -29,5 +41,6 @@ struct ProgressBar: View {
                     .foregroundStyle(.primary)
             }
             .trackingSize($contentSize)
+        #endif
     }
 }

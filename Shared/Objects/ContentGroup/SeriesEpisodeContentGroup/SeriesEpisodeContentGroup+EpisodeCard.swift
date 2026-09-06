@@ -161,7 +161,7 @@ extension SeriesEpisodeContentGroup {
                 artwork
                 #if os(tvOS)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    Rectangle()
                         .stroke(
                             Color.snowfinIceBlue.opacity(focusedElement == .artwork ? 0.9 : 0),
                             lineWidth: 3
@@ -176,7 +176,10 @@ extension SeriesEpisodeContentGroup {
             }
             .foregroundStyle(.primary, .secondary)
             .buttonStyle(.card)
-            .focused($focusedElement, equals: .artwork)
+            #if os(tvOS)
+                .buttonBorderShape(.roundedRectangle(radius: 0))
+            #endif
+                .focused($focusedElement, equals: .artwork)
 
             if let contextMenuItem {
                 button.posterContextMenu(for: contextMenuItem) {
@@ -252,8 +255,6 @@ extension SeriesEpisodeContentGroup {
         let showsMaterial: Bool
         let isFocused: Bool
 
-        private let cornerRadius: CGFloat = 20
-
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
                 .padding(28)
@@ -266,13 +267,10 @@ extension SeriesEpisodeContentGroup {
                 .backport
                 .glassEffect(
                     showsMaterial ? .regular : .identity,
-                    in: .rect(
-                        cornerRadius: cornerRadius,
-                        style: .continuous
-                    )
+                    in: .rect
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    Rectangle()
                         .stroke(
                             Color.snowfinIceBlue.opacity(isFocused ? 0.85 : 0),
                             lineWidth: 3

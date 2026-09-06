@@ -67,8 +67,12 @@ struct PillGroup<Element: Displayable>: ContentGroup {
                             .font(.callout)
                             .fontWeight(.semibold)
                             .labelStyle(CapsuleLabelStyle())
-                            .buttonBorderShape(.capsule)
-                            .buttonStyle(.card)
+                            #if os(tvOS)
+                                .buttonBorderShape(.roundedRectangle(radius: 0))
+                            #else
+                                .buttonBorderShape(.capsule)
+                            #endif
+                                .buttonStyle(.card)
                         }
                     }
                     .edgePadding(.horizontal)

@@ -12,8 +12,11 @@ import Foundation
 private let landscapeMaxWidth: CGFloat = 300
 private let portraitMaxWidth: CGFloat = 200
 #else
-private let landscapeMaxWidth: CGFloat = 500
-private let portraitMaxWidth: CGFloat = 500
+// The tvOS poster rows display five landscape or seven portrait columns.
+// Leave a small allowance for focus scaling without requesting 500-point
+// images for cards that render substantially smaller.
+private let landscapeMaxWidth: CGFloat = 360
+private let portraitMaxWidth: CGFloat = 240
 #endif
 
 enum PosterDisplayType: String, CaseIterable, Displayable, Storable, SystemImageable {

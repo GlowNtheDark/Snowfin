@@ -95,6 +95,27 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             []
         }
 
+        #if os(tvOS)
+        if item.type == .movie {
+            let actors = item.people?.filter { person in
+                person.type == .actor || person.type == .guestStar
+            } ?? []
+
+            if actors.isNotEmpty {
+                PosterGroup(
+                    id: "actors",
+                    library: StaticLibrary(
+                        title: L10n.castAndCrew.localizedCapitalized,
+                        id: "actors",
+                        elements: actors
+                    ),
+                    posterDisplayType: .portrait,
+                    posterSize: .small
+                )
+            }
+        }
+        #endif
+
         if let genres = item.itemGenres, genres.isNotEmpty {
             PillGroup(
                 displayTitle: L10n.genres,
@@ -202,7 +223,10 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             )
         }
 
-        if let castAndCrew = item.people, castAndCrew.isNotEmpty {
+        if let castAndCrew = item.people,
+           castAndCrew.isNotEmpty,
+           !UIDevice.isTV || item.type != .movie
+        {
             PosterGroup(
                 id: "cast-and-crew",
                 library: StaticLibrary(
@@ -222,6 +246,24 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             posterSize: .small
         )
 
+        #if os(tvOS)
+        if Defaults[.Customization.shouldShowRecommendations], item.type != .movie {
+            PosterGroup(
+                id: "similar-items",
+                library: SimilarItemsLibrary(itemID: itemID, itemType: item.type),
+                posterDisplayType: .landscape,
+                posterSize: .small
+            )
+        }
+
+        if item.type != .series {
+            AboutItemGroup(
+                displayTitle: L10n.about,
+                id: "about",
+                item: item
+            )
+        }
+        #else
         if Defaults[.Customization.shouldShowRecommendations] {
             PosterGroup(
                 id: "similar-items",
@@ -236,6 +278,7 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             id: "about",
             item: item
         )
+        #endif
     }
 
     func toggleIsFavorite() async {

@@ -148,36 +148,75 @@ struct PlayButton: View {
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .backport
-            .glassEffect(
-                .regular.selection(
-                    tint: primaryTint,
-                    foregroundColor: primaryForeground
-                ),
-                in: .capsule
-            )
+            #if os(tvOS)
+                .glassEffect(
+                    .regular.selection(
+                        tint: primaryTint,
+                        foregroundColor: primaryForeground
+                    ),
+                    in: .rect
+                )
+            #else
+                .glassEffect(
+                    .regular.selection(
+                        tint: primaryTint,
+                        foregroundColor: primaryForeground
+                    ),
+                    in: .capsule
+                )
+            #endif
         }
-        .buttonBorderShape(.capsule)
         #if os(tvOS)
-            .buttonStyle(SnowfinPrimaryPlayButtonStyle())
+        .buttonBorderShape(.roundedRectangle(radius: 0))
+        .buttonStyle(SnowfinPrimaryPlayButtonStyle())
         #else
-            .buttonStyle(BasicHoverButtonStyle())
+        .buttonBorderShape(.capsule)
+        .buttonStyle(BasicHoverButtonStyle())
         #endif
-            .coordinatedFocus(ItemView.Component.play)
-            .contextMenu {
-                if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
-                    Button(L10n.playFromBeginning, systemImage: "gobackward") {
-                        play(fromBeginning: true)
-                    }
+        .coordinatedFocus(ItemView.Component.play)
+        .contextMenu {
+            if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
+                Button(L10n.playFromBeginning, systemImage: "gobackward") {
+                    play(fromBeginning: true)
                 }
             }
-            .disabled(provider.mediaPlayerItemProvider == nil)
+        }
+        .disabled(provider.mediaPlayerItemProvider == nil)
     }
+
+    #if os(tvOS)
+    private var playFromBeginningButton: some View {
+        Button {
+            play(fromBeginning: true)
+        } label: {
+            Label(L10n.playFromBeginning, systemImage: "gobackward")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.1))
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BasicHoverButtonStyle())
+        .disabled(provider.mediaPlayerItemProvider == nil)
+    }
+    #endif
 
     var body: some View {
         HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
             playButton
 
+            #if os(tvOS)
+            if provider.item.type == .movie {
+                playFromBeginningButton
+            } else {
+                versionMenu
+            }
+            #else
             versionMenu
+            #endif
         }
         .frame(height: UIDevice.isTV ? 75 : 44)
     }

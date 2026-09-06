@@ -28,6 +28,14 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
     let filterViewModel: FilterViewModel
     let parent: BaseItemDto
 
+    var loadsEntireCollection: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     init(
         parent: BaseItemDto,
         filters: ItemFilterCollection? = nil
@@ -102,13 +110,14 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
         environment: Environment,
         pageState: LibraryPageState
     ) async throws -> [BaseItemDto] {
-        var parameters = attachPage(
-            to: attachFilters(
-                to: makeBaseItemParameters(environment: environment),
-                using: environment.filters
-            ),
-            pageState: pageState
+        var parameters = attachFilters(
+            to: makeBaseItemParameters(environment: environment),
+            using: environment.filters,
+            isLetterFilterIncluded: !loadsEntireCollection
         )
+        if !loadsEntireCollection {
+            parameters = attachPage(to: parameters, pageState: pageState)
+        }
         parameters.userID = pageState.userSession.user.id
 
         let request = Paths.getItems(parameters: parameters)
@@ -279,9 +288,14 @@ private struct ItemLibraryBody<Content: View>: View {
         self.content = content()
     }
 
-    var body: some View {
+    private var libraryContent: some View {
         content
-            .letterPickerBar(filterViewModel: filterViewModel)
+            .letterPickerBar(
+                filterViewModel: filterViewModel,
+                preferredLetter: viewModel.letterScrollTarget
+            ) { letter in
+                viewModel.letterScrollTarget = letter
+            }
             .onFirstAppear {
                 Task {
                     await filterViewModel.getQueryFilters()
@@ -298,13 +312,55 @@ private struct ItemLibraryBody<Content: View>: View {
             ) { filters in
                 viewModel.environment.filters = filters
             }
-        #if os(tvOS)
-            .background(alignment: .top) {
-                if !router.isRootOfPath {
-                    FocusedPosterCinematicBackgroundView()
+    }
+
+    #if os(tvOS)
+    private var sortControl: some View {
+        Button {
+            router.route(to: .filter(type: .sortBy, viewModel: filterViewModel))
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: ItemFilterType.sortBy.systemImage)
+
+                Text(L10n.sort)
+
+                if let sort = filterViewModel.currentFilters.sortBy.first {
+                    Text(sort.displayTitle)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .font(.headline)
+            .padding(.horizontal, 22)
+            .frame(minHeight: 60)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SnowfinLibraryToolbarButtonStyle())
+    }
+    #endif
+
+    var body: some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                sortControl
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, EdgeInsets.edgePadding)
+            .padding(.top, 24)
+            .padding(.bottom, 18)
+            .focusSection()
+
+            libraryContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(alignment: .top) {
+            if !router.isRootOfPath {
+                FocusedPosterCinematicBackgroundView()
+            }
+        }
         #else
+        libraryContent
             .navigationBarFilterDrawer(
                 viewModel: filterViewModel,
                 types: enabledDrawerFilters
@@ -324,3 +380,33 @@ private struct ItemLibraryBody<Content: View>: View {
         StoredValues[.User.libraryFilters(parentID: id)] = storedFilters
     }
 }
+
+#if os(tvOS)
+private struct SnowfinLibraryToolbarButtonStyle: ButtonStyle {
+
+    @Environment(\.isFocused)
+    private var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isFocused ? Color.snowfinDeepNavy : Color.white)
+            .background {
+                Rectangle()
+                    .fill(isFocused ? Color.snowfinIceBlue : Color.snowfinDeepNavy)
+                    .overlay {
+                        if isFocused {
+                            Rectangle()
+                                .stroke(Color.snowfinIceBlue, lineWidth: 2)
+                        }
+                    }
+            }
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .shadow(
+                color: isFocused ? Color.snowfinIceBlue.opacity(0.3) : .clear,
+                radius: isFocused ? 14 : 0
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif

@@ -314,6 +314,9 @@ final class UserSessionManager: ObservableObject {
         }
 
         if newSession == nil {
+            #if os(tvOS)
+            ScreenTopShelfSnapshotWriter.clear()
+            #endif
             state = .signedOut
         } else {
             state = .signedIn

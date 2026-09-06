@@ -19,6 +19,11 @@ struct PosterButton<Item: Poster>: View {
     @Namespace
     private var namespace
 
+    #if os(tvOS)
+    @FocusState
+    private var isFocused: Bool
+    #endif
+
     @State
     private var posterSize: CGSize = .zero
 
@@ -45,7 +50,7 @@ struct PosterButton<Item: Poster>: View {
             .frame(width: posterSize.width)
             .padding(20)
             .backport
-            .glassEffect(in: .rect(cornerRadius: 10))
+            .glassEffect(in: .rect)
     }
 
     @ViewBuilder
@@ -60,7 +65,23 @@ struct PosterButton<Item: Poster>: View {
         .contentShape(.contextMenuPreview, Rectangle())
         .matchedTransitionSource(id: "item", in: namespace)
         .subtleShadow()
-        .hoverEffect(.highlight)
+        #if os(tvOS)
+            .overlay {
+                Rectangle()
+                    .stroke(
+                        Color.snowfinIceBlue.opacity(isFocused ? 0.95 : 0),
+                        lineWidth: 3
+                    )
+            }
+            .scaleEffect(isFocused ? 1.035 : 1)
+            .shadow(
+                color: isFocused ? Color.snowfinIceBlue.opacity(0.28) : .clear,
+                radius: isFocused ? 16 : 0
+            )
+            .animation(.easeOut(duration: 0.16), value: isFocused)
+        #else
+            .hoverEffect(.highlight)
+        #endif
     }
 
     @ViewBuilder
@@ -81,11 +102,13 @@ struct PosterButton<Item: Poster>: View {
         } label: {
             // Layout required for tvOS focused offset label behavior
             #if os(tvOS)
-            posterImage(overlay: item.posterOverlay(for: displayType))
+            VStack(alignment: .leading, spacing: 12) {
+                posterImage(overlay: item.posterOverlay(for: displayType))
 
-            if posterConfiguration.showLabels {
-                item.posterLabel
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if posterConfiguration.showLabels {
+                    item.posterLabel
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             #else
             buttonLabel(overlay: item.posterOverlay(for: displayType))
@@ -94,10 +117,13 @@ struct PosterButton<Item: Poster>: View {
         }
         .environment(\.posterDisplayType, displayType)
         .foregroundStyle(.primary, .secondary)
-        .buttonStyle(.borderless)
-        .buttonBorderShape(.roundedRectangle)
         #if os(tvOS)
+            .buttonStyle(SnowfinPosterButtonStyle())
+            .buttonBorderShape(.roundedRectangle(radius: 0))
+            .focused($isFocused)
             .focusedValue(\.focusedPoster, AnyPoster(item))
+        #else
+            .buttonStyle(.borderless)
         #endif
             .posterContextMenu(for: item) {
                 contextMenuPreview
@@ -105,3 +131,15 @@ struct PosterButton<Item: Poster>: View {
             }
     }
 }
+
+#if os(tvOS)
+private struct SnowfinPosterButtonStyle: ButtonStyle {
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif

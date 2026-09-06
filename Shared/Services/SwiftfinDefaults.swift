@@ -169,7 +169,11 @@ extension Defaults.Keys {
             }
 
             static var letterPickerOrientation: Key<LetterPickerOrientation> {
+                #if os(tvOS)
+                UserKey("letterPickerOrientation", default: .trailing)
+                #else
                 UserKey("letterPickerOrientation", default: .disabled)
+                #endif
             }
 
             static var style: Key<LibraryStyle> {
