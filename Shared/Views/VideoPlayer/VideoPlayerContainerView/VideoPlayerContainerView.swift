@@ -905,7 +905,9 @@ extension VideoPlayer {
 
         @objc
         private func handleMenuEnded() {
-            if containerState.isScrubbing {
+            if manager.snowfinSegmentCoordinator.cancelCountdown() {
+                return
+            } else if containerState.isScrubbing {
                 containerState.cancelScrub()
                 containerState.timer.poke()
             } else if containerState.isPresentingSupplement {

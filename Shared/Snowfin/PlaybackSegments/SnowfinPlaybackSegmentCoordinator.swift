@@ -33,6 +33,21 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     @Published
     private(set) var isOverlayPresented = false
 
+    var currentItem: BaseItemDto? {
+        manager?.item
+    }
+
+    var isNextEpisodeTransitionPresented: Bool {
+        guard let presentation else { return false }
+
+        switch presentation.kind {
+        case .nextEpisode, .countdown:
+            return true
+        case .intro:
+            return false
+        }
+    }
+
     private weak var manager: MediaPlayerManager?
     private var segments: [SnowfinPlaybackSegment] = []
     private var handledSegmentIDs: Set<String> = []
@@ -41,6 +56,7 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     private var currentItemID: String?
     private var activeSegment: SnowfinPlaybackSegment?
     private var pendingCreditsSegment: SnowfinPlaybackSegment?
+    private var cancelledCountdownSegmentIDs: Set<String> = []
     private var nextItemProvider: MediaPlayerItemProvider?
     private var segmentTask: Task<Void, Never>?
     private var countdownTask: Task<Void, Never>?
@@ -123,6 +139,7 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         dismissOverlay()
         segments = []
         handledSegmentIDs = []
+        cancelledCountdownSegmentIDs = []
         activeSegment = nil
         pendingCreditsSegment = nil
         currentItemID = nil
@@ -150,6 +167,20 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         manager.playNewItemCompletingCurrent(provider: provider)
     }
 
+    func playContinueWatching(_ item: BaseItemDto) {
+        guard let manager,
+              let provider = item.getPlaybackItemProvider(userSession: nil)
+        else { return }
+
+        countdownTask?.cancel()
+        countdownTask = nil
+        dismissOverlay()
+        activeSegment = nil
+        pendingCreditsSegment = nil
+        log("Starting Continue Watching item \(item.id ?? "Unknown")")
+        manager.playNewItemCompletingCurrent(provider: provider)
+    }
+
     func keepWatching() {
         guard let segment = activeSegment ?? pendingCreditsSegment else { return }
         countdownTask?.cancel()
@@ -159,6 +190,24 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         activeSegment = nil
         pendingCreditsSegment = nil
         log("Credits autoplay cancelled with Keep Watching", segment: segment)
+    }
+
+    @discardableResult
+    func cancelCountdown() -> Bool {
+        guard let countdownTask,
+              let segment = activeSegment ?? pendingCreditsSegment
+        else { return false }
+
+        countdownTask.cancel()
+        self.countdownTask = nil
+        cancelledCountdownSegmentIDs.insert(segment.id)
+
+        if let presentation, case .countdown = presentation.kind {
+            self.presentation = .init(kind: .nextEpisode, item: presentation.item, remainingSeconds: nil)
+        }
+
+        log("Credits countdown cancelled", segment: segment)
+        return true
     }
 
     private func playbackTimeDidChange(to current: Duration) {
@@ -268,7 +317,10 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     }
 
     private func startCountdownIfPossible(for segment: SnowfinPlaybackSegment) {
-        guard countdownTask == nil, let provider = nextItemProvider else {
+        guard !cancelledCountdownSegmentIDs.contains(segment.id),
+              countdownTask == nil,
+              let provider = nextItemProvider
+        else {
             if nextItemProvider == nil {
                 log("Credits countdown waiting for next-episode resolution", segment: segment)
             }

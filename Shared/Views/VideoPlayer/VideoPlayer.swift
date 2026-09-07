@@ -29,6 +29,10 @@ struct VideoPlayer: View {
     private var audioOffset: Duration = .zero
     @State
     private var isBeingDismissedByTransition = false
+    #if os(tvOS)
+    @State
+    private var isNextEpisodeTransitionPresented = false
+    #endif
 
     // TODO: move behavior to `PlaybackProgress`?
     @State
@@ -53,6 +57,11 @@ struct VideoPlayer: View {
         } playbackControls: {
             PlaybackControls()
         }
+        #if os(tvOS)
+        .scaleEffect(isNextEpisodeTransitionPresented ? 0.72 : 1)
+        .opacity(isNextEpisodeTransitionPresented ? 0.5 : 1)
+        .animation(.easeInOut(duration: 0.3), value: isNextEpisodeTransitionPresented)
+        #endif
         .overlay {
             #if os(tvOS)
             SnowfinPlaybackSegmentOverlay(
@@ -66,70 +75,75 @@ struct VideoPlayer: View {
             manager.snowfinSegmentCoordinator.prepare(for: manager.playbackItem)
             manager.start()
         }
+        #if os(tvOS)
+        .onReceive(manager.snowfinSegmentCoordinator.$presentation) { _ in
+            isNextEpisodeTransitionPresented = manager.snowfinSegmentCoordinator.isNextEpisodeTransitionPresented
+        }
+        #endif
         .prefersStatusBarHidden(!containerState.isPresentingOverlay)
-        .onChange(of: audioOffset) {
-            if let proxy = proxy as? MediaPlayerOffsetConfigurable {
-                proxy.setAudioOffset(audioOffset)
+            .onChange(of: audioOffset) {
+                if let proxy = proxy as? MediaPlayerOffsetConfigurable {
+                    proxy.setAudioOffset(audioOffset)
+                }
             }
-        }
-        .onChange(of: containerState.isAspectFilled) {
-            UIView.animate(withDuration: 0.2) {
-                proxy.setAspectFill(containerState.isAspectFilled)
+            .onChange(of: containerState.isAspectFilled) {
+                UIView.animate(withDuration: 0.2) {
+                    proxy.setAspectFill(containerState.isAspectFilled)
+                }
             }
-        }
-        .onChange(of: containerState.isScrubbing) {
-            if containerState.isScrubbing {
-                scrubbingStartTime = CACurrentMediaTime()
+            .onChange(of: containerState.isScrubbing) {
+                if containerState.isScrubbing {
+                    scrubbingStartTime = CACurrentMediaTime()
+                }
+
+                guard let scrubbingStartTime else { return }
+                let scrubbingDelta = CACurrentMediaTime() - scrubbingStartTime
+                let secondsDelta = abs(manager.seconds - containerState.scrubbedSeconds.value)
+
+                guard secondsDelta >= .seconds(1), scrubbingDelta >= 0.1 else { return }
+
+                let scrubbedSeconds = containerState.scrubbedSeconds.value
+                manager.seconds = scrubbedSeconds
+                proxy.setSeconds(scrubbedSeconds)
+            }
+            .onChange(of: subtitleOffset) {
+                if let proxy = proxy as? MediaPlayerOffsetConfigurable {
+                    proxy.setSubtitleOffset(subtitleOffset)
+                }
+            }
+            .preference(
+                key: PresentationControllerShouldDismissPreferenceKey.self,
+                value: containerState.presentationControllerShouldDismiss
+            )
+            .onChange(of: presentationCoordinator.isPresented) {
+                guard !presentationCoordinator.isPresented else { return }
+                isBeingDismissedByTransition = true
+                manager.stop()
+            }
+            .onReceive(manager.$playbackItem) { newItem in
+                containerState.isAspectFilled = false
+                audioOffset = .zero
+                subtitleOffset = .zero
+
+                // TODO: move to container view
+                containerState.scrubbedSeconds.value = newItem?.baseItem.startSeconds ?? .zero
+            }
+            .onReceive(manager.$state) { newState in
+                if newState == .stopped, !isBeingDismissedByTransition {
+                    router.dismiss()
+                }
             }
 
-            guard let scrubbingStartTime else { return }
-            let scrubbingDelta = CACurrentMediaTime() - scrubbingStartTime
-            let secondsDelta = abs(manager.seconds - containerState.scrubbedSeconds.value)
-
-            guard secondsDelta >= .seconds(1), scrubbingDelta >= 0.1 else { return }
-
-            let scrubbedSeconds = containerState.scrubbedSeconds.value
-            manager.seconds = scrubbedSeconds
-            proxy.setSeconds(scrubbedSeconds)
-        }
-        .onChange(of: subtitleOffset) {
-            if let proxy = proxy as? MediaPlayerOffsetConfigurable {
-                proxy.setSubtitleOffset(subtitleOffset)
+            .alert(
+                L10n.error,
+                isPresented: .constant(manager.error != nil)
+            ) {
+                Button(L10n.close, role: .cancel) {
+                    Container.shared.mediaPlayerManager.reset()
+                    router.dismiss()
+                }
+            } message: {
+                Text(L10n.unableToLoadThisItem)
             }
-        }
-        .preference(
-            key: PresentationControllerShouldDismissPreferenceKey.self,
-            value: containerState.presentationControllerShouldDismiss
-        )
-        .onChange(of: presentationCoordinator.isPresented) {
-            guard !presentationCoordinator.isPresented else { return }
-            isBeingDismissedByTransition = true
-            manager.stop()
-        }
-        .onReceive(manager.$playbackItem) { newItem in
-            containerState.isAspectFilled = false
-            audioOffset = .zero
-            subtitleOffset = .zero
-
-            // TODO: move to container view
-            containerState.scrubbedSeconds.value = newItem?.baseItem.startSeconds ?? .zero
-        }
-        .onReceive(manager.$state) { newState in
-            if newState == .stopped, !isBeingDismissedByTransition {
-                router.dismiss()
-            }
-        }
-
-        .alert(
-            L10n.error,
-            isPresented: .constant(manager.error != nil)
-        ) {
-            Button(L10n.close, role: .cancel) {
-                Container.shared.mediaPlayerManager.reset()
-                router.dismiss()
-            }
-        } message: {
-            Text(L10n.unableToLoadThisItem)
-        }
     }
 }
