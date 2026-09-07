@@ -25,6 +25,12 @@ struct MainTabView: View {
 
     @FocusState
     private var focusedSidebarTabID: String?
+
+    @State
+    private var previewedSidebarTabID: String?
+
+    @StateObject
+    private var searchFocus = TVSearchFocusCoordinator()
     #endif
 
     init() {
@@ -102,24 +108,34 @@ struct MainTabView: View {
         focusedSidebarTabID != nil
     }
 
-    private func selectSidebarTab(_ tab: TabCoordinator.TabData) {
-        tabCoordinator.selectedTabID = tab.item.id
+    private var displayedTabID: String? {
+        previewedSidebarTabID ?? tabCoordinator.selectedTabID
     }
 
     private func activateSidebarTab(_ tab: TabCoordinator.TabData) {
+        previewedSidebarTabID = tab.item.id
+        if tabCoordinator.selectedTabID != tab.item.id {
+            tabCoordinator.selectedTabID = tab.item.id
+        }
         focusedSidebarTabID = nil
+
+        if tab.item.id == TabItem.search.id, tab.coordinator.path.isEmpty {
+            searchFocus.requestEntry()
+            return
+        }
 
         // Let the sidebar relinquish focus before delivering the repeated-tab
         // event that asks the destination to focus its primary content.
         DispatchQueue.main.async {
-            selectSidebarTab(tab)
+            guard displayedTabID == tab.item.id else { return }
+            tab.publisher.send(.init(isRoot: tab.coordinator.path.isEmpty, isRepeat: true))
         }
     }
 
     @ViewBuilder
     private func selectedTabContent() -> some View {
-        if let tab = tabCoordinator.tabs.first(where: { $0.item.id == tabCoordinator.selectedTabID }) {
-            NavigationInjectionView(
+        if let tab = tabCoordinator.tabs.first(where: { $0.item.id == displayedTabID }) {
+            let content = NavigationInjectionView(
                 coordinator: tab.coordinator
             ) {
                 tab.item.content
@@ -127,11 +143,17 @@ struct MainTabView: View {
             .environmentObject(tabCoordinator)
             .environment(\.tabItemSelected, tab.publisher)
             .id(tab.item.id)
+
+            if tab.item.id == TabItem.search.id {
+                TVSearchFocusContainer(content: content, focus: searchFocus)
+            } else {
+                content
+            }
         }
     }
 
     private func sidebarButton(for tab: TabCoordinator.TabData) -> some View {
-        let isSelected = tab.item.id == tabCoordinator.selectedTabID
+        let isSelected = tab.item.id == displayedTabID
         let isFocused = tab.item.id == focusedSidebarTabID
 
         return Button {
@@ -228,16 +250,29 @@ struct MainTabView: View {
             .focusSection()
             .clipped()
             .zIndex(1)
-            .onChange(of: focusedSidebarTabID) { _, tabID in
+            .onChange(of: focusedSidebarTabID) { previousTabID, tabID in
                 guard let tabID,
-                      let tab = tabCoordinator.tabs.first(where: { $0.item.id == tabID }),
-                      tabCoordinator.selectedTabID != tabID
+                      tabCoordinator.tabs.contains(where: { $0.item.id == tabID })
                 else { return }
 
-                selectSidebarTab(tab)
+                // Directional entry chooses the nearest row, not the active tab.
+                // Correct only entry from content; up/down within the menu previews normally.
+                if previousTabID == nil,
+                   let activeTabID = tabCoordinator.selectedTabID,
+                   activeTabID != tabID
+                {
+                    focusedSidebarTabID = activeTabID
+                    return
+                }
+
+                previewedSidebarTabID = tabID
             }
         }
         .background(Color.snowfinDeepNavy)
+        .onChange(of: tabCoordinator.selectedTabID) { _, tabID in
+            guard focusedSidebarTabID == nil else { return }
+            previewedSidebarTabID = tabID
+        }
         .transaction(value: isSidebarExpanded) { transaction in
             transaction.animation = nil
             transaction.disablesAnimations = true
@@ -256,6 +291,7 @@ struct MainTabView: View {
                 }
             }
         #if os(tvOS)
+            .environmentObject(searchFocus)
             .background(alignment: .top) {
                 FocusedPosterCinematicBackgroundView()
             }

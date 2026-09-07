@@ -14,7 +14,7 @@ extension Color {
 
     #if os(tvOS)
     static let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255, opacity: 1)
-    static let snowfinDeepNavy = Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255, opacity: 1)
+    static let snowfinDeepNavy = Color(red: 1 / 255, green: 3 / 255, blue: 5 / 255, opacity: 1)
 
     var isLegacyJellyfinPurple: Bool {
         let components = rgbaComponents

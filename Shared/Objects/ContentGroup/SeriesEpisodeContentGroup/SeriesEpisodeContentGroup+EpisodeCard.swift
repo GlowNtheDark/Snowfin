@@ -26,11 +26,29 @@ extension SeriesEpisodeContentGroup {
 
         @ViewBuilder
         private var overlayView: some View {
+            #if os(tvOS)
+            if posterConfiguration.indicators.contains(.played), episode.userData?.isPlayed ?? false {
+                ProgressIndicator(
+                    title: nil,
+                    progress: 1,
+                    posterDisplayType: .landscape,
+                    isCompleted: true
+                )
+            } else if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
+                ProgressIndicator(
+                    title: progressLabel,
+                    progress: (episode.userData?.playedPercentage ?? 0) / 100,
+                    posterDisplayType: .landscape,
+                    isCompleted: false
+                )
+            }
+            #else
             if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
                     progress: (episode.userData?.playedPercentage ?? 0) / 100,
-                    posterDisplayType: .landscape
+                    posterDisplayType: .landscape,
+                    isCompleted: false
                 )
             } else if posterConfiguration.indicators.contains(.played), episode.userData?.isPlayed ?? false {
                 PlayedIndicator()
@@ -38,6 +56,7 @@ extension SeriesEpisodeContentGroup {
                     .padding(3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
+            #endif
         }
 
         private var episodeContent: String {

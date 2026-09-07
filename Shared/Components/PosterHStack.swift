@@ -32,7 +32,7 @@ struct PosterHStack<
     private var imagePrefetcher = ImagePrefetcher(
         pipeline: .Swiftfin.posters,
         destination: .memoryCache,
-        maxConcurrentRequestCount: 2
+        maxConcurrentRequestCount: UIDevice.isTV ? 3 : 2
     )
 
     let elements: Data

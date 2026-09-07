@@ -216,7 +216,24 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
     ) -> Paths.GetItemsParameters {
         var parameters = parameters
         parameters.audioLanguages = filters.audioLanguages.map(\.value)
+        #if os(tvOS)
+        let playbackTraits = filters.traits.filter {
+            $0 == .isPlayed || $0 == .isUnplayed
+        }
+
+        parameters.isPlayed = if playbackTraits.contains(.isPlayed) {
+            true
+        } else if playbackTraits.contains(.isUnplayed) {
+            false
+        } else {
+            nil
+        }
+        parameters.filters = filters.traits.filter {
+            $0 != .isPlayed && $0 != .isUnplayed
+        }
+        #else
         parameters.filters = filters.traits
+        #endif
         parameters.genres = filters.genres.map(\.value)
         parameters.officialRatings = filters.officialRatings.map(\.value)
         parameters.sortBy = filters.sortBy

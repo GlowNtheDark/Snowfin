@@ -26,6 +26,10 @@ final class FocusCoordinator: ObservableObject {
         request = id
     }
 
+    func clearRequest() {
+        request = nil
+    }
+
     fileprivate func update(_ id: String, isFocused: Bool) {
         if isFocused {
             focusedIDs.insert(id)
@@ -67,12 +71,18 @@ private struct CoordinatedFocusModifier: ViewModifier {
             .onChange(of: isFocused) {
                 coordinator.update(id, isFocused: isFocused)
             }
+        #if os(tvOS)
+            .onReceive(coordinator.$request) { request in
+                apply(request)
+            }
+        #else
             .onChange(of: coordinator.request) {
                 apply(coordinator.request)
             }
+        #endif
             .onDisappear {
-                coordinator.update(id, isFocused: false)
-            }
+                    coordinator.update(id, isFocused: false)
+                }
     }
 }
 
@@ -102,12 +112,18 @@ private struct CoordinatedFocusSelectionModifier: ViewModifier {
             .onChange(of: selection.wrappedValue) {
                 coordinator.update(id, isFocused: selection.wrappedValue == id)
             }
+        #if os(tvOS)
+            .onReceive(coordinator.$request) { request in
+                apply(request)
+            }
+        #else
             .onChange(of: coordinator.request) {
                 apply(coordinator.request)
             }
+        #endif
             .onDisappear {
-                coordinator.update(id, isFocused: false)
-            }
+                    coordinator.update(id, isFocused: false)
+                }
     }
 }
 

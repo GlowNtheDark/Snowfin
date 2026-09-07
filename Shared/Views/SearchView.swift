@@ -16,12 +16,17 @@ struct SearchView: View {
     private var enabledDrawerFilters
     #endif
 
+    #if os(iOS)
     @FocusState
     private var isSearchFocused: Bool
+    #endif
 
     #if os(tvOS)
     @FocusState
     private var focusedSuggestionID: String?
+
+    @EnvironmentObject
+    private var searchFocus: TVSearchFocusCoordinator
     #endif
 
     @State
@@ -59,7 +64,7 @@ struct SearchView: View {
 
     #if os(tvOS)
     private func focusSearchContent() {
-        isSearchFocused = false
+        searchFocus.cancelEntry()
 
         if viewModel.canSearch,
            let firstGroup = viewModel.itemContentGroupViewModel.groups.first
@@ -107,29 +112,38 @@ struct SearchView: View {
         .ignoresSafeArea(.keyboard)
         .navigationTitle(L10n.search)
         .toolbarTitleDisplayMode(.inline)
-        .searchFocused($isSearchFocused)
-        .onReceive(tabItemSelected) { event in
-            if event.isRepeat, event.isRoot {
-                isSearchFocused = true
+        #if os(tvOS)
+            .tvSearchFocusRegistration(searchFocus)
+            .onReceive(searchFocus.$entryRequest) { _ in
+                focusedSuggestionID = nil
+                focusCoordinator.clearRequest()
             }
-        }
-        .onFirstAppear {
-            viewModel.getSuggestions()
-        }
-        .onChange(of: searchQuery) {
-            viewModel.search(query: searchQuery)
-        }
-        .searchable(
-            text: $searchQuery,
-            prompt: L10n.search
-        )
-        .environmentObject(focusCoordinator)
+        #else
+            .searchFocused($isSearchFocused)
+            .onReceive(tabItemSelected) { event in
+                if event.isRepeat, event.isRoot {
+                    isSearchFocused = true
+                }
+            }
+        #endif
+            .onFirstAppear {
+                    viewModel.getSuggestions()
+                }
+                .onChange(of: searchQuery) {
+                    viewModel.search(query: searchQuery)
+                }
+                .searchable(
+                    text: $searchQuery,
+                    prompt: L10n.search
+                )
+                .environmentObject(focusCoordinator)
         #if os(tvOS)
             .edgePadding(.top)
             .focusSection()
             .onMoveCommand { direction in
-                guard direction == .down, isSearchFocused else { return }
-                focusSearchContent()
+                if direction == .down, searchFocus.isFieldFocused {
+                    focusSearchContent()
+                }
             }
         #else
             .navigationBarFilterDrawer(

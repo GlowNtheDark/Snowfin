@@ -123,7 +123,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
             .map {
                 PosterGroup(
                     library: $0,
-                    posterDisplayType: .landscape
+                    posterDisplayType: $0.libraryItemTypes.contains(.movie) || $0.libraryItemTypes
+                        .contains(.series) ? .portrait : .landscape
                 )
             }
 
