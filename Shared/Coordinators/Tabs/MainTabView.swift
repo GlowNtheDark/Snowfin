@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import FactoryKit
 import JellyfinAPI
 import SwiftUI
@@ -29,8 +30,14 @@ struct MainTabView: View {
     @State
     private var previewedSidebarTabID: String?
 
+    @State
+    private var hasRequestedLaunchContentFocus = false
+
     @StateObject
     private var searchFocus = TVSearchFocusCoordinator()
+
+    @Default(.accentColor)
+    private var accentColor
     #endif
 
     init() {
@@ -132,10 +139,26 @@ struct MainTabView: View {
         }
     }
 
+    private func returnToSidebar(tabID: String) {
+        guard tabCoordinator.tabs.contains(where: { $0.item.id == tabID }) else { return }
+        focusedSidebarTabID = tabID
+    }
+
+    private func requestInitialHomeContentFocus(for tab: TabCoordinator.TabData) {
+        guard !hasRequestedLaunchContentFocus,
+              tab.item.id == tabCoordinator.tabs.first?.item.id,
+              tab.item.id == tabCoordinator.selectedTabID,
+              tab.coordinator.path.isEmpty
+        else { return }
+
+        hasRequestedLaunchContentFocus = true
+        activateSidebarTab(tab)
+    }
+
     @ViewBuilder
     private func selectedTabContent() -> some View {
         if let tab = tabCoordinator.tabs.first(where: { $0.item.id == displayedTabID }) {
-            let content = NavigationInjectionView(
+            NavigationInjectionView(
                 coordinator: tab.coordinator
             ) {
                 tab.item.content
@@ -143,11 +166,11 @@ struct MainTabView: View {
             .environmentObject(tabCoordinator)
             .environment(\.tabItemSelected, tab.publisher)
             .id(tab.item.id)
-
-            if tab.item.id == TabItem.search.id {
-                TVSearchFocusContainer(content: content, focus: searchFocus)
-            } else {
-                content
+            .environment(\.initialTabCandidateReady) {
+                requestInitialHomeContentFocus(for: tab)
+            }
+            .onExitCommand {
+                returnToSidebar(tabID: tab.item.id)
             }
         }
     }
@@ -182,13 +205,13 @@ struct MainTabView: View {
             .background {
                 if isFocused {
                     Rectangle()
-                        .fill(Color.snowfinIceBlue)
+                        .fill(accentColor)
                 } else if isSelected {
                     Rectangle()
-                        .fill(Color.snowfinIceBlue.opacity(0.22))
+                        .fill(accentColor.opacity(0.22))
                         .overlay {
                             Rectangle()
-                                .stroke(Color.snowfinIceBlue.opacity(0.8), lineWidth: 2)
+                                .stroke(accentColor.opacity(0.8), lineWidth: 2)
                         }
                 }
             }
@@ -235,11 +258,13 @@ struct MainTabView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 30)
+            .padding(.top, 60)
+            .padding(.bottom, 30)
             .frame(width: isSidebarExpanded ? 292 : 84)
+            .frame(maxHeight: .infinity, alignment: .top)
             .background {
                 Rectangle()
-                    .fill(Color.snowfinDeepNavy.opacity(0.98))
+                    .fill(Color.black)
                     .overlay(alignment: .trailing) {
                         Rectangle()
                             .fill(Color.snowfinIceBlue.opacity(0.2))
@@ -249,6 +274,8 @@ struct MainTabView: View {
             .focusScope(sidebarFocusNamespace)
             .focusSection()
             .clipped()
+            // Expand the complete rail, including its background and clipping bounds.
+            .ignoresSafeArea(.container, edges: [.horizontal, .vertical])
             .zIndex(1)
             .onChange(of: focusedSidebarTabID) { previousTabID, tabID in
                 guard let tabID,
@@ -300,6 +327,11 @@ struct MainTabView: View {
 }
 
 #if os(tvOS)
+extension EnvironmentValues {
+    @Entry
+    var initialTabCandidateReady: (() -> Void)? = nil
+}
+
 private struct SnowfinSidebarButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {

@@ -158,13 +158,17 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     }
 
     func playNextEpisode() {
+        playNextEpisode(reason: .manualPlayNext)
+    }
+
+    private func playNextEpisode(reason: MediaPlayerManager.CompletionReason) {
         guard let manager, let provider = nextItemProvider else { return }
         countdownTask?.cancel()
         dismissOverlay()
         activeSegment = nil
         pendingCreditsSegment = nil
         log("Starting resolved next episode \(provider.item.id ?? "Unknown")")
-        manager.playNewItemCompletingCurrent(provider: provider)
+        manager.playNewItemCompletingCurrent(provider: provider, reason: reason)
     }
 
     func playContinueWatching(_ item: BaseItemDto) {
@@ -178,7 +182,12 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         activeSegment = nil
         pendingCreditsSegment = nil
         log("Starting Continue Watching item \(item.id ?? "Unknown")")
-        manager.playNewItemCompletingCurrent(provider: provider)
+        #if DEBUG
+        print(
+            "[WatchedTrace] transition=continueWatchingSwitch itemID=\(manager.item.id ?? "nil") actualPosition=\(manager.seconds.ticks) reportedPosition=\(manager.seconds.ticks)"
+        )
+        #endif
+        manager.playNewItem(provider: provider)
     }
 
     func keepWatching() {
@@ -351,7 +360,7 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
 
             self.log("Credits countdown completed", segment: segment)
             self.countdownTask = nil
-            self.playNextEpisode()
+            self.playNextEpisode(reason: .countdownPlayNext)
         }
     }
 

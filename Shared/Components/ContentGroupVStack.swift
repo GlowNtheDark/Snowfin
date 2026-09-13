@@ -14,7 +14,7 @@ struct ContentGroupVStack: View {
 
     private var spacing: CGFloat {
         #if os(tvOS)
-        60
+        36
         #else
         20
         #endif

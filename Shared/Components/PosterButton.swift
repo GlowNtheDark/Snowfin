@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 struct PosterButton<Item: Poster>: View {
@@ -16,12 +17,19 @@ struct PosterButton<Item: Poster>: View {
     @Environment(\.viewContext)
     private var viewContext
 
+    @Default(.accentColor)
+    private var accentColor
+
     @Namespace
     private var namespace
 
     #if os(tvOS)
     @FocusState
     private var isFocused: Bool
+    @Environment(\.launchFocusFirstPoster)
+    private var launchFocusFirstPoster
+    @Environment(\.initialTabCandidateReady)
+    private var initialTabCandidateReady
     #endif
 
     @State
@@ -69,13 +77,13 @@ struct PosterButton<Item: Poster>: View {
             .overlay {
                 Rectangle()
                     .stroke(
-                        Color.snowfinIceBlue.opacity(isFocused ? 0.95 : 0),
+                        accentColor.opacity(isFocused ? 0.95 : 0),
                         lineWidth: 3
                     )
             }
             .scaleEffect(isFocused ? 1.035 : 1)
             .shadow(
-                color: isFocused ? Color.snowfinIceBlue.opacity(0.28) : .clear,
+                color: isFocused ? accentColor.opacity(0.28) : .clear,
                 radius: isFocused ? 16 : 0
             )
             .animation(.easeOut(duration: 0.16), value: isFocused)
@@ -122,6 +130,15 @@ struct PosterButton<Item: Poster>: View {
             .buttonBorderShape(.roundedRectangle(radius: 0))
             .focused($isFocused)
             .focusedValue(\.focusedPoster, AnyPoster(item))
+            .background {
+                if launchFocusFirstPoster == AnyPoster(item) {
+                    LaunchFocusCandidateProbe(
+                        swiftUIFocused: isFocused,
+                        onReady: initialTabCandidateReady
+                    )
+                    .allowsHitTesting(false)
+                }
+            }
         #else
             .buttonStyle(.borderless)
         #endif
@@ -140,6 +157,97 @@ private struct SnowfinPosterButtonStyle: ButtonStyle {
             .contentShape(Rectangle())
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif
+
+#if os(tvOS)
+extension EnvironmentValues {
+    @Entry
+    var launchFocusFirstPoster: AnyPoster? = nil
+}
+
+/// Signals once when the first Home tile is visible enough to accept focus.
+struct LaunchFocusCandidateProbe: UIViewRepresentable {
+    let swiftUIFocused: Bool
+    let onReady: (() -> Void)?
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: ProbeView, context: Context) {
+        view.swiftUIFocused = swiftUIFocused
+        view.onReady = onReady
+        view.signalIfVisible()
+    }
+
+    final class ProbeView: UIView {
+        var swiftUIFocused = false
+        var onReady: (() -> Void)?
+        private var didSignalReadiness = false
+        private var visibilityObservations: [NSKeyValueObservation] = []
+
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            observeVisibility()
+            signalIfVisible()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            observeVisibility()
+            signalIfVisible()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            signalIfVisible()
+        }
+
+        private func observeVisibility() {
+            visibilityObservations.removeAll()
+            var ancestors: [UIView] = []
+            var next: UIView? = self
+            while let view = next {
+                ancestors.append(view)
+                next = view.superview
+            }
+            for view in ancestors {
+                visibilityObservations.append(
+                    view.observe(\.alpha, options: [.initial, .new]) { [weak self] _, _ in
+                        self?.signalIfVisible()
+                    }
+                )
+                visibilityObservations.append(
+                    view.observe(\.isHidden, options: [.initial, .new]) { [weak self] _, _ in
+                        self?.signalIfVisible()
+                    }
+                )
+            }
+        }
+
+        func signalIfVisible() {
+            guard !didSignalReadiness,
+                  let onReady,
+                  window != nil,
+                  !bounds.isEmpty
+            else { return }
+
+            var effectiveAlpha: CGFloat = 1
+            var next: UIView? = self
+            while let view = next {
+                guard !view.isHidden else { return }
+                effectiveAlpha *= view.alpha
+                next = view.superview
+            }
+            guard effectiveAlpha > 0.99 else { return }
+
+            didSignalReadiness = true
+            onReady()
+        }
     }
 }
 #endif

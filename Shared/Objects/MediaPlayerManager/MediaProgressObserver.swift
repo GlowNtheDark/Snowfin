@@ -77,16 +77,16 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             .store(in: &cancellables)
     }
 
-    private func endPlaybackSession(seconds: Duration? = nil) {
+    private func endPlaybackSession(seconds: Duration? = nil, ordinaryExit: Bool = false) {
         guard let item else { return }
-        sendStopReport(for: item, seconds: seconds ?? manager?.seconds)
+        sendStopReport(for: item, seconds: seconds ?? manager?.seconds, ordinaryExit: ordinaryExit)
     }
 
     private func playbackItemDidChange(_ newItem: MediaPlayerItem?) {
         timer.poke()
 
         if let item, newItem !== item {
-            endPlaybackSession(seconds: manager?.previousItemStopSecondsOverride)
+            endPlaybackSession(seconds: manager?.previousItemStopSeconds)
             self.item = newItem
             self.hasSentStart = false
             sendReport()
@@ -103,7 +103,19 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     private func didReceive(action: MediaPlayerManager._Action) {
         switch action {
         case .stop:
-            endPlaybackSession()
+            #if DEBUG
+            let position = manager.map { String($0.seconds.ticks) } ?? "nil"
+            let runtime = item?.baseItem.runTimeTicks.map(String.init) ?? "nil"
+            let played = manager?.item.userData?.isPlayed.map(String.init) ?? "nil"
+            let itemPlayed = item?.baseItem.userData?.isPlayed.map(String.init) ?? "nil"
+            print(
+                "[WatchedTrace] ordinaryExit itemID=\(item?.baseItem.id ?? "nil") actualPosition=\(position) runtime=\(runtime) managerPresent=\(manager != nil)"
+            )
+            print(
+                "[WatchedTrace] ordinaryExit before itemID=\(item?.baseItem.id ?? "nil") played=\(played) playbackItemPlayed=\(itemPlayed)"
+            )
+            #endif
+            endPlaybackSession(ordinaryExit: true)
             timer.stop()
             cancellables = []
             item = nil
@@ -135,7 +147,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         }
     }
 
-    private func sendStopReport(for item: MediaPlayerItem, seconds: Duration?) {
+    private func sendStopReport(for item: MediaPlayerItem, seconds: Duration?, ordinaryExit: Bool = false) {
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -151,9 +163,64 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             info.sessionID = item.playSessionID
 
             let request = Paths.reportPlaybackStopped(info)
-            try await send(request)
+            #if DEBUG
+            let ticks = seconds.map { String($0.ticks) } ?? "nil"
+            print(
+                "[WatchedTrace] transition=ordinaryStop itemID=\(item.baseItem.id ?? "nil") actualPosition=\(ticks) reportedPosition=\(ticks)"
+            )
+            #endif
+            #if DEBUG && os(tvOS)
+            if ordinaryExit {
+                print(
+                    "[WatchedTrace] ordinaryExit stopReport itemID=\(item.baseItem.id ?? "nil") endpoint=POST/Sessions/Playing/Stopped position=\(ticks) playedField=absent syntheticRuntime=false"
+                )
+                await debugReadExitState(itemID: item.baseItem.id, phase: "serverBefore")
+            }
+            #endif
+            do {
+                try await send(request)
+                #if DEBUG && os(tvOS)
+                if ordinaryExit {
+                    print("[WatchedTrace] ordinaryExit stopReportAccepted itemID=\(item.baseItem.id ?? "nil")")
+                    await debugReadExitState(itemID: item.baseItem.id, phase: "serverAfter")
+                }
+                #endif
+            } catch {
+                #if DEBUG
+                if ordinaryExit {
+                    print("[WatchedTrace] ordinaryExit stopReportFailed itemID=\(item.baseItem.id ?? "nil")")
+                }
+                #endif
+                throw error
+            }
         }
     }
+
+    #if DEBUG && os(tvOS)
+    private func debugReadExitState(itemID: String?, phase: String) async {
+        guard let itemID else { return }
+        do {
+            let request = try Paths.getItem(itemID: itemID, userID: authenticatedUser.id)
+            let response = try await send(request)
+            let decoded = response.value
+            let played = decoded.userData?.isPlayed.map(String.init) ?? "nil"
+            let position = decoded.userData?.playbackPositionTicks.map(String.init) ?? "nil"
+            let runtime = decoded.runTimeTicks.map(String.init) ?? "nil"
+            let percentage = decoded.userData?.playedPercentage.map(String.init(describing:)) ?? "nil"
+            print(
+                "[WatchedTrace] ordinaryExit \(phase) itemID=\(decoded.id ?? "nil") played=\(played) position=\(position) runtime=\(runtime) playedPercentage=\(percentage)"
+            )
+            if phase == "serverAfter" {
+                let progress = decoded.progressPercentage.map(String.init(describing:)) ?? "nil"
+                print(
+                    "[WatchedTrace] ordinaryExit localAfter itemID=\(decoded.id ?? "nil") source=freshDecodedResponse isPlayed=\(played) isWatched=\(decoded.userData?.isPlayed == true) progress=\(progress) remaining=\(decoded.progressLabel ?? "nil")"
+                )
+            }
+        } catch {
+            print("[WatchedTrace] ordinaryExit \(phase) itemID=\(itemID) readFailed=true")
+        }
+    }
+    #endif
 
     private func sendProgressReport(for item: MediaPlayerItem, seconds: Duration?, isPaused: Bool = false) {
 
@@ -174,6 +241,12 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             info.subtitleStreamIndex = item.selectedSubtitleStreamIndex
 
             let request = Paths.reportPlaybackProgress(info)
+            #if DEBUG
+            let ticks = seconds.map { String($0.ticks) } ?? "nil"
+            print(
+                "[WatchedTrace] progressReport itemID=\(item.baseItem.id ?? "nil") endpoint=POST/Sessions/Playing/Progress position=\(ticks) playedField=absent syntheticRuntime=false"
+            )
+            #endif
             try await send(request)
         }
     }

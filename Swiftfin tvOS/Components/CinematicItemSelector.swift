@@ -48,25 +48,22 @@ struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
     }
 
     var body: some View {
-        CinematicContentGroupContainer(preferredHeight: 400) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
 
-                if let selectedItem {
-                    topContent(selectedItem)
-                        .id(selectedItem.hashValue)
-                        .transition(.opacity)
-                }
-
-                // TODO: fix intrinsic content sizing without frame
-                PosterHStack(
-                    elements: items,
-                    displayType: .landscape,
-                    size: .medium
-                ) { item, _ in
-                    action(item)
-                }
-                .frame(height: 400)
+            if let selectedItem {
+                topContent(selectedItem)
+                    .id(selectedItem.hashValue)
+                    .transition(.opacity)
             }
+
+            PosterHStack(
+                elements: items,
+                displayType: .portrait,
+                size: .small
+            ) { item, _ in
+                action(item)
+            }
+            .environment(\.launchFocusFirstPoster, items.first.map { AnyPoster($0) })
         }
         .background(Color.snowfinDeepNavy)
         .onChange(of: focusedPoster) {

@@ -56,7 +56,7 @@ final class MediaPlayerManager: ViewModel {
         case ended
         case error
         case playNewItem(provider: MediaPlayerItemProvider)
-        case playNewItemCompletingCurrent(provider: MediaPlayerItemProvider)
+        case playNewItemCompletingCurrent(provider: MediaPlayerItemProvider, reason: CompletionReason = .manualPlayNext)
         case setBitrate(bitrate: PlaybackBitrate)
         case setPlaybackRequestStatus(status: PlaybackRequestStatus)
         case setRate(rate: Float)
@@ -146,10 +146,13 @@ final class MediaPlayerManager: ViewModel {
 
     lazy var snowfinSegmentCoordinator = SnowfinPlaybackSegmentCoordinator(manager: self)
 
-    /// A one-shot reporting position used while replacing the current playback item.
-    /// This lets an early, intentional completion follow the normal item-change
-    /// reporting path without changing the player's actual playback position.
-    private(set) var previousItemStopSecondsOverride: Duration?
+    enum CompletionReason: String {
+        case manualPlayNext
+        case countdownPlayNext
+    }
+
+    /// Snapshot the real outgoing position before stopping the proxy can reset it.
+    private(set) var previousItemStopSeconds: Duration?
 
     // TODO: replace with graph dependency package
     private func setSupplements() {
@@ -256,6 +259,12 @@ final class MediaPlayerManager: ViewModel {
             return
         }
 
+        #if DEBUG
+        print(
+            "[WatchedTrace] transition=naturalEnd itemID=\(item.id ?? "nil") actualPosition=\(seconds.ticks) reportedPosition=\(seconds.ticks)"
+        )
+        #endif
+
         if let nextItem = queue?.nextItem, try authenticatedUser.data.configuration?.enableNextEpisodeAutoPlay == true {
             await self.playNewItem(provider: nextItem)
         } else {
@@ -293,26 +302,35 @@ final class MediaPlayerManager: ViewModel {
 
     @Function(\Action.Cases.playNewItem)
     private func _playNewItem(_ provider: MediaPlayerItemProvider) async throws {
-        try await replacePlaybackItem(with: provider, previousItemStopSeconds: nil)
+        try await replacePlaybackItem(with: provider)
     }
 
     @Function(\Action.Cases.playNewItemCompletingCurrent)
-    private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider) async throws {
-        try await replacePlaybackItem(with: provider, previousItemStopSeconds: item.runtime)
+    private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider, _ reason: CompletionReason) async throws {
+        guard let itemID = playbackItem?.baseItem.id else { return }
+        let request = try Paths.markPlayedItem(itemID: itemID, userID: authenticatedUser.id)
+        let response = try await send(request)
+        Notifications[.itemUserDataDidChange].post(response.value)
+        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        #if DEBUG
+        print(
+            "[WatchedTrace] transition=\(reason.rawValue) markPlayed=true itemID=\(itemID) actualPosition=\(seconds.ticks) reportedPosition=\(seconds.ticks)"
+        )
+        #endif
+        try await replacePlaybackItem(with: provider)
     }
 
     private func replacePlaybackItem(
-        with provider: MediaPlayerItemProvider,
-        previousItemStopSeconds: Duration?
+        with provider: MediaPlayerItemProvider
     ) async throws {
+        previousItemStopSeconds = seconds
+        defer { previousItemStopSeconds = nil }
         item = provider.item
         setSupplements()
         proxy?.stop()
         let newPlaybackItem = try await provider()
 
-        previousItemStopSecondsOverride = previousItemStopSeconds
         playbackItem = newPlaybackItem
-        previousItemStopSecondsOverride = nil
     }
 
     @Function(\Action.Cases.setBitrate)

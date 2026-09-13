@@ -75,13 +75,44 @@ enum ScreenTopShelfSnapshotWriter {
                 id: id,
                 imageURL: imageURL,
                 progress: progress,
-                title: item.displayTitle
+                title: topShelfTitle(for: item)
             )
         }
 
         updateTask = Task.detached(priority: .utility) {
             await writeSnapshot(for: candidates)
         }
+    }
+
+    private static func topShelfTitle(for item: BaseItemDto) -> String {
+        guard item.type == .episode else { return item.displayTitle }
+
+        let seriesName = item.seriesName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let episodeTitle = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let episodeNumber: String? = {
+            switch (item.parentIndexNumber, item.indexNumber) {
+            case let (season?, episode?):
+                "S\(season):E\(episode)"
+            case let (nil, episode?):
+                "E\(episode)"
+            case let (season?, nil):
+                "S\(season)"
+            case (nil, nil):
+                nil
+            }
+        }()
+        let details = [episodeNumber, episodeTitle]
+            .compactMap(\.self)
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+
+        // Sectioned Top Shelf items have one native title, with no subtitle API.
+        // tvOS controls how the line break is displayed and truncated.
+        let title = [seriesName, details]
+            .compactMap(\.self)
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+        return title.isEmpty ? item.displayTitle : title
     }
 
     private static func landscapeImageURL(for item: BaseItemDto) -> URL? {

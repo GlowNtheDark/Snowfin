@@ -26,6 +26,12 @@ struct PosterIndicatorsOverlay: View {
         UIDevice.isTV ? 45 : 25
     }
 
+    /// Jellyfin's user state is authoritative for watched treatment; resume
+    /// progress must not promote an item to watched.
+    private var isWatched: Bool {
+        item.userData?.isPlayed == true
+    }
+
     private var showsUnplayedIndicator: Bool {
         indicators.contains(.unplayed) &&
             item.canBePlayed &&
@@ -37,14 +43,14 @@ struct PosterIndicatorsOverlay: View {
     private var showsProgressIndicator: Bool {
         indicators.contains(.progress) &&
             item.progressLabel != nil &&
-            item.userData?.isPlayed != true
+            !isWatched
     }
 
     private var showsCompletedProgressIndicator: Bool {
         indicators.contains(.played) &&
             item.canBePlayed &&
             !item.isLiveStream &&
-            item.userData?.isPlayed == true
+            isWatched
     }
 
     var body: some View {
@@ -68,7 +74,7 @@ struct PosterIndicatorsOverlay: View {
                     if indicators.contains(.played),
                        item.canBePlayed,
                        !item.isLiveStream,
-                       item.userData?.isPlayed == true
+                       isWatched
                     {
                         PlayedIndicator()
                             .frame(width: indicatorSize, height: indicatorSize)
@@ -103,6 +109,14 @@ struct PosterIndicatorsOverlay: View {
             }
             #endif
         }
+        #if DEBUG && os(tvOS)
+        .onAppear {
+            item.debugLogWatchedState("tile.appear.completed=\(showsCompletedProgressIndicator)")
+        }
+        .onChange(of: item.watchedStateDebugSnapshot) {
+            item.debugLogWatchedState("tile.changed.completed=\(showsCompletedProgressIndicator)")
+        }
+        #endif
     }
 }
 

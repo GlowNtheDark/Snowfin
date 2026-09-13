@@ -21,7 +21,7 @@ struct ProgressIndicator: View {
 
     private var progressColor: Color {
         #if os(tvOS)
-        isCompleted ? Color(red: 0.25, green: 0.95, blue: 0.62) : accentColor
+        isCompleted ? accentColor.watchedAccentColor : accentColor
         #else
         accentColor
         #endif

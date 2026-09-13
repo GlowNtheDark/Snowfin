@@ -14,7 +14,14 @@ import SwiftUI
 final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
     @Published
-    private(set) var item: BaseItemDto
+    private(set) var item: BaseItemDto {
+        didSet {
+            #if DEBUG && os(tvOS)
+            item.debugLogWatchedState("detail.provider.changed")
+            #endif
+        }
+    }
+
     @Published
     private(set) var localTrailers: [BaseItemDto] = []
     @Published
@@ -32,6 +39,9 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         self.id = item.id ?? "Unknown"
         self.item = item
         super.init()
+        #if DEBUG && os(tvOS)
+        item.debugLogWatchedState("detail.initial")
+        #endif
     }
 
     init(id: String) {
@@ -43,6 +53,18 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     func makeGroups(environment: Empty) async throws -> [any ContentGroup] {
         let userSession = try requireUserSession()
         let fullItem = try await item.getFullItem(userSession: userSession, sendNotification: true)
+        #if DEBUG && os(tvOS)
+        fullItem.debugLogWatchedState("detail.fullItem.result")
+        if UserDefaults.standard.string(forKey: "WatchedTraceItemID") == fullItem.id {
+            do {
+                let request = try Paths.getItem(itemID: id, userID: authenticatedUser.id)
+                let response = try await userSession.client.send(request)
+                response.value.debugLogWatchedState("server.getItem.response")
+            } catch {
+                print("[WatchedTrace] surface=server.getItem.failed itemID=\(id)")
+            }
+        }
+        #endif
         let newMediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
             for: fullItem,
             userSession: userSession
@@ -51,6 +73,9 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         let newRandomBackdropItem = try? await randomBackdropItem(for: fullItem)
 
         item = fullItem
+        #if DEBUG && os(tvOS)
+        newMediaPlayerItemProvider?.item.debugLogWatchedState("detail.playbackWrapper")
+        #endif
         localTrailers = newLocalTrailers ?? []
         mediaPlayerItemProvider = newMediaPlayerItemProvider
         randomBackdropItem = newRandomBackdropItem
@@ -293,13 +318,22 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     }
 
     func toggleIsPlayed() async {
+        #if DEBUG && os(tvOS)
+        item.debugLogWatchedState("detail.toggle.before")
+        #endif
         let beforeIsPlayed = item.userData?.isPlayed ?? false
 
         item.userData?.isPlayed = !beforeIsPlayed
+        #if DEBUG && os(tvOS)
+        item.debugLogWatchedState("detail.toggle.optimistic")
+        #endif
         do {
             try await setIsPlayed(!beforeIsPlayed)
         } catch {
             item.userData?.isPlayed = beforeIsPlayed
+            #if DEBUG && os(tvOS)
+            item.debugLogWatchedState("detail.toggle.rollback")
+            #endif
         }
     }
 
@@ -430,6 +464,11 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         }
 
         let response = try await send(request)
+        #if DEBUG && os(tvOS)
+        var responseItem = item
+        responseItem.userData = response.value
+        responseItem.debugLogWatchedState("server.markPlayed.response")
+        #endif
         Notifications[.itemUserDataDidChange].post(response.value)
         Notifications[.itemShouldRefreshMetadata].post(itemID)
     }

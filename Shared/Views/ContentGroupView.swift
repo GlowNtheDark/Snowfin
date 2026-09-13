@@ -25,12 +25,31 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
     @StateObject
     private var viewModel: ContentGroupViewModel<Provider>
 
+    #if os(tvOS)
+    @State
+    private var pendingFirstGroupFocus = false
+    #endif
+
     @TabItemSelected
     private var tabItemSelected
 
     init(provider: Provider) {
         _viewModel = StateObject(wrappedValue: ContentGroupViewModel(provider: provider))
     }
+
+    #if os(tvOS)
+    private func resolveFirstGroupFocus(using proxy: ScrollViewProxy) {
+        guard pendingFirstGroupFocus,
+              let firstGroup = viewModel.groups.first
+        else { return }
+
+        pendingFirstGroupFocus = false
+        proxy.scrollTo("top", anchor: .top)
+        DispatchQueue.main.async {
+            focusCoordinator.focus(firstGroup.id)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var contentView: some View {
@@ -56,23 +75,25 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             .refreshable {
                 await viewModel.background.refresh()
             }
+            #if os(tvOS)
+            .onAppear {
+                resolveFirstGroupFocus(using: proxy)
+            }
+            .onChange(of: pendingFirstGroupFocus) {
+                resolveFirstGroupFocus(using: proxy)
+            }
+            .onChange(of: viewModel.groups.count) { _, _ in
+                resolveFirstGroupFocus(using: proxy)
+            }
+            #else
             .onReceive(tabItemSelected) { event in
                 if event.isRepeat, event.isRoot {
-                    #if os(tvOS)
-                    proxy.scrollTo("top", anchor: .top)
-
-                    if let firstGroup = viewModel.groups.first {
-                        DispatchQueue.main.async {
-                            focusCoordinator.focus(firstGroup.id)
-                        }
-                    }
-                    #else
                     withAnimation {
                         proxy.scrollTo("top", anchor: .top)
                     }
-                    #endif
                 }
             }
+            #endif
         }
     }
 
@@ -99,7 +120,14 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         }
         .animation(.linear(duration: 0.2), value: viewModel.state)
         .animation(.linear(duration: 0.2), value: viewModel.background.states)
-        .navigationTitle(viewModel.provider.displayTitle)
+        #if os(tvOS)
+            .onReceive(tabItemSelected) { event in
+                if event.isRepeat, event.isRoot {
+                    pendingFirstGroupFocus = true
+                }
+            }
+        #endif
+            .navigationTitle(viewModel.provider.displayTitle)
         #if os(iOS)
             .toolbarTitleDisplayMode(router.isRootOfPath ? .inlineLarge : .inline)
         #elseif os(tvOS)

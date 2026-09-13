@@ -44,6 +44,7 @@ struct CinematicSelectionContentGroup: ContentGroup {
                 ) { item in
                     router.route(to: .item(item: item))
                 }
+                .padding(.top, -16)
             } header: {
                 Text(viewModel.resumeViewModel.library.parent.displayTitle)
                     .font(.title3)

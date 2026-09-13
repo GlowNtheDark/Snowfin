@@ -19,6 +19,45 @@ import SwiftUI
 
 extension BaseItemDto {
 
+    #if DEBUG && os(tvOS)
+    /// Set the launch argument `-WatchedTraceItemID <Jellyfin item ID>` to
+    /// correlate one tile with its detail provider and fresh server response.
+    var watchedStateDebugSnapshot: String {
+        func value(_ value: (some Any)?) -> String {
+            value.map { String(describing: $0) } ?? "nil"
+        }
+        let remainingTicks = runTimeTicks.flatMap { runtime in
+            userData?.playbackPositionTicks.map { runtime - $0 }
+        }
+        let fields: [String: String] = [
+            "itemID": value(id),
+            "title": displayTitle,
+            "userDataPresent": String(userData != nil),
+            "userDataItemID": value(userData?.itemID),
+            "isPlayed": value(userData?.isPlayed),
+            "isWatched": String(userData?.isPlayed == true),
+            "playbackPositionTicks": value(userData?.playbackPositionTicks),
+            "runTimeTicks": value(runTimeTicks),
+            "playedPercentage": value(userData?.playedPercentage),
+            "progressPercentage": value(progressPercentage),
+            "remainingTicks": value(remainingTicks),
+            "remainingSeconds": value(remainingTicks.map { Double($0) / 10_000_000 }),
+            "progressLabel": value(progressLabel),
+            "playButtonLabel": playButtonLabel,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return text
+    }
+
+    func debugLogWatchedState(_ surface: String) {
+        let targetID = UserDefaults.standard.string(forKey: "WatchedTraceItemID")
+        guard id == targetID || (targetID == nil && surface == "detail.initial") else { return }
+        print("[WatchedTrace] surface=\(surface) \(watchedStateDebugSnapshot)")
+    }
+    #endif
+
     init(person: BaseItemPerson) {
         self.init(
             id: person.id,
@@ -349,6 +388,18 @@ extension BaseItemDto {
 
             return clamp(
                 Date.now.timeIntervalSince(startDate) / length,
+                min: 0,
+                max: 1
+            )
+        }
+
+        if let playbackPositionTicks = userData?.playbackPositionTicks,
+           let runTimeTicks,
+           playbackPositionTicks > 0,
+           runTimeTicks > 0
+        {
+            return clamp(
+                Double(playbackPositionTicks) / Double(runTimeTicks),
                 min: 0,
                 max: 1
             )

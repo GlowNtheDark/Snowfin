@@ -24,10 +24,15 @@ extension SeriesEpisodeContentGroup {
 
         let episode: BaseItemDto
 
+        /// Only Jellyfin's explicit user state selects the completed styling.
+        private var isWatched: Bool {
+            episode.userData?.isPlayed == true
+        }
+
         @ViewBuilder
         private var overlayView: some View {
             #if os(tvOS)
-            if posterConfiguration.indicators.contains(.played), episode.userData?.isPlayed ?? false {
+            if posterConfiguration.indicators.contains(.played), isWatched {
                 ProgressIndicator(
                     title: nil,
                     progress: 1,
@@ -37,7 +42,7 @@ extension SeriesEpisodeContentGroup {
             } else if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
-                    progress: (episode.userData?.playedPercentage ?? 0) / 100,
+                    progress: episode.progressPercentage ?? 0,
                     posterDisplayType: .landscape,
                     isCompleted: false
                 )
@@ -46,11 +51,11 @@ extension SeriesEpisodeContentGroup {
             if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
-                    progress: (episode.userData?.playedPercentage ?? 0) / 100,
+                    progress: episode.progressPercentage ?? 0,
                     posterDisplayType: .landscape,
                     isCompleted: false
                 )
-            } else if posterConfiguration.indicators.contains(.played), episode.userData?.isPlayed ?? false {
+            } else if posterConfiguration.indicators.contains(.played), isWatched {
                 PlayedIndicator()
                     .frame(width: UIDevice.isTV ? 45 : 25, height: UIDevice.isTV ? 45 : 25)
                     .padding(3)

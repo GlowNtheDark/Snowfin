@@ -42,6 +42,37 @@ extension Color {
         Color(uiColor: uiColor.overlayColor)
     }
 
+    /// A related, clearly distinct variant for completed progress.
+    var watchedAccentColor: Color {
+        let uiColor = uiColor
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard uiColor.getHue(
+            &hue,
+            saturation: &saturation,
+            brightness: &brightness,
+            alpha: &alpha
+        ) else {
+            let components = rgbaComponents
+            return Color(
+                red: min(components.red * 0.65 + 0.25, 1),
+                green: min(components.green * 0.65 + 0.25, 1),
+                blue: min(components.blue * 0.65 + 0.25, 1),
+                opacity: components.alpha
+            )
+        }
+
+        return Color(
+            hue: hue,
+            saturation: max(saturation * 0.45, 0.32),
+            brightness: max(brightness, 0.72),
+            opacity: alpha
+        )
+    }
+
     // TODO: Correct and add colors
     #if os(tvOS)
     static let systemFill = Color.white
