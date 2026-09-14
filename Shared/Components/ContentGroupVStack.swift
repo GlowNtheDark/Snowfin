@@ -31,6 +31,11 @@ struct ContentGroupVStack: View {
                 makeGroupBody(group)
                     .eraseToAnyView()
                     .coordinatedFocus(group.id)
+                #if os(tvOS)
+                    .id(group.id)
+                    .environment(\.homeFocusGroup, group.id)
+                    .environment(\.homeFocusRowOrder, groups.firstIndex { $0.id == group.id } ?? 0)
+                #endif
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

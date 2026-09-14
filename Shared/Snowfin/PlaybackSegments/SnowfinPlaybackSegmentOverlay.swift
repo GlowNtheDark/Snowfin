@@ -309,7 +309,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         Button {
                             coordinator.playNextEpisode()
                         } label: {
-                            Text("Play Now")
+                            Text("Play Next")
                                 .font(.system(size: 24, weight: .semibold))
                                 .lineLimit(1)
                                 .fixedSize(horizontal: true, vertical: false)

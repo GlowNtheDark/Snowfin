@@ -12,8 +12,10 @@ import Transmission
 
 struct VideoPlayer: View {
 
+    #if !os(tvOS)
     @Environment(\.presentationCoordinator)
     private var presentationCoordinator
+    #endif
 
     @InjectedObject(\.mediaPlayerManager)
     private var manager: MediaPlayerManager
@@ -28,7 +30,7 @@ struct VideoPlayer: View {
     @State
     private var audioOffset: Duration = .zero
     @State
-    private var isBeingDismissedByTransition = false
+    private var shouldSuppressStopDismissal = false
     #if os(tvOS)
     @State
     private var isNextEpisodeTransitionPresented = false
@@ -50,7 +52,10 @@ struct VideoPlayer: View {
     var body: some View {
         VideoPlayerContainerView(
             containerState: containerState,
-            manager: manager
+            manager: manager,
+            onPresentationWillStopPlayback: {
+                shouldSuppressStopDismissal = true
+            }
         ) {
             proxy.videoPlayerBody
                 .eraseToAnyView()
@@ -71,6 +76,7 @@ struct VideoPlayer: View {
             #endif
         }
         .onAppear {
+            shouldSuppressStopDismissal = false
             manager.proxy = proxy
             manager.snowfinSegmentCoordinator.prepare(for: manager.playbackItem)
             manager.start()
@@ -115,35 +121,36 @@ struct VideoPlayer: View {
                 key: PresentationControllerShouldDismissPreferenceKey.self,
                 value: containerState.presentationControllerShouldDismiss
             )
+        #if !os(tvOS)
             .onChange(of: presentationCoordinator.isPresented) {
                 guard !presentationCoordinator.isPresented else { return }
-                isBeingDismissedByTransition = true
+                shouldSuppressStopDismissal = true
                 manager.stop()
             }
+        #endif
             .onReceive(manager.$playbackItem) { newItem in
-                containerState.isAspectFilled = false
-                audioOffset = .zero
-                subtitleOffset = .zero
+                    containerState.isAspectFilled = false
+                    audioOffset = .zero
+                    subtitleOffset = .zero
 
-                // TODO: move to container view
-                containerState.scrubbedSeconds.value = newItem?.baseItem.startSeconds ?? .zero
-            }
-            .onReceive(manager.$state) { newState in
-                if newState == .stopped, !isBeingDismissedByTransition {
+                    // TODO: move to container view
+                    containerState.scrubbedSeconds.value = newItem?.baseItem.startSeconds ?? .zero
+                }
+                .onReceive(manager.$state) { newState in
+                    guard newState == .stopped, !shouldSuppressStopDismissal else { return }
                     router.dismiss()
                 }
-            }
 
-            .alert(
-                L10n.error,
-                isPresented: .constant(manager.error != nil)
-            ) {
-                Button(L10n.close, role: .cancel) {
-                    Container.shared.mediaPlayerManager.reset()
-                    router.dismiss()
+                .alert(
+                    L10n.error,
+                    isPresented: .constant(manager.error != nil)
+                ) {
+                    Button(L10n.close, role: .cancel) {
+                        Container.shared.mediaPlayerManager.reset()
+                        router.dismiss()
+                    }
+                } message: {
+                    Text(L10n.unableToLoadThisItem)
                 }
-            } message: {
-                Text(L10n.unableToLoadThisItem)
-            }
     }
 }

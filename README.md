@@ -37,6 +37,10 @@ Use the TestFlight version to test new features and bug fixes before being publi
 
 ## 📖 Documentation
 
+For this Screen checkout, start with the [agent guide](AGENTS.md),
+[architecture map](ARCHITECTURE.md), and [product documentation](docs/PRODUCT.md).
+The Swiftfin links below retain upstream project context.
+
 Swiftfin provides detailed documentation to help you understand key aspects of the app and its development approach:
 
 - [🎞️ Library Support](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/libraries.md) — Information on **library compatibility** and supported media types in Swiftin.

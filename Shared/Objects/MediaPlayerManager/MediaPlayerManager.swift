@@ -56,7 +56,7 @@ final class MediaPlayerManager: ViewModel {
         case ended
         case error
         case playNewItem(provider: MediaPlayerItemProvider)
-        case playNewItemCompletingCurrent(provider: MediaPlayerItemProvider, reason: CompletionReason = .manualPlayNext)
+        case playNewItemCompletingCurrent(provider: MediaPlayerItemProvider)
         case setBitrate(bitrate: PlaybackBitrate)
         case setPlaybackRequestStatus(status: PlaybackRequestStatus)
         case setRate(rate: Float)
@@ -145,11 +145,6 @@ final class MediaPlayerManager: ViewModel {
     var supplements: [any MediaPlayerSupplement] = []
 
     lazy var snowfinSegmentCoordinator = SnowfinPlaybackSegmentCoordinator(manager: self)
-
-    enum CompletionReason: String {
-        case manualPlayNext
-        case countdownPlayNext
-    }
 
     /// Snapshot the real outgoing position before stopping the proxy can reset it.
     private(set) var previousItemStopSeconds: Duration?
@@ -259,12 +254,6 @@ final class MediaPlayerManager: ViewModel {
             return
         }
 
-        #if DEBUG
-        print(
-            "[WatchedTrace] transition=naturalEnd itemID=\(item.id ?? "nil") actualPosition=\(seconds.ticks) reportedPosition=\(seconds.ticks)"
-        )
-        #endif
-
         if let nextItem = queue?.nextItem, try authenticatedUser.data.configuration?.enableNextEpisodeAutoPlay == true {
             await self.playNewItem(provider: nextItem)
         } else {
@@ -306,17 +295,12 @@ final class MediaPlayerManager: ViewModel {
     }
 
     @Function(\Action.Cases.playNewItemCompletingCurrent)
-    private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider, _ reason: CompletionReason) async throws {
+    private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider) async throws {
         guard let itemID = playbackItem?.baseItem.id else { return }
         let request = try Paths.markPlayedItem(itemID: itemID, userID: authenticatedUser.id)
         let response = try await send(request)
         Notifications[.itemUserDataDidChange].post(response.value)
         Notifications[.itemShouldRefreshMetadata].post(itemID)
-        #if DEBUG
-        print(
-            "[WatchedTrace] transition=\(reason.rawValue) markPlayed=true itemID=\(itemID) actualPosition=\(seconds.ticks) reportedPosition=\(seconds.ticks)"
-        )
-        #endif
         try await replacePlaybackItem(with: provider)
     }
 

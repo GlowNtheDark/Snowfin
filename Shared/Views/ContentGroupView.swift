@@ -28,6 +28,19 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
     #if os(tvOS)
     @State
     private var pendingFirstGroupFocus = false
+    @Environment(\.registerHomeFocus)
+    private var registerHomeFocus
+    @State
+    private var homeFocusRows: [HomeFocusRow] = []
+
+    private var isHome: Bool {
+        viewModel.provider is DefaultContentGroupProvider
+    }
+
+    private func resolveHomeReturn() {
+        guard isHome, router.isRootOfPath, !viewModel.background.is(.refreshing) else { return }
+        focusCoordinator.resolveHomeReturn(rows: homeFocusRows)
+    }
     #endif
 
     @TabItemSelected
@@ -78,6 +91,21 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             #if os(tvOS)
             .onAppear {
                 resolveFirstGroupFocus(using: proxy)
+                resolveHomeReturn()
+            }
+            .onPreferenceChange(HomeFocusRowsKey.self) { rows in
+                homeFocusRows = rows
+                resolveHomeReturn()
+            }
+            .onChange(of: focusCoordinator.homeReturnTarget) { _, tile in
+                if let tile {
+                    proxy.scrollTo(tile.groupID, anchor: .center)
+                }
+            }
+            .onChange(of: router.isRootOfPath) { _, isRoot in
+                if isRoot {
+                    resolveHomeReturn()
+                }
             }
             .onChange(of: pendingFirstGroupFocus) {
                 resolveFirstGroupFocus(using: proxy)
@@ -87,12 +115,12 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             }
             #else
             .onReceive(tabItemSelected) { event in
-                if event.isRepeat, event.isRoot {
-                    withAnimation {
-                        proxy.scrollTo("top", anchor: .top)
+                    if event.isRepeat, event.isRoot {
+                        withAnimation {
+                            proxy.scrollTo("top", anchor: .top)
+                        }
                     }
                 }
-            }
             #endif
         }
     }
@@ -121,6 +149,32 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         .animation(.linear(duration: 0.2), value: viewModel.state)
         .animation(.linear(duration: 0.2), value: viewModel.background.states)
         #if os(tvOS)
+            .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
+            .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
+            .onAppear {
+                if isHome, let navigationCoordinator = router.router.navigationCoordinator {
+                    registerHomeFocus?(focusCoordinator, navigationCoordinator)
+                }
+            }
+            .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) {
+                if isHome {
+                    focusCoordinator.homeStopReported()
+                }
+            }
+            .onChange(of: viewModel.background.is(.refreshing)) { wasRefreshing, refreshing in
+                if isHome, wasRefreshing, !refreshing {
+                    if viewModel.groups.isEmpty {
+                        focusCoordinator.cancelHomeReturn()
+                    } else {
+                        focusCoordinator.homeRefreshFinished()
+                    }
+                }
+            }
+            .onChange(of: focusCoordinator.defersHomeRefresh) { _, deferred in
+                if isHome {
+                    viewModel.setDefersHomeRefresh(deferred)
+                }
+            }
             .onReceive(tabItemSelected) { event in
                 if event.isRepeat, event.isRoot {
                     pendingFirstGroupFocus = true

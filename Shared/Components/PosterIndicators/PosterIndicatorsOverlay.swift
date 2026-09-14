@@ -109,14 +109,6 @@ struct PosterIndicatorsOverlay: View {
             }
             #endif
         }
-        #if DEBUG && os(tvOS)
-        .onAppear {
-            item.debugLogWatchedState("tile.appear.completed=\(showsCompletedProgressIndicator)")
-        }
-        .onChange(of: item.watchedStateDebugSnapshot) {
-            item.debugLogWatchedState("tile.changed.completed=\(showsCompletedProgressIndicator)")
-        }
-        #endif
     }
 }
 

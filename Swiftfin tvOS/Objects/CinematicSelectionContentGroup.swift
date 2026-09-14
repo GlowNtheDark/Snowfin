@@ -12,7 +12,9 @@ import SwiftUI
 
 struct CinematicSelectionContentGroup: ContentGroup {
 
-    let id = "cinematic-selection"
+    static let homeGroupID = "cinematic-selection"
+
+    let id = Self.homeGroupID
     let viewModel: CinematicSelectionContentGroupViewModel
 
     var _shouldBeResolved: Bool {
@@ -104,7 +106,13 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
     }
 
     func refresh() async {
-        await resumeViewModel.refresh()
+        if resumeViewModel.elements.isEmpty {
+            await resumeViewModel.refresh()
+        } else {
+            // Keep the current row until the replacement result is ready.
+            // Foreground refresh clears its cells before fetching.
+            await resumeViewModel.background.refresh()
+        }
     }
 
     private static func deduplicatedContinueItems(_ items: [BaseItemDto]) -> [BaseItemDto] {

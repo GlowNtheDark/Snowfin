@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Combine
 import Defaults
 import FactoryKit
 import JellyfinAPI
@@ -32,6 +33,22 @@ struct MainTabView: View {
 
     @State
     private var hasRequestedLaunchContentFocus = false
+
+    @State
+    private var isAwaitingLaunchContentFocus = true
+
+    @State
+    private var homePlaybackCoordinator: FocusCoordinator?
+    @State
+    private var protectsHomePlaybackReturn = false
+    @State
+    private var homeNavigationCoordinator: NavigationCoordinator?
+    @State
+    private var homeDetailsCoordinator: NavigationCoordinator?
+    @State
+    private var homeDirectPlayerIsPresented = false
+    @State
+    private var homeDetailsPlayerIsPresented = false
 
     @StateObject
     private var searchFocus = TVSearchFocusCoordinator()
@@ -120,6 +137,7 @@ struct MainTabView: View {
     }
 
     private func activateSidebarTab(_ tab: TabCoordinator.TabData) {
+        homePlaybackCoordinator?.cancelHomeReturn()
         previewedSidebarTabID = tab.item.id
         if tabCoordinator.selectedTabID != tab.item.id {
             tabCoordinator.selectedTabID = tab.item.id
@@ -152,7 +170,18 @@ struct MainTabView: View {
         else { return }
 
         hasRequestedLaunchContentFocus = true
-        activateSidebarTab(tab)
+        tab.publisher.send(.init(isRoot: true, isRepeat: true))
+    }
+
+    private func initialHomeContentFocusAcquired(for tab: TabCoordinator.TabData) {
+        guard isAwaitingLaunchContentFocus,
+              hasRequestedLaunchContentFocus,
+              tab.item.id == tabCoordinator.tabs.first?.item.id,
+              tab.item.id == tabCoordinator.selectedTabID,
+              tab.coordinator.path.isEmpty
+        else { return }
+
+        isAwaitingLaunchContentFocus = false
     }
 
     @ViewBuilder
@@ -169,7 +198,16 @@ struct MainTabView: View {
             .environment(\.initialTabCandidateReady) {
                 requestInitialHomeContentFocus(for: tab)
             }
+            .environment(\.initialTabCandidateFocused) {
+                initialHomeContentFocusAcquired(for: tab)
+            }
+            .environment(\.registerHomeFocus) { coordinator, navigationCoordinator in
+                guard tab.item.id == tabCoordinator.tabs.first?.item.id else { return }
+                homePlaybackCoordinator = coordinator
+                homeNavigationCoordinator = navigationCoordinator
+            }
             .onExitCommand {
+                guard !protectsHomePlaybackReturn else { return }
                 returnToSidebar(tabID: tab.item.id)
             }
         }
@@ -223,7 +261,11 @@ struct MainTabView: View {
             guard direction == .right else { return }
             activateSidebarTab(tab)
         }
-        .prefersDefaultFocus(isSelected, in: sidebarFocusNamespace)
+        .prefersDefaultFocus(!isAwaitingLaunchContentFocus && isSelected, in: sidebarFocusNamespace)
+        // While content owns focus, admit only the active destination into the
+        // collapsed rail's focus search. Once it acquires focus and expands the
+        // rail, every item becomes eligible for normal sidebar navigation.
+        .disabled(!isSidebarExpanded && !isSelected)
         .accessibilityLabel(tab.item.displayTitle)
         .padding(.horizontal, 8)
     }
@@ -273,30 +315,65 @@ struct MainTabView: View {
             }
             .focusScope(sidebarFocusNamespace)
             .focusSection()
+            .disabled(protectsHomePlaybackReturn || isAwaitingLaunchContentFocus)
             .clipped()
             // Expand the complete rail, including its background and clipping bounds.
             .ignoresSafeArea(.container, edges: [.horizontal, .vertical])
             .zIndex(1)
-            .onChange(of: focusedSidebarTabID) { previousTabID, tabID in
+            .onChange(of: focusedSidebarTabID) { _, tabID in
                 guard let tabID,
                       tabCoordinator.tabs.contains(where: { $0.item.id == tabID })
                 else { return }
-
-                // Directional entry chooses the nearest row, not the active tab.
-                // Correct only entry from content; up/down within the menu previews normally.
-                if previousTabID == nil,
-                   let activeTabID = tabCoordinator.selectedTabID,
-                   activeTabID != tabID
-                {
-                    focusedSidebarTabID = activeTabID
-                    return
-                }
 
                 previewedSidebarTabID = tabID
             }
         }
         .background(Color.snowfinDeepNavy)
+        .onReceive(homeNavigationCoordinator?.$presentedSheet.eraseToAnyPublisher() ?? Just(nil).eraseToAnyPublisher()) { presentedRoute in
+            let previousDetailsCoordinator = homeDetailsCoordinator
+            homeDetailsCoordinator = presentedRoute?.route.id.hasPrefix("item-") == true ? presentedRoute?.coordinator : nil
+
+            if presentedRoute == nil, previousDetailsCoordinator != nil {
+                homePlaybackCoordinator?.homeDetailsDismissed()
+            }
+        }
+        .onReceive(
+            homeNavigationCoordinator?.$presentedFullScreen.eraseToAnyPublisher() ??
+                Just(nil).eraseToAnyPublisher()
+        ) { presentedRoute in
+            if presentedRoute?.route.id == "videoPlayer" {
+                homeDirectPlayerIsPresented = true
+                homePlaybackCoordinator?.homePlayerPresented(fromDetails: false)
+            } else if homeDirectPlayerIsPresented {
+                homeDirectPlayerIsPresented = false
+                homePlaybackCoordinator?.homePlayerDismissed()
+            }
+        }
+        .onReceive(
+            homeDetailsCoordinator?.$presentedFullScreen.eraseToAnyPublisher() ??
+                Just(nil).eraseToAnyPublisher()
+        ) { presentedRoute in
+            if presentedRoute?.route.id == "videoPlayer" {
+                homeDetailsPlayerIsPresented = true
+                homePlaybackCoordinator?.homePlayerPresented(fromDetails: true)
+            } else if homeDetailsPlayerIsPresented {
+                homeDetailsPlayerIsPresented = false
+                homePlaybackCoordinator?.homePlayerDismissed()
+            }
+        }
+        .onReceive(
+            homePlaybackCoordinator?.$protectsHomeReturn.eraseToAnyPublisher() ??
+                Just(false).eraseToAnyPublisher()
+        ) { protecting in
+            protectsHomePlaybackReturn = protecting
+            if protecting {
+                focusedSidebarTabID = nil
+            }
+        }
         .onChange(of: tabCoordinator.selectedTabID) { _, tabID in
+            if tabID != tabCoordinator.tabs.first?.item.id {
+                isAwaitingLaunchContentFocus = false
+            }
             guard focusedSidebarTabID == nil else { return }
             previewedSidebarTabID = tabID
         }
@@ -330,6 +407,8 @@ struct MainTabView: View {
 extension EnvironmentValues {
     @Entry
     var initialTabCandidateReady: (() -> Void)? = nil
+    @Entry
+    var initialTabCandidateFocused: (() -> Void)? = nil
 }
 
 private struct SnowfinSidebarButtonStyle: ButtonStyle {

@@ -40,6 +40,18 @@ struct PosterHStack<
     let size: PosterDisplayType.Size
     let action: (Data.Element, Namespace.ID) -> Void
 
+    #if os(tvOS)
+    private var homeTiles: [FocusCoordinator.HomeTile] {
+        guard environment.homeTileCoordinator != nil, let groupID = environment.homeFocusGroup else { return [] }
+        var seen = Set<String>()
+        return elements.enumerated().compactMap { index, item in
+            guard let tile = FocusCoordinator.HomeTile.make(poster: item, groupID: groupID, index: index),
+                  seen.insert(tile.itemID).inserted else { return nil }
+            return tile
+        }
+    }
+    #endif
+
     private var layout: CollectionHStackLayout {
         #if os(tvOS)
         .grid(
@@ -133,6 +145,11 @@ struct PosterHStack<
             ) { namespace in
                 action(item, namespace)
             }
+            #if os(tvOS)
+            .environment(\.homeFocusTile, homeTiles.first { tile in
+                FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
+            })
+            #endif
         }
         .clipsToBounds(false)
         .insets(horizontal: horizontalInset)
@@ -149,5 +166,15 @@ struct PosterHStack<
         }
         .scrollBehavior(.continuousLeadingEdge)
         .withViewContext(.isThumb)
+        #if os(tvOS)
+            .preference(key: HomeFocusRowsKey.self, value: environment.homeTileCoordinator == nil ? [] : [
+                HomeFocusRow(
+                    groupID: environment.homeFocusGroup ?? "",
+                    order: environment.homeFocusRowOrder,
+                    revision: environment.homeFocusRevision,
+                    tiles: homeTiles
+                ),
+            ])
+        #endif
     }
 }

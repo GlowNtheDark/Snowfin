@@ -42,6 +42,12 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
     private var lastRefreshDate = Date.distantPast
     private var lastRefreshSignalDate = Date.distantPast
 
+    #if os(tvOS)
+    private var homeRefreshPending = false
+    private var homeRefreshRunning = false
+    private var defersHomeRefresh = false
+    #endif
+
     private var hasPendingRefreshSignals: Bool {
         lastRefreshSignalDate > lastRefreshDate
     }
@@ -56,11 +62,63 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
             Notifications[.itemUserDataDidChange].publisher.map { _ in () },
             Notifications[.itemMetadataDidChange].publisher.map { _ in () }
         )
+        #if os(tvOS)
+        .receive(on: DispatchQueue.main)
+        #endif
         .sink { [weak self] _ in
             self?.lastRefreshSignalDate = Date.now
+            #if os(tvOS)
+            self?.invalidateHome()
+            #endif
         }
         .store(in: &cancellables)
+
+        #if os(tvOS)
+        if provider is DefaultContentGroupProvider {
+            Publishers.MergeMany([
+                Notifications[.didSendStopReport].publisher.map { _ in () }.eraseToAnyPublisher(),
+                Notifications[.didRequestGlobalRefresh].publisher.map { _ in () }.eraseToAnyPublisher(),
+                Notifications[.didDeleteItem].publisher.map { _ in () }.eraseToAnyPublisher(),
+            ])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.lastRefreshSignalDate = Date.now
+                self?.invalidateHome()
+            }
+            .store(in: &cancellables)
+        }
+        #endif
     }
+
+    #if os(tvOS)
+    private func invalidateHome() {
+        guard provider is DefaultContentGroupProvider else { return }
+        homeRefreshPending = true
+        refreshHomeIfPending()
+    }
+
+    private func refreshHomeIfPending() {
+        let starts = homeRefreshPending && !defersHomeRefresh && !homeRefreshRunning && !candidateGroups.isEmpty
+        guard starts else { return }
+        homeRefreshRunning = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { homeRefreshRunning = false }
+            // Signals arriving during a fetch require one follow-up fetch.
+            while homeRefreshPending {
+                homeRefreshPending = false
+                await background.refresh()
+            }
+        }
+    }
+
+    func setDefersHomeRefresh(_ deferred: Bool) {
+        defersHomeRefresh = deferred
+        if !deferred {
+            refreshHomeIfPending()
+        }
+    }
+    #endif
 
     func refreshIfNeeded(
         sinceLastDisappear interval: TimeInterval,
@@ -79,13 +137,21 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
 
     @Function(\Action.Cases.refresh)
     private func _refresh() async throws {
+        #if os(tvOS)
+        let refreshStartedAt = Date.now
+        #endif
         if StateTask.isBackground {
             try await backgroundRefresh()
         } else {
             try await fullRefresh()
         }
 
+        #if os(tvOS)
+        lastRefreshDate = provider is DefaultContentGroupProvider ? refreshStartedAt : Date.now
+        refreshHomeIfPending()
+        #else
         lastRefreshDate = Date.now
+        #endif
     }
 
     private func getViewModel(for group: some ContentGroup) -> any WithRefresh {

@@ -198,14 +198,6 @@ extension ItemView {
             .buttonStyle(BasicHoverButtonStyle())
             .font(.title3)
             .fontWeight(.semibold)
-            #if DEBUG && os(tvOS)
-                .onAppear {
-                    provider.item.debugLogWatchedState("detail.actions.appear")
-                }
-                .onChange(of: provider.item.watchedStateDebugSnapshot) {
-                    provider.item.debugLogWatchedState("detail.actions.changed")
-                }
-            #endif
         }
     }
 }
