@@ -12,12 +12,65 @@ extension Color {
 
     static let jellyfinPurple = Color(red: 172 / 255, green: 92 / 255, blue: 195 / 255, opacity: 1)
 
+    #if os(tvOS)
+    static let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255, opacity: 1)
+    static let snowfinDeepNavy = Color(red: 1 / 255, green: 3 / 255, blue: 5 / 255, opacity: 1)
+
+    var isLegacyJellyfinPurple: Bool {
+        let components = rgbaComponents
+
+        return Int((components.red * 255).rounded()) == 172 &&
+            Int((components.green * 255).rounded()) == 92 &&
+            Int((components.blue * 255).rounded()) == 195 &&
+            Int((components.alpha * 255).rounded()) == 255
+    }
+    #endif
+
+    static var applicationDefaultAccent: Color {
+        #if os(tvOS)
+        snowfinIceBlue
+        #else
+        jellyfinPurple
+        #endif
+    }
+
     var uiColor: UIColor {
         UIColor(self)
     }
 
     var overlayColor: Color {
         Color(uiColor: uiColor.overlayColor)
+    }
+
+    /// A related, clearly distinct variant for completed progress.
+    var watchedAccentColor: Color {
+        let uiColor = uiColor
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard uiColor.getHue(
+            &hue,
+            saturation: &saturation,
+            brightness: &brightness,
+            alpha: &alpha
+        ) else {
+            let components = rgbaComponents
+            return Color(
+                red: min(components.red * 0.65 + 0.25, 1),
+                green: min(components.green * 0.65 + 0.25, 1),
+                blue: min(components.blue * 0.65 + 0.25, 1),
+                opacity: components.alpha
+            )
+        }
+
+        return Color(
+            hue: hue,
+            saturation: max(saturation * 0.45, 0.32),
+            brightness: max(brightness, 0.72),
+            opacity: alpha
+        )
     }
 
     // TODO: Correct and add colors

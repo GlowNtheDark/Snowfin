@@ -24,20 +24,44 @@ extension SeriesEpisodeContentGroup {
 
         let episode: BaseItemDto
 
+        /// Only Jellyfin's explicit user state selects the completed styling.
+        private var isWatched: Bool {
+            episode.userData?.isPlayed == true
+        }
+
         @ViewBuilder
         private var overlayView: some View {
+            #if os(tvOS)
+            if posterConfiguration.indicators.contains(.played), isWatched {
+                ProgressIndicator(
+                    title: nil,
+                    progress: 1,
+                    posterDisplayType: .landscape,
+                    isCompleted: true
+                )
+            } else if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
+                ProgressIndicator(
+                    title: progressLabel,
+                    progress: episode.progressPercentage ?? 0,
+                    posterDisplayType: .landscape,
+                    isCompleted: false
+                )
+            }
+            #else
             if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
-                    progress: (episode.userData?.playedPercentage ?? 0) / 100,
-                    posterDisplayType: .landscape
+                    progress: episode.progressPercentage ?? 0,
+                    posterDisplayType: .landscape,
+                    isCompleted: false
                 )
-            } else if posterConfiguration.indicators.contains(.played), episode.userData?.isPlayed ?? false {
+            } else if posterConfiguration.indicators.contains(.played), isWatched {
                 PlayedIndicator()
                     .frame(width: UIDevice.isTV ? 45 : 25, height: UIDevice.isTV ? 45 : 25)
                     .padding(3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
+            #endif
         }
 
         private var episodeContent: String {
@@ -159,10 +183,27 @@ extension SeriesEpisodeContentGroup {
         private var artworkButton: some View {
             let button = Button(action: artworkAction) {
                 artwork
+                #if os(tvOS)
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            Color.snowfinIceBlue.opacity(focusedElement == .artwork ? 0.9 : 0),
+                            lineWidth: 3
+                        )
+                }
+                .shadow(
+                    color: focusedElement == .artwork ? Color.snowfinIceBlue.opacity(0.38) : .clear,
+                    radius: focusedElement == .artwork ? 22 : 0
+                )
+                .animation(.easeOut(duration: 0.16), value: focusedElement)
+                #endif
             }
             .foregroundStyle(.primary, .secondary)
             .buttonStyle(.card)
-            .focused($focusedElement, equals: .artwork)
+            #if os(tvOS)
+                .buttonBorderShape(.roundedRectangle(radius: 0))
+            #endif
+                .focused($focusedElement, equals: .artwork)
 
             if let contextMenuItem {
                 button.posterContextMenu(for: contextMenuItem) {
@@ -238,8 +279,6 @@ extension SeriesEpisodeContentGroup {
         let showsMaterial: Bool
         let isFocused: Bool
 
-        private let cornerRadius: CGFloat = 20
-
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
                 .padding(28)
@@ -252,19 +291,22 @@ extension SeriesEpisodeContentGroup {
                 .backport
                 .glassEffect(
                     showsMaterial ? .regular : .identity,
-                    in: .rect(
-                        cornerRadius: cornerRadius,
-                        style: .continuous
-                    )
+                    in: .rect
                 )
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            Color.snowfinIceBlue.opacity(isFocused ? 0.85 : 0),
+                            lineWidth: 3
+                        )
+                }
                 .scaleEffect(isFocused ? 1.05 : 1)
                 .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .brightness(isFocused ? 0.04 : 0)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .shadow(
-                    color: .black.opacity(isFocused ? 0.3 : 0),
-                    radius: isFocused ? 18 : 0,
-                    y: isFocused ? 10 : 0
+                    color: isFocused ? Color.snowfinIceBlue.opacity(0.3) : .clear,
+                    radius: isFocused ? 20 : 0
                 )
                 .animation(.easeInOut(duration: 0.2), value: showsMaterial)
                 .animation(.easeOut(duration: 0.15), value: isFocused)

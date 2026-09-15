@@ -39,17 +39,20 @@ extension VideoPlayer {
 
         private let containerState: VideoPlayerContainerState
         private let manager: MediaPlayerManager
+        private let onPresentationWillStopPlayback: () -> Void
         private let player: Player
         private let playbackControls: PlaybackControls
 
         init(
             containerState: VideoPlayerContainerState,
             manager: MediaPlayerManager,
+            onPresentationWillStopPlayback: @escaping () -> Void,
             @ViewBuilder player: @escaping () -> Player,
             @ViewBuilder playbackControls: @escaping () -> PlaybackControls
         ) {
             self.containerState = containerState
             self.manager = manager
+            self.onPresentationWillStopPlayback = onPresentationWillStopPlayback
             self.player = player()
             self.playbackControls = playbackControls()
         }
@@ -66,6 +69,7 @@ extension VideoPlayer {
             return UIVideoPlayerContainerViewController(
                 containerState: containerState,
                 manager: manager,
+                onPresentationWillStopPlayback: onPresentationWillStopPlayback,
                 player: playerView,
                 playbackControls: playbackControlsView
             )
@@ -357,6 +361,7 @@ extension VideoPlayer {
 
         private let logger = Logger.swiftfin()
         private let manager: MediaPlayerManager
+        private let onPresentationWillStopPlayback: () -> Void
         private let player: AnyView
         private let playbackControls: AnyView
         let containerState: VideoPlayerContainerState
@@ -372,11 +377,13 @@ extension VideoPlayer {
         init(
             containerState: VideoPlayerContainerState,
             manager: MediaPlayerManager,
+            onPresentationWillStopPlayback: @escaping () -> Void,
             player: AnyView,
             playbackControls: AnyView
         ) {
             self.containerState = containerState
             self.manager = manager
+            self.onPresentationWillStopPlayback = onPresentationWillStopPlayback
             self.player = player
             self.playbackControls = playbackControls
 
@@ -762,6 +769,7 @@ extension VideoPlayer {
 
             guard manager.state != .stopped else { return }
 
+            onPresentationWillStopPlayback()
             Task { @MainActor in
                 manager.stop()
             }
@@ -850,6 +858,15 @@ extension VideoPlayer {
         }
 
         private func handlePlayPauseEnded() {
+            if containerState.isPresentingSegmentOverlay {
+                if let presentation = manager.snowfinSegmentCoordinator.presentation,
+                   case .countdown = presentation.kind
+                {
+                    manager.snowfinSegmentCoordinator.playNextEpisode()
+                }
+                return
+            }
+
             if containerState.isScrubbing {
                 containerState.cancelScrub()
                 containerState.timer.poke()
@@ -874,6 +891,11 @@ extension VideoPlayer {
         }
 
         private func handleSelectEnded(_ press: UIPress, event: UIPressesEvent?) {
+            if containerState.isPresentingSegmentOverlay {
+                forwardPressesEnded([press], event: event)
+                return
+            }
+
             if !containerState.isPresentingOverlay {
                 containerState.isPresentingOverlay = true
                 containerState.timer.poke()
@@ -898,7 +920,9 @@ extension VideoPlayer {
 
         @objc
         private func handleMenuEnded() {
-            if containerState.isScrubbing {
+            if manager.snowfinSegmentCoordinator.cancelCountdown() {
+                return
+            } else if containerState.isScrubbing {
                 containerState.cancelScrub()
                 containerState.timer.poke()
             } else if containerState.isPresentingSupplement {

@@ -29,10 +29,19 @@ struct SupplementActionButtonStyle: PrimitiveButtonStyle {
         } label: {
             baseLabel(configuration)
                 .background {
+                    #if os(tvOS)
+                    Rectangle()
+                        .fill(.white)
+                    #else
                     RoundedRectangle(cornerRadius: 7)
                         .fill(.white)
+                    #endif
                 }
+            #if os(tvOS)
+                .clipShape(Rectangle())
+            #else
                 .clipShape(RoundedRectangle(cornerRadius: 7))
+            #endif
         }
         .buttonStyle(.card)
     }
@@ -42,6 +51,15 @@ struct SupplementActionButtonStyle: PrimitiveButtonStyle {
         Button {
             configuration.trigger()
         } label: {
+            #if os(tvOS)
+            baseLabel(configuration)
+                .glassEffect(
+                    .regular
+                        .tint(.white)
+                        .interactive(),
+                    in: Rectangle()
+                )
+            #else
             baseLabel(configuration)
                 .glassEffect(
                     .regular
@@ -49,10 +67,15 @@ struct SupplementActionButtonStyle: PrimitiveButtonStyle {
                         .interactive(),
                     in: Capsule()
                 )
+            #endif
         }
-        .buttonBorderShape(.capsule)
         #if os(tvOS)
-            .buttonStyle(.card)
+        .buttonBorderShape(.roundedRectangle(radius: 0))
+        #else
+        .buttonBorderShape(.capsule)
+        #endif
+        #if os(tvOS)
+        .buttonStyle(.card)
         #endif
     }
 

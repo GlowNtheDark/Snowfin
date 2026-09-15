@@ -6,9 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
 import SwiftUI
-import SwiftUIIntrospect
 
 extension View {
 
@@ -38,11 +36,23 @@ extension View {
     func prefersStatusBarHidden(_ hidden: Bool = true) -> some View {
         self
     }
+}
 
-    /// - Important: This does nothing on tvOS.
-    @ViewBuilder
-    func searchFocused(_ isFocused: FocusState<Bool>.Binding) -> some View {
-        self
+@MainActor
+final class TVSearchFocusCoordinator: ObservableObject {
+
+    @Published
+    private(set) var entryRequest = 0
+
+    private(set) var hasPendingEntry = false
+
+    func requestEntry() {
+        hasPendingEntry = true
+        entryRequest += 1
+    }
+
+    func cancelEntry() {
+        hasPendingEntry = false
     }
 }
 

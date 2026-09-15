@@ -33,6 +33,14 @@ extension ItemView {
             return false
         }
 
+        private var playedTint: Color {
+            #if os(tvOS)
+            .snowfinIceBlue
+            #else
+            .jellyfinPurple
+            #endif
+        }
+
         @ViewBuilder
         private func materialLabel(
             _ title: String,
@@ -66,6 +74,34 @@ extension ItemView {
         }
 
         var body: some View {
+            #if os(tvOS)
+            if provider.item.type == .movie, provider.item.canBePlayed {
+                let isPlayed = provider.item.userData?.isPlayed == true
+
+                Button {
+                    Task { await provider.toggleIsPlayed() }
+                } label: {
+                    materialLabel(
+                        L10n.played,
+                        systemImage: "checkmark",
+                        isHighlighted: isPlayed,
+                        tint: playedTint,
+                        foregroundColor: .primary
+                    )
+                }
+                .frame(height: 64)
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(BasicHoverButtonStyle())
+                .font(.headline)
+                .fontWeight(.semibold)
+            } else if (UIDevice.isTV && provider.item.canEdit) ||
+                provider.item.canBePlayed ||
+                provider.item.canBeFavorited ||
+                hasTrailers
+            {
+                contentView
+            }
+            #else
             if (UIDevice.isTV && provider.item.canEdit) ||
                 provider.item.canBePlayed ||
                 provider.item.canBeFavorited ||
@@ -73,6 +109,7 @@ extension ItemView {
             {
                 contentView
             }
+            #endif
         }
 
         @ViewBuilder
@@ -91,7 +128,7 @@ extension ItemView {
                             L10n.played,
                             systemImage: "checkmark",
                             isHighlighted: isPlayed,
-                            tint: .jellyfinPurple,
+                            tint: playedTint,
                             foregroundColor: .primary
                         )
                     }

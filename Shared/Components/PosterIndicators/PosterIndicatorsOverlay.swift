@@ -26,6 +26,12 @@ struct PosterIndicatorsOverlay: View {
         UIDevice.isTV ? 45 : 25
     }
 
+    /// Jellyfin's user state is authoritative for watched treatment; resume
+    /// progress must not promote an item to watched.
+    private var isWatched: Bool {
+        item.userData?.isPlayed == true
+    }
+
     private var showsUnplayedIndicator: Bool {
         indicators.contains(.unplayed) &&
             item.canBePlayed &&
@@ -37,7 +43,14 @@ struct PosterIndicatorsOverlay: View {
     private var showsProgressIndicator: Bool {
         indicators.contains(.progress) &&
             item.progressLabel != nil &&
-            item.userData?.isPlayed != true
+            !isWatched
+    }
+
+    private var showsCompletedProgressIndicator: Bool {
+        indicators.contains(.played) &&
+            item.canBePlayed &&
+            !item.isLiveStream &&
+            isWatched
     }
 
     var body: some View {
@@ -57,14 +70,16 @@ struct PosterIndicatorsOverlay: View {
                             .frame(width: indicatorSize, height: indicatorSize)
                     }
 
+                    #if os(iOS)
                     if indicators.contains(.played),
                        item.canBePlayed,
                        !item.isLiveStream,
-                       item.userData?.isPlayed == true
+                       isWatched
                     {
                         PlayedIndicator()
                             .frame(width: indicatorSize, height: indicatorSize)
                     }
+                    #endif
                 }
                 .padding(3)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -72,14 +87,27 @@ struct PosterIndicatorsOverlay: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if showsProgressIndicator {
+            #if os(tvOS)
+            if showsProgressIndicator || showsCompletedProgressIndicator {
                 ProgressIndicator(
-                    title: item.progressLabel ?? "",
-                    progress: item.progressPercentage ?? 0,
-                    posterDisplayType: posterDisplayType
+                    title: showsCompletedProgressIndicator ? nil : item.progressLabel,
+                    progress: showsCompletedProgressIndicator ? 1 : item.progressPercentage ?? 0,
+                    posterDisplayType: posterDisplayType,
+                    isCompleted: showsCompletedProgressIndicator
                 )
                 .zIndex(5)
             }
+            #else
+            if showsProgressIndicator {
+                ProgressIndicator(
+                    title: item.progressLabel,
+                    progress: item.progressPercentage ?? 0,
+                    posterDisplayType: posterDisplayType,
+                    isCompleted: false
+                )
+                .zIndex(5)
+            }
+            #endif
         }
     }
 }

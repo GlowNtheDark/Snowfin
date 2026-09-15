@@ -113,6 +113,11 @@ struct ItemView: View {
 
     var body: some View {
         ZStack {
+            #if os(tvOS)
+            Color.snowfinDeepNavy
+                .ignoresSafeArea()
+            #endif
+
             switch viewModel.state {
             case .content:
                 content

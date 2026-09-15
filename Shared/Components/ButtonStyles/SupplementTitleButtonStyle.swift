@@ -43,7 +43,7 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
                     .regular
                         .tint(isSelected ? .white : nil)
                         .interactive(isFocused),
-                    in: Capsule()
+                    in: Rectangle()
                 )
                 .opacity(inactiveSelectedOpacity)
                 .animation(.easeInOut(duration: 0.1), value: isFocused)
@@ -55,22 +55,22 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
                 .foregroundStyle(isSelected ? .black : .white)
                 .background {
                     if isSelected {
-                        Capsule()
+                        Rectangle()
                             .fill(Color.white)
                     } else {
-                        Capsule()
+                        Rectangle()
                             .fill(Material.ultraThinMaterial)
                             .background {
-                                Capsule()
+                                Rectangle()
                                     .fill(.white.opacity(0.2))
                             }
                     }
                 }
                 .overlay {
-                    Capsule()
+                    Rectangle()
                         .stroke(.white.opacity(0.1), lineWidth: 1)
                 }
-                .clipShape(Capsule())
+                .clipShape(Rectangle())
                 .subtleShadow()
                 .opacity(inactiveSelectedOpacity)
                 .scaleEffect(isFocused ? 1.06 : 1)

@@ -53,7 +53,7 @@ extension EPGDateBar {
                             foregroundColor: isFocused ? .black : .primary
                         )
                         .interactive(),
-                        in: .capsule
+                        in: .rect
                     )
             }
             .focused($isFocused)

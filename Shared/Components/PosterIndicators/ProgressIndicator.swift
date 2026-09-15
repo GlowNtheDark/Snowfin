@@ -14,31 +14,52 @@ struct ProgressIndicator: View {
     @Default(.accentColor)
     private var accentColor
 
-    let title: String
+    let title: String?
     let progress: Double
     let posterDisplayType: PosterDisplayType
+    let isCompleted: Bool
+
+    private var progressColor: Color {
+        #if os(tvOS)
+        isCompleted ? accentColor.watchedAccentColor : accentColor
+        #else
+        accentColor
+        #endif
+    }
+
+    private var progressHeight: CGFloat {
+        #if os(tvOS)
+        isCompleted ? 9 : 6
+        #else
+        6
+        #endif
+    }
 
     @ViewBuilder
     private var compactView: some View {
         Rectangle()
-            .fill(accentColor)
+            .fill(progressColor)
             .scaleEffect(x: progress, y: 1, anchor: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 6)
+            .frame(height: progressHeight)
+            .shadow(color: isCompleted ? progressColor.opacity(0.6) : .clear, radius: 5)
     }
 
     @ViewBuilder
     private var regularView: some View {
         VStack(alignment: .leading, spacing: 5) {
 
-            Text(title)
-                .font(.system(.footnote, design: .rounded))
-                .fontWeight(.medium)
+            if let title, !title.isEmpty {
+                Text(title)
+                    .font(.system(.footnote, design: .rounded))
+                    .fontWeight(.medium)
+            }
 
             ProgressView(value: progress)
                 .progressViewStyle(.playback)
-                .foregroundStyle(accentColor)
-                .frame(height: 6)
+                .foregroundStyle(progressColor)
+                .frame(height: progressHeight)
+                .shadow(color: isCompleted ? progressColor.opacity(0.6) : .clear, radius: 5)
         }
         .padding(.bottom, 5)
         .padding(.horizontal, 5)

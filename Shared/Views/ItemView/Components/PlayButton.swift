@@ -27,6 +27,22 @@ struct PlayButton: View {
         return provider.mediaPlayerItemProvider?.mediaSource?.displayTitle
     }
 
+    private var primaryTint: Color {
+        #if os(tvOS)
+        .snowfinIceBlue
+        #else
+        accentColor
+        #endif
+    }
+
+    private var primaryForeground: Color {
+        #if os(tvOS)
+        .snowfinDeepNavy
+        #else
+        accentColor.overlayColor
+        #endif
+    }
+
     private var mediaSourceSelection: Binding<MediaSourceInfo?> {
         Binding(
             get: { provider.mediaPlayerItemProvider?.mediaSource },
@@ -128,20 +144,35 @@ struct PlayButton: View {
                     }
                 }
             }
-            .font(.callout)
+            .font(UIDevice.isTV ? .title3 : .callout)
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .backport
-            .glassEffect(
-                .regular.selection(
-                    tint: accentColor,
-                    foregroundColor: accentColor.overlayColor
-                ),
-                in: .capsule
-            )
+            #if os(tvOS)
+                .glassEffect(
+                    .regular.selection(
+                        tint: primaryTint,
+                        foregroundColor: primaryForeground
+                    ),
+                    in: .rect
+                )
+            #else
+                .glassEffect(
+                    .regular.selection(
+                        tint: primaryTint,
+                        foregroundColor: primaryForeground
+                    ),
+                    in: .capsule
+                )
+            #endif
         }
+        #if os(tvOS)
+        .buttonBorderShape(.roundedRectangle(radius: 0))
+        .buttonStyle(SnowfinPrimaryPlayButtonStyle())
+        #else
         .buttonBorderShape(.capsule)
         .buttonStyle(BasicHoverButtonStyle())
+        #endif
         .coordinatedFocus(ItemView.Component.play)
         .contextMenu {
             if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
@@ -153,12 +184,61 @@ struct PlayButton: View {
         .disabled(provider.mediaPlayerItemProvider == nil)
     }
 
+    #if os(tvOS)
+    private var playFromBeginningButton: some View {
+        Button {
+            play(fromBeginning: true)
+        } label: {
+            Label(L10n.playFromBeginning, systemImage: "gobackward")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.1))
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BasicHoverButtonStyle())
+        .disabled(provider.mediaPlayerItemProvider == nil)
+    }
+    #endif
+
     var body: some View {
         HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
             playButton
 
+            #if os(tvOS)
+            if provider.item.type == .movie {
+                playFromBeginningButton
+            } else {
+                versionMenu
+            }
+            #else
             versionMenu
+            #endif
         }
         .frame(height: UIDevice.isTV ? 75 : 44)
     }
 }
+
+#if os(tvOS)
+private struct SnowfinPrimaryPlayButtonStyle: ButtonStyle {
+
+    @Environment(\.isFocused)
+    private var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .isSelected(isFocused)
+            .scaleEffect(configuration.isPressed ? 0.97 : isFocused ? 1.045 : 1)
+            .brightness(isFocused ? 0.04 : 0)
+            .shadow(
+                color: isFocused ? Color.snowfinIceBlue.opacity(0.42) : .clear,
+                radius: isFocused ? 24 : 0
+            )
+            .animation(.easeOut(duration: 0.16), value: isFocused)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+#endif

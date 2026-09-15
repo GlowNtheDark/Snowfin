@@ -66,7 +66,7 @@ private struct VideoPlayerSliderContent: SliderContentView {
     private let tickWidth: CGFloat = 3
 
     private var activeColor: Color {
-        isEnabled ? .white : .lightGray
+        isEnabled ? Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255) : .lightGray
     }
 
     private var scrubbedProgress: Double {
@@ -144,11 +144,11 @@ private struct VideoPlayerSliderContent: SliderContentView {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(activeColor.opacity(0.2))
+                    .fill(Color.white.opacity(0.22))
 
                 if sliderState.isFocused, let pendingProgress {
                     progressSegment(progress: pendingProgress, in: proxy.size)
-                        .foregroundStyle(activeColor.opacity(0.45))
+                        .foregroundStyle(Color.white.opacity(0.45))
                 }
 
                 if sliderState.isFocused {
@@ -158,12 +158,12 @@ private struct VideoPlayerSliderContent: SliderContentView {
 
                 if let visibleTickProgress {
                     Rectangle()
-                        .fill(activeColor.opacity(0.95))
+                        .fill(Color.white)
                         .frame(width: tickWidth)
                         .offset(x: tickOffset(for: visibleTickProgress, in: proxy.size.width))
                 }
             }
-            .clipShape(Capsule())
+            .clipShape(Rectangle())
         }
         .onChange(of: sliderState.isFocused) {
             if !sliderState.isFocused {

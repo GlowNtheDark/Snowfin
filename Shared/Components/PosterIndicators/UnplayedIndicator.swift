@@ -29,12 +29,14 @@ struct UnplayedIndicator: View {
                     .fixedSize()
                     .frame(minWidth: size.width, minHeight: size.height)
                     .background {
-                        UnevenRoundedRectangle(bottomLeadingRadius: UIDevice.isTV ? 18 : 6)
+                        UnevenRoundedRectangle(bottomLeadingRadius: UIDevice.isTV ? 0 : 6)
                             .fill(accentColor)
                     }
             } else {
+                #if !os(tvOS)
                 Q3RightTriangle()
                     .fill(accentColor)
+                #endif
             }
         }
     }

@@ -20,7 +20,7 @@ enum VideoPlayerType: String, CaseIterable, Displayable, Storable {
         case .native:
             L10n.native
         case .swiftfin:
-            L10n.swiftfin
+            L10n.applicationBrand
         }
     }
 

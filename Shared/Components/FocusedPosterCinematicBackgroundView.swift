@@ -7,32 +7,13 @@
 //
 
 #if os(tvOS)
-import Defaults
 import SwiftUI
 
 struct FocusedPosterCinematicBackgroundView: View {
 
-    @Default(.Customization.Library.cinematicBackground)
-    private var isCinematicBackgroundEnabled
-
-    @FocusedValue(\.focusedPoster)
-    private var focusedPoster
-
     var body: some View {
-        if isCinematicBackgroundEnabled {
-            FadeContentTransitionView(
-                item: focusedPoster,
-                debounce: 0.5
-            ) { item in
-                ImageView(item?.landscapeImageSources(environment: .default) ?? [])
-                    .failure {
-                        EmptyView()
-                    }
-                    .aspectRatio(contentMode: .fill)
-            }
-            .blurred()
+        Color.snowfinDeepNavy
             .ignoresSafeArea()
-        }
     }
 }
 #endif

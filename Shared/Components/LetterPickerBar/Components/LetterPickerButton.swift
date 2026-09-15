@@ -54,15 +54,19 @@ extension LetterPickerBar {
                             tint: glassTint,
                             foregroundColor: glassTint.overlayColor
                         ) : .identity,
-                        in: .rect(cornerRadius: 5)
+                        in: .rect
                     )
                     .isSelected(isGlassVisible)
             }
             .buttonStyle(.borderless)
-            .buttonBorderShape(.roundedRectangle)
-            .focused($isFocused)
-            .scaleEffect(isFocused ? 1.2 : 1)
-            .animation(.easeInOut(duration: 0.15), value: isFocused)
+            #if os(tvOS)
+                .buttonBorderShape(.roundedRectangle(radius: 0))
+            #else
+                .buttonBorderShape(.roundedRectangle)
+            #endif
+                .focused($isFocused)
+                .scaleEffect(isFocused ? 1.2 : 1)
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
 }

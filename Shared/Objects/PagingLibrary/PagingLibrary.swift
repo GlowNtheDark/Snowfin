@@ -24,6 +24,7 @@ protocol PagingLibrary<Element> {
 
     var environment: Environment? { get }
     var hasNextPage: Bool { get }
+    var loadsEntireCollection: Bool { get }
     var parent: Parent { get }
 
     func retrievePage(
@@ -72,6 +73,10 @@ extension PagingLibrary {
 
     var hasNextPage: Bool {
         true
+    }
+
+    var loadsEntireCollection: Bool {
+        false
     }
 
     func makeLibraryBody(

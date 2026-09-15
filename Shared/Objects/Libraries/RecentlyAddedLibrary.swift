@@ -10,8 +10,17 @@ import JellyfinAPI
 
 struct RecentlyAddedLibrary: BaseItemKindLibrary {
 
-    let libraryItemTypes: [BaseItemKind] = [.movie, .series]
-    let parent: TitledLibraryParent = .init(displayTitle: L10n.recentlyAdded.localizedCapitalized, id: "recently-added")
+    let libraryItemTypes: [BaseItemKind]
+    let parent: TitledLibraryParent
+
+    init(
+        itemTypes: [BaseItemKind] = [.movie, .series],
+        title: String = L10n.recentlyAdded.localizedCapitalized,
+        id: String = "recently-added"
+    ) {
+        self.libraryItemTypes = itemTypes
+        self.parent = .init(displayTitle: title, id: id)
+    }
 
     func retrievePage(
         environment: Empty,
@@ -19,7 +28,7 @@ struct RecentlyAddedLibrary: BaseItemKindLibrary {
     ) async throws -> [BaseItemDto] {
         var parameters = Paths.GetItemsParameters()
         parameters.enableUserData = true
-        parameters.includeItemTypes = [.movie, .series]
+        parameters.includeItemTypes = libraryItemTypes
         parameters.isRecursive = true
         parameters.limit = pageState.pageSize
         parameters.sortBy = [.dateCreated]

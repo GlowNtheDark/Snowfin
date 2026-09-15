@@ -56,6 +56,7 @@ final class MediaPlayerManager: ViewModel {
         case ended
         case error
         case playNewItem(provider: MediaPlayerItemProvider)
+        case playNewItemCompletingCurrent(provider: MediaPlayerItemProvider)
         case setBitrate(bitrate: PlaybackBitrate)
         case setPlaybackRequestStatus(status: PlaybackRequestStatus)
         case setRate(rate: Float)
@@ -69,7 +70,7 @@ final class MediaPlayerManager: ViewModel {
             case .error:
                 .to(.error)
                     .invalid(.stopped)
-            case .playNewItem, .start:
+            case .playNewItem, .playNewItemCompletingCurrent, .start:
                 .to(.loadingItem, then: .playback)
                     .invalid(.stopped)
             case .stop:
@@ -107,6 +108,7 @@ final class MediaPlayerManager: ViewModel {
                 seconds = playbackItem.baseItem.startSeconds ?? .zero
                 playbackItem.manager = self
                 setSupplements()
+                snowfinSegmentCoordinator.prepare(for: playbackItem)
 
                 logger.info(
                     "Playing new item",
@@ -119,6 +121,8 @@ final class MediaPlayerManager: ViewModel {
                 )
 
                 Task { _ = await playbackItem.previewImageProvider?.image(for: seconds) }
+            } else {
+                snowfinSegmentCoordinator.prepare(for: nil)
             }
         }
     }
@@ -139,6 +143,11 @@ final class MediaPlayerManager: ViewModel {
 
     @Published
     var supplements: [any MediaPlayerSupplement] = []
+
+    lazy var snowfinSegmentCoordinator = SnowfinPlaybackSegmentCoordinator(manager: self)
+
+    /// Snapshot the real outgoing position before stopping the proxy can reset it.
+    private(set) var previousItemStopSeconds: Duration?
 
     // TODO: replace with graph dependency package
     private func setSupplements() {
@@ -282,10 +291,30 @@ final class MediaPlayerManager: ViewModel {
 
     @Function(\Action.Cases.playNewItem)
     private func _playNewItem(_ provider: MediaPlayerItemProvider) async throws {
+        try await replacePlaybackItem(with: provider)
+    }
+
+    @Function(\Action.Cases.playNewItemCompletingCurrent)
+    private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider) async throws {
+        guard let itemID = playbackItem?.baseItem.id else { return }
+        let request = try Paths.markPlayedItem(itemID: itemID, userID: authenticatedUser.id)
+        let response = try await send(request)
+        Notifications[.itemUserDataDidChange].post(response.value)
+        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        try await replacePlaybackItem(with: provider)
+    }
+
+    private func replacePlaybackItem(
+        with provider: MediaPlayerItemProvider
+    ) async throws {
+        previousItemStopSeconds = seconds
+        defer { previousItemStopSeconds = nil }
         item = provider.item
         setSupplements()
         proxy?.stop()
-        playbackItem = try await provider()
+        let newPlaybackItem = try await provider()
+
+        playbackItem = newPlaybackItem
     }
 
     @Function(\Action.Cases.setBitrate)
@@ -376,6 +405,7 @@ final class MediaPlayerManager: ViewModel {
     private func _stop() async throws {
         await self.cancel()
 
+        snowfinSegmentCoordinator.reset()
         proxy?.stop()
         Container.shared.mediaPlayerManagerPublisher().send(nil)
         Container.shared.mediaPlayerManager.reset()

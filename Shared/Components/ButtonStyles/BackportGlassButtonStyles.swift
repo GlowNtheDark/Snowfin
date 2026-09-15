@@ -105,6 +105,9 @@ private struct BackportGlassButtonStyleBody: View {
         } label: {
             configuration.label
         }
+        #if os(tvOS)
+        .buttonBorderShape(.roundedRectangle(radius: 0))
+        #endif
     }
 
     @ViewBuilder
@@ -113,10 +116,23 @@ private struct BackportGlassButtonStyleBody: View {
         case .standard:
             fallbackButton
                 .backport
+            #if os(tvOS)
+                .glassEffect(legacyGlass, in: .rect)
+            #else
                 .glassEffect(legacyGlass, in: .capsule)
+            #endif
         case .prominent:
             fallbackButton
                 .backport
+            #if os(tvOS)
+                .glassEffect(
+                    legacyGlass.selection(
+                        tint: prominentTint,
+                        foregroundColor: prominentTint.overlayColor
+                    ),
+                    in: .rect
+                )
+            #else
                 .glassEffect(
                     legacyGlass.selection(
                         tint: prominentTint,
@@ -124,6 +140,7 @@ private struct BackportGlassButtonStyleBody: View {
                     ),
                     in: .capsule
                 )
+            #endif
         }
     }
 

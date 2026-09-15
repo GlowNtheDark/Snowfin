@@ -116,7 +116,7 @@ extension VideoPlayer.PlaybackControls {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
                 .background {
-                    Capsule()
+                    Rectangle()
                         .fill(Color.gray)
                 }
         }
@@ -170,7 +170,7 @@ extension VideoPlayer.PlaybackControls {
                     .aspectRatio(videoSizeAspectRatio, contentMode: .fit)
                     .frame(height: previewImageHeight)
                     .posterBorder()
-                    .cornerRadius(ratio: 1 / 30, of: \.width)
+                    .clipShape(Rectangle())
                     .offset(x: previewXOffset, y: -(previewImageHeight + 10))
                     .shadow(color: Color.black.opacity(0.5), radius: 10, x: 0, y: 4)
             }

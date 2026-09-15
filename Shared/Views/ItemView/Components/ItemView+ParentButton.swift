@@ -41,7 +41,11 @@ extension ItemView {
                     isIconTrailing: true
                 )
             )
+            #if os(tvOS)
+            .buttonBorderShape(.roundedRectangle(radius: 0))
+            #else
             .buttonBorderShape(.capsule)
+            #endif
             .buttonStyle(.card)
         }
     }

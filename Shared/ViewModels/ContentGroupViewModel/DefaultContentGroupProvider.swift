@@ -45,8 +45,7 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
 
         #if os(tvOS)
         let cinematicSelectionContentGroup = CinematicSelectionContentGroup(
-            resumeLibrary: ResumeItemsLibrary(mediaTypes: [.video]),
-            recentlyAddedLibrary: RecentlyAddedLibrary()
+            resumeLibrary: ResumeItemsLibrary(mediaTypes: [.video])
         )
 
         cinematicSelectionContentGroup
@@ -59,14 +58,30 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
         )
         #endif
 
+        #if os(iOS)
         PosterGroup(
             library: NextUpLibrary()
         )
+        #endif
 
         if Defaults[.Customization.Home.showRecentlyAdded] {
             #if os(tvOS)
-            CinematicRecentlyAddedContentGroup(
-                viewModel: cinematicSelectionContentGroup.viewModel
+            PosterGroup(
+                id: "recently-added-movies",
+                library: RecentlyAddedLibrary(
+                    itemTypes: [.movie],
+                    title: "\(L10n.recentlyAdded.localizedCapitalized) \(L10n.movies)",
+                    id: "recently-added-movies"
+                )
+            )
+
+            PosterGroup(
+                id: "recently-added-tv-shows",
+                library: RecentlyAddedLibrary(
+                    itemTypes: [.series],
+                    title: "\(L10n.recentlyAdded.localizedCapitalized) \(L10n.tvShowsCapitalized)",
+                    id: "recently-added-tv-shows"
+                )
             )
             #else
             PosterGroup(
@@ -108,8 +123,16 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
             .map {
                 PosterGroup(
                     library: $0,
-                    posterDisplayType: .landscape
+                    posterDisplayType: $0.libraryItemTypes.contains(.movie) || $0.libraryItemTypes
+                        .contains(.series) ? .portrait : .landscape
                 )
             }
+
+        #if os(tvOS)
+        PosterGroup(
+            library: PopularMoviesLibrary(),
+            posterSize: .medium
+        )
+        #endif
     }
 }

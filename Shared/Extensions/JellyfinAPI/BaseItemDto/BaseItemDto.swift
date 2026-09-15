@@ -354,6 +354,18 @@ extension BaseItemDto {
             )
         }
 
+        if let playbackPositionTicks = userData?.playbackPositionTicks,
+           let runTimeTicks,
+           playbackPositionTicks > 0,
+           runTimeTicks > 0
+        {
+            return clamp(
+                Double(playbackPositionTicks) / Double(runTimeTicks),
+                min: 0,
+                max: 1
+            )
+        }
+
         guard let playedPercentage = userData?.playedPercentage, playedPercentage > 0 else {
             return nil
         }

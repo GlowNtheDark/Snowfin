@@ -35,6 +35,10 @@ class VideoPlayerContainerState: ObservableObject {
     @Published
     var isPresentingPlaybackControls: Bool = false
 
+    /// A native focus overlay is currently handling tvOS remote input.
+    @Published
+    var isPresentingSegmentOverlay: Bool = false
+
     // TODO: replace with graph dependency package
     func setPlaybackControlsVisibility() {
 

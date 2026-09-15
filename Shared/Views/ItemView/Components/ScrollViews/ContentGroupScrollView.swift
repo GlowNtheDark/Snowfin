@@ -65,6 +65,35 @@ extension ItemView {
                         (location: 1, opacity: 1)
                     }
             }
+            #if os(tvOS)
+            .overlay {
+                ZStack {
+                    Color.snowfinDeepNavy
+                        .opacity(isHeaderFocused ? 0.18 : 0.46)
+
+                    LinearGradient(
+                        colors: [
+                            Color.snowfinDeepNavy.opacity(0.92),
+                            Color.snowfinDeepNavy.opacity(0.48),
+                            .clear,
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.snowfinDeepNavy.opacity(0.22),
+                            Color.snowfinDeepNavy.opacity(0.9),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .allowsHitTesting(false)
+            }
+            #endif
             .animation(.linear(duration: 0.2), value: isHeaderFocused)
         }
 

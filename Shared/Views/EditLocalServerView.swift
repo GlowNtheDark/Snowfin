@@ -65,7 +65,9 @@ struct EditLocalServerView: View {
             } footer: {
                 if !viewModel.server.isVersionCompatible {
                     Label(
-                        L10n.serverVersionWarning(viewModel.server.client.version.majorMinor.description),
+                        L10n.applicationBranded(
+                            L10n.serverVersionWarning(viewModel.server.client.version.majorMinor.description)
+                        ),
                         systemImage: "exclamationmark.circle.fill"
                     )
                     .labelStyle(.sectionFooterWithImage(imageStyle: .orange))

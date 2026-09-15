@@ -66,7 +66,7 @@ extension Defaults.Keys {
     ///
     /// This is set externally whenever the app or user accent colors change,
     /// depending on the current app state.
-    static var accentColor: Key<Color> = AppKey("accentColor", default: .jellyfinPurple)
+    static var accentColor: Key<Color> = AppKey("accentColor", default: .applicationDefaultAccent)
 
     /// The _real_ appearance key to be used.
     ///
@@ -100,7 +100,7 @@ extension Defaults.Keys {
     /// The accent color default for user contexts.
     /// Only use for `set`, use `accentColor` for `get`.
     static var userAccentColor: Key<Color> {
-        UserKey("userAccentColor", default: .jellyfinPurple)
+        UserKey("userAccentColor", default: .applicationDefaultAccent)
     }
 
     /// The appearance default for user contexts.
@@ -169,7 +169,11 @@ extension Defaults.Keys {
             }
 
             static var letterPickerOrientation: Key<LetterPickerOrientation> {
+                #if os(tvOS)
+                UserKey("letterPickerOrientation", default: .trailing)
+                #else
                 UserKey("letterPickerOrientation", default: .disabled)
+                #endif
             }
 
             static var style: Key<LibraryStyle> {
@@ -364,6 +368,20 @@ extension Defaults.Keys {
 
             static var playbackRate: Key<Float> {
                 UserKey("playbackRate", default: Float(1.0))
+            }
+        }
+
+        enum Segments {
+            static var introBehavior: Key<SnowfinIntroBehavior> {
+                UserKey("snowfinIntroBehavior", default: .showSkipButton)
+            }
+
+            static var creditsBehavior: Key<SnowfinCreditsBehavior> {
+                UserKey("snowfinCreditsBehavior", default: .showNextEpisode)
+            }
+
+            static var countdownDuration: Key<SnowfinAutoplayCountdownDuration> {
+                UserKey("snowfinAutoplayCountdownDuration", default: .ten)
             }
         }
 

@@ -11,9 +11,26 @@ import SwiftUI
 #if os(tvOS)
 struct BasicHoverButtonStyle: ButtonStyle {
 
+    @Environment(\.isFocused)
+    private var isFocused
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .hoverEffect(.lift)
+            .contentShape(Rectangle())
+            .overlay {
+                Rectangle()
+                    .stroke(
+                        Color.snowfinIceBlue.opacity(isFocused ? 0.9 : 0),
+                        lineWidth: 2
+                    )
+            }
+            .scaleEffect(configuration.isPressed ? 0.97 : isFocused ? 1.035 : 1)
+            .shadow(
+                color: isFocused ? Color.snowfinIceBlue.opacity(0.28) : .clear,
+                radius: isFocused ? 16 : 0
+            )
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 #else

@@ -30,6 +30,22 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     @StateObject
     private var gridProxy = CollectionVGridProxy()
+    #if os(tvOS)
+    @StateObject
+    private var gridScrollCoordinator = CollectionVGridScrollCoordinator()
+
+    @FocusState
+    private var focusedElementID: Element.ID?
+
+    @State
+    private var savedFocusedElementID: Element.ID?
+
+    @State
+    private var gridLocatorID = UUID()
+
+    @State
+    private var isLetterRestorePending: Bool = false
+    #endif
     @StateObject
     private var viewModel: PagingLibraryViewModel<Library>
 
@@ -90,6 +106,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 )
             ) { element in
                 element.makeBody(libraryStyle: libraryStyle)
+                #if os(tvOS)
+                    .focused($focusedElementID, equals: element.id)
+                #endif
             }
             .onReachedBottomEdge(offset: .offset(300)) {
                 if viewModel.isSearchActive {
@@ -99,16 +118,33 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 }
             }
             .proxy(gridProxy)
-            .ignoresSafeArea(edges: .vertical)
+            #if os(tvOS)
+                .background {
+                    CollectionVGridLocator(coordinator: gridScrollCoordinator)
+                        .id(gridLocatorID)
+                }
+            #endif
+                .ignoresSafeArea(edges: .horizontal)
         }
         .scrollIndicators(.hidden)
         .withViewContext(.isListRowSeparatorVisible)
         .withViewContext(.isThumb)
-        .onReceive(tabItemSelected) { event in
-            if event.isRepeat, event.isRoot {
-                gridProxy.scrollToTop(animated: true)
+        #if os(tvOS)
+            .focusSection()
+        #endif
+            .onReceive(tabItemSelected) { event in
+                if event.isRepeat, event.isRoot {
+                    #if os(tvOS)
+                    gridProxy.scrollToTop(animated: false)
+                    focusedElementID = nil
+                    DispatchQueue.main.async {
+                        focusedElementID = viewModel.displayedElements.first?.id
+                    }
+                    #else
+                    gridProxy.scrollToTop(animated: true)
+                    #endif
+                }
             }
-        }
     }
 
     @ViewBuilder
@@ -172,21 +208,206 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 gridProxy.layout()
             }
         }
-        .onReceive(viewModel.events) { event in
-            switch event {
-            case let .gotRandomItem(element):
-                element.libraryDidSelectElement(router: router, in: namespace)
+        #if os(tvOS)
+        .onChange(of: viewModel.letterScrollTarget) { _, letter in
+            savedFocusedElementID = nil
+            isLetterRestorePending = false
+            _ = scrollToLetter(letter)
+        }
+        .onChange(of: focusedElementID) { _, elementID in
+            if let elementID {
+                savedFocusedElementID = elementID
             }
         }
-        .onFirstAppear {
-            viewModel.refresh()
+        .onChange(of: viewModel.elements) {
+            restoreLetterPositionIfNeeded()
         }
-        #if os(iOS)
-        .navigationBarMenuButton(
-            isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
-        ) {
-            menuContent
+        .onAppear {
+            gridLocatorID = UUID()
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
+
+            DispatchQueue.main.async {
+                restoreLetterPositionIfNeeded()
+            }
+        }
+        .onDisappear {
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
+            focusedElementID = nil
+            gridScrollCoordinator.locatorView = nil
+            gridScrollCoordinator.collectionView = nil
         }
         #endif
+        .onReceive(viewModel.events) { event in
+                switch event {
+                case let .gotRandomItem(element):
+                    element.libraryDidSelectElement(router: router, in: namespace)
+                }
+            }
+            .onFirstAppear {
+                viewModel.refresh()
+            }
+        #if os(iOS)
+            .navigationBarMenuButton(
+                isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
+            ) {
+                menuContent
+            }
+        #endif
+    }
+
+    #if os(tvOS)
+    private func restoreLetterPositionIfNeeded() {
+        guard isLetterRestorePending,
+              let letter = viewModel.letterScrollTarget,
+              let index = viewModel.displayedElements.firstIndex(where: { $0.id == savedFocusedElementID }) ??
+              indexOfFirstElement(for: letter)
+        else { return }
+
+        isLetterRestorePending = false
+        let elementID = viewModel.displayedElements[index].id
+        gridScrollCoordinator.scrollToItem(at: index) {
+            focusedElementID = elementID
+        }
+    }
+
+    @discardableResult
+    private func scrollToLetter(_ letter: ItemLetter?) -> Bool {
+        guard let letter,
+              let index = indexOfFirstElement(for: letter)
+        else { return false }
+
+        gridScrollCoordinator.scrollToItem(at: index)
+        return true
+    }
+
+    private func indexOfFirstElement(for letter: ItemLetter) -> Int? {
+        let target = letter.value.uppercased()
+
+        return viewModel.displayedElements.firstIndex { element in
+            let title = element.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let first = title.first else { return false }
+            let initial = String(first).uppercased()
+
+            if target == "#" {
+                return initial.range(of: "^[A-Z]$", options: .regularExpression) == nil
+            }
+
+            return initial == target
+        }
+    }
+    #endif
+}
+
+#if os(tvOS)
+private final class CollectionVGridScrollCoordinator: ObservableObject {
+
+    weak var locatorView: UIView?
+
+    weak var collectionView: UICollectionView? {
+        didSet {
+            applyPendingScroll()
+        }
+    }
+
+    private var pendingIndex: Int?
+    private var pendingFocus: (() -> Void)?
+
+    func scrollToItem(at index: Int, onScrolled: (() -> Void)? = nil) {
+        pendingIndex = index
+        pendingFocus = onScrolled
+        applyPendingScroll()
+    }
+
+    private func applyPendingScroll() {
+        guard let collectionView,
+              collectionView.window != nil,
+              !collectionView.bounds.isEmpty,
+              let index = pendingIndex,
+              index >= 0,
+              collectionView.numberOfSections > 0,
+              index < collectionView.numberOfItems(inSection: 0)
+        else { return }
+
+        let focus = pendingFocus
+        pendingIndex = nil
+        pendingFocus = nil
+        collectionView.layoutIfNeeded()
+        collectionView.scrollToItem(
+            at: IndexPath(item: index, section: 0),
+            at: .top,
+            animated: false
+        )
+        collectionView.layoutIfNeeded()
+        if let focus {
+            DispatchQueue.main.async(execute: focus)
+        }
     }
 }
+
+private struct CollectionVGridLocator: UIViewRepresentable {
+
+    let coordinator: CollectionVGridScrollCoordinator
+
+    final class LocatorView: UIView {
+        var locate: (() -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            locate?()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            locate?()
+        }
+    }
+
+    func makeUIView(context: Context) -> LocatorView {
+        let view = LocatorView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        coordinator.locatorView = view
+        coordinator.collectionView = nil
+        return view
+    }
+
+    func updateUIView(_ uiView: LocatorView, context: Context) {
+        uiView.locate = { [weak uiView] in
+            DispatchQueue.main.async {
+                guard let uiView,
+                      self.coordinator.locatorView === uiView,
+                      uiView.window != nil
+                else { return }
+                self.coordinator.collectionView = self.findCollectionView(near: uiView)
+            }
+        }
+        uiView.locate?()
+    }
+
+    private func findCollectionView(near view: UIView) -> UICollectionView? {
+        var ancestor = view.superview
+
+        while let current = ancestor {
+            if let collectionView = firstCollectionView(in: current) {
+                return collectionView
+            }
+            ancestor = current.superview
+        }
+
+        return nil
+    }
+
+    private func firstCollectionView(in view: UIView) -> UICollectionView? {
+        if view is any _UICollectionVGrid {
+            return view.subviews.compactMap { $0 as? UICollectionView }.first
+        }
+
+        for subview in view.subviews {
+            if let collectionView = firstCollectionView(in: subview) {
+                return collectionView
+            }
+        }
+
+        return nil
+    }
+}
+#endif

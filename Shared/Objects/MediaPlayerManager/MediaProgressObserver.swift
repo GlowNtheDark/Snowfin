@@ -29,6 +29,9 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     private var hasSentStart = false
     private var item: MediaPlayerItem?
     private var lastPlaybackRequestStatus: MediaPlayerManager.PlaybackRequestStatus = .playing
+    #if os(tvOS)
+    private var lastNotifiedProgressTicks: [String: Int] = [:]
+    #endif
 
     init(item: MediaPlayerItem) {
         self.item = item
@@ -77,16 +80,16 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             .store(in: &cancellables)
     }
 
-    private func endPlaybackSession() {
+    private func endPlaybackSession(seconds: Duration? = nil) {
         guard let item else { return }
-        sendStopReport(for: item, seconds: manager?.seconds)
+        sendStopReport(for: item, seconds: seconds ?? manager?.seconds)
     }
 
     private func playbackItemDidChange(_ newItem: MediaPlayerItem?) {
         timer.poke()
 
         if let item, newItem !== item {
-            endPlaybackSession()
+            endPlaybackSession(seconds: manager?.previousItemStopSeconds)
             self.item = newItem
             self.hasSentStart = false
             sendReport()
@@ -152,6 +155,9 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
             let request = Paths.reportPlaybackStopped(info)
             try await send(request)
+            #if os(tvOS)
+            Notifications[.didSendStopReport].post()
+            #endif
         }
     }
 
@@ -175,6 +181,16 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
             let request = Paths.reportPlaybackProgress(info)
             try await send(request)
+            #if os(tvOS)
+            if let itemID = item.baseItem.id, let ticks = info.positionTicks {
+                let previous = lastNotifiedProgressTicks[itemID]
+                // Use acknowledged reports, not the player's high-frequency clock.
+                if previous == nil || abs(Double(ticks) - Double(previous ?? 0)) >= 100_000_000 || isPaused {
+                    lastNotifiedProgressTicks[itemID] = ticks
+                    Notifications[.didSendResumeProgressReport].post()
+                }
+            }
+            #endif
         }
     }
 }

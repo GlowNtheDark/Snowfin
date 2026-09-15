@@ -128,7 +128,29 @@ extension L10n {
     // MARK: - Brands
 
     static let swiftfin = "Swiftfin"
+    static let snowfin = "Snowfin"
+    static let screen = "Screen"
     static let jellyfin = "Jellyfin"
+
+    static var applicationBrand: String {
+        #if os(tvOS)
+        screen
+        #else
+        swiftfin
+        #endif
+    }
+
+    static func applicationBranded(_ value: String) -> String {
+        #if os(tvOS)
+        value
+            .replacingOccurrences(of: "Swiftfin", with: screen)
+            .replacingOccurrences(of: "swiftfin", with: screen)
+            .replacingOccurrences(of: "Snowfin", with: screen)
+            .replacingOccurrences(of: "snowfin", with: screen)
+        #else
+        value
+        #endif
+    }
 
     // MARK: - Platforms
 

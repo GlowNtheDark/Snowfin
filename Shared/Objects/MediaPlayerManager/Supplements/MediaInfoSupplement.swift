@@ -203,10 +203,10 @@ extension MediaInfoSupplement {
                 .edgePadding(.horizontal)
                 .padding(.vertical, EdgeInsets.edgePadding / 2)
                 .background {
-                    RoundedRectangle(cornerRadius: 32)
+                    Rectangle()
                         .fill(Material.thin)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 32))
+                .clipShape(Rectangle())
                 .edgePadding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .focusSection()

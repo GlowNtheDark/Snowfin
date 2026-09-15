@@ -464,8 +464,8 @@ internal enum L10n {
   internal static let dateModified = L10n.tr("Localizable", "dateModified", fallback: "Date modified")
   /// Date of death
   internal static let dateOfDeath = L10n.tr("Localizable", "dateOfDeath", fallback: "Date of death")
-  /// Date played
-  internal static let datePlayed = L10n.tr("Localizable", "datePlayed", fallback: "Date played")
+  /// Date watched
+  internal static let datePlayed = L10n.tr("Localizable", "datePlayed", fallback: "Date watched")
   /// Dates
   internal static let dates = L10n.tr("Localizable", "dates", fallback: "Dates")
   /// Day of week
@@ -776,8 +776,8 @@ internal enum L10n {
   internal static let hexColor = L10n.tr("Localizable", "hexColor", fallback: "Hex color")
   /// Hidden
   internal static let hidden = L10n.tr("Localizable", "hidden", fallback: "Hidden")
-  /// Hide played in Latest
-  internal static let hidePlayedInLatest = L10n.tr("Localizable", "hidePlayedInLatest", fallback: "Hide played in Latest")
+  /// Hide watched in Latest
+  internal static let hidePlayedInLatest = L10n.tr("Localizable", "hidePlayedInLatest", fallback: "Hide watched in Latest")
   /// Hide user from login screen
   internal static let hideUserFromLoginScreen = L10n.tr("Localizable", "hideUserFromLoginScreen", fallback: "Hide user from login screen")
   /// Hint
@@ -978,10 +978,10 @@ internal enum L10n {
   internal static let manualPlaylistsFolder = L10n.tr("Localizable", "manualPlaylistsFolder", fallback: "Manual playlists folder")
   /// Manual playlists folders
   internal static let manualPlaylistsFolders = L10n.tr("Localizable", "manualPlaylistsFolders", fallback: "Manual playlists folders")
-  /// Mark as played
-  internal static let markAsPlayed = L10n.tr("Localizable", "markAsPlayed", fallback: "Mark as played")
-  /// Mark as unplayed
-  internal static let markAsUnplayed = L10n.tr("Localizable", "markAsUnplayed", fallback: "Mark as unplayed")
+  /// Mark as watched
+  internal static let markAsPlayed = L10n.tr("Localizable", "markAsPlayed", fallback: "Mark as watched")
+  /// Mark as unwatched
+  internal static let markAsUnplayed = L10n.tr("Localizable", "markAsUnplayed", fallback: "Mark as unwatched")
   /// Maximum
   internal static let maximum = L10n.tr("Localizable", "maximum", fallback: "Maximum")
   /// Maximum bitrate
@@ -1216,8 +1216,8 @@ internal enum L10n {
   internal static let playDefaultTrack = L10n.tr("Localizable", "playDefaultTrack", fallback: "Play default track")
   /// Always plays the first track marked as Default, even if not in your language.
   internal static let playDefaultTrackDescription = L10n.tr("Localizable", "playDefaultTrackDescription", fallback: "Always plays the first track marked as Default, even if not in your language.")
-  /// Played
-  internal static let played = L10n.tr("Localizable", "played", fallback: "Played")
+  /// Watched
+  internal static let played = L10n.tr("Localizable", "played", fallback: "Watched")
   /// Uses Apple's AVPlayer which supports HDR, Picture in Picture, AirPlay casting, and HomePod or AirPlay-enabled speakers. However, it has no subtitle support and is very restrictive with file formats.
   internal static let playerNativeDescription = L10n.tr("Localizable", "playerNativeDescription", fallback: "Uses Apple's AVPlayer which supports HDR, Picture in Picture, AirPlay casting, and HomePod or AirPlay-enabled speakers. However, it has no subtitle support and is very restrictive with file formats.")
   /// Uses VLC's VLCKit to provide compatibility with nearly any file type. However, VLCKit cannot use HomePod or AirPlay-enabled speakers, HDR, Picture in Picture, or AirPlay casting.
@@ -1316,8 +1316,8 @@ internal enum L10n {
   internal static let ratings = L10n.tr("Localizable", "ratings", fallback: "Ratings")
   /// Recently added
   internal static let recentlyAdded = L10n.tr("Localizable", "recentlyAdded", fallback: "Recently added")
-  /// Recently played
-  internal static let recentlyPlayed = L10n.tr("Localizable", "recentlyPlayed", fallback: "Recently played")
+  /// Recently watched
+  internal static let recentlyPlayed = L10n.tr("Localizable", "recentlyPlayed", fallback: "Recently watched")
   /// Recommended
   internal static let recommended = L10n.tr("Localizable", "recommended", fallback: "Recommended")
   /// Recording
@@ -1482,8 +1482,8 @@ internal enum L10n {
   internal static let sendProgressReports = L10n.tr("Localizable", "sendProgressReports", fallback: "Send progress reports")
   /// Series
   internal static let series = L10n.tr("Localizable", "series", fallback: "Series")
-  /// Series date played
-  internal static let seriesDatePlayed = L10n.tr("Localizable", "seriesDatePlayed", fallback: "Series date played")
+  /// Series date watched
+  internal static let seriesDatePlayed = L10n.tr("Localizable", "seriesDatePlayed", fallback: "Series date watched")
   /// Series name
   internal static let seriesName = L10n.tr("Localizable", "seriesName", fallback: "Series name")
   /// Server
@@ -1772,8 +1772,8 @@ internal enum L10n {
   internal static let unlimitedConnectionsDescription = L10n.tr("Localizable", "unlimitedConnectionsDescription", fallback: "The user can connect to the server without any limits.")
   /// Allows unlimited failed login attempts without locking the user.
   internal static let unlimitedFailedLoginDescription = L10n.tr("Localizable", "unlimitedFailedLoginDescription", fallback: "Allows unlimited failed login attempts without locking the user.")
-  /// Unplayed
-  internal static let unplayed = L10n.tr("Localizable", "unplayed", fallback: "Unplayed")
+  /// Unwatched
+  internal static let unplayed = L10n.tr("Localizable", "unplayed", fallback: "Unwatched")
   /// Unreleased
   internal static let unreleased = L10n.tr("Localizable", "unreleased", fallback: "Unreleased")
   /// You have unsaved changes. Are you sure you want to discard them?

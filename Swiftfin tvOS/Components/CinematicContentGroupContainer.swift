@@ -14,13 +14,22 @@ struct CinematicContentGroupContainer<Content: View>: View {
     private var frameForParentView
 
     private let content: Content
+    private let preferredHeight: CGFloat?
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        preferredHeight: CGFloat? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
         self.content = content()
+        self.preferredHeight = preferredHeight
     }
 
     private var resolvedHeight: CGFloat {
         let parentHeight = frameForParentView[.scrollView, default: .zero].frame.height
+
+        if let preferredHeight {
+            return parentHeight > 0 ? min(preferredHeight, parentHeight) : preferredHeight
+        }
 
         return max(parentHeight - 75, 0)
     }

@@ -86,7 +86,7 @@ struct PlaybackInfoLabeledContentStyle: LabeledContentStyle {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    Rectangle()
                         .fill(isFocused ? Color.white.opacity(0.15) : Color.clear)
                 )
                 .focusable()

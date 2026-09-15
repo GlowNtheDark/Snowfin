@@ -15,6 +15,11 @@ struct PosterImage<Element: Poster>: View {
     @Environment(\.self)
     private var environment
 
+    #if os(tvOS)
+    @Environment(\.isFocused)
+    private var isFocused
+    #endif
+
     private let contentMode: ContentMode
     private let element: Element
     private var pipeline: ImagePipeline
@@ -42,6 +47,14 @@ struct PosterImage<Element: Poster>: View {
         )
     }
 
+    private var imagePriority: ImageRequest.Priority {
+        #if os(tvOS)
+        isFocused ? .high : .normal
+        #else
+        .high
+        #endif
+    }
+
     var body: some View {
         ZStack {
             Rectangle()
@@ -52,6 +65,7 @@ struct PosterImage<Element: Poster>: View {
             } content: {
                 ImageView(imageSources)
                     .pipeline(pipeline)
+                    .priority(imagePriority)
                     .image { image in
                         element.transform(image: image, displayType: displayType)
                     }

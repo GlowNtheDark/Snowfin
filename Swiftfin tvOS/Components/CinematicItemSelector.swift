@@ -11,9 +11,6 @@ import SwiftUI
 
 struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
 
-    @Environment(\.frameForParentView)
-    private var frameForParentView
-
     @FocusState
     private var isSectionFocused
 
@@ -37,10 +34,6 @@ struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
         self.topContent = topContent
     }
 
-    private var parentFrame: CGRect {
-        frameForParentView[.scrollView, default: .zero].frame
-    }
-
     private var resolvedSelectedPoster: AnyPoster? {
         selectedPoster ?? items.first.map { AnyPoster($0) }
     }
@@ -55,52 +48,24 @@ struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
     }
 
     var body: some View {
-        CinematicContentGroupContainer {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
 
-                if let selectedItem {
-                    topContent(selectedItem)
-                        .id(selectedItem.hashValue)
-                        .transition(.opacity)
-                }
+            if let selectedItem {
+                topContent(selectedItem)
+                    .id(selectedItem.hashValue)
+                    .transition(.opacity)
+            }
 
-                // TODO: fix intrinsic content sizing without frame
-                PosterHStack(
-                    elements: items,
-                    displayType: .landscape,
-                    size: .medium
-                ) { item, _ in
-                    action(item)
-                }
-                .frame(height: 400)
+            PosterHStack(
+                elements: items,
+                displayType: .portrait,
+                size: .small
+            ) { item, _ in
+                action(item)
             }
+            .environment(\.launchFocusFirstPoster, items.first.map { AnyPoster($0) })
         }
-        .background(alignment: .top) {
-            FadeContentTransitionView(
-                item: resolvedSelectedPoster,
-                debounce: 0.5
-            ) { item in
-                ImageView(item?.landscapeImageSources(environment: .default) ?? [])
-                    .failure {
-                        EmptyView()
-                    }
-                    .aspectRatio(contentMode: .fill)
-            }
-            .overlay {
-                Color.black
-                    .mask(gradient: .linear) {
-                        (location: 0.5, opacity: 0)
-                        (location: 0.6, opacity: 0.4)
-                        (location: 1, opacity: 1)
-                    }
-            }
-            .frame(height: parentFrame.height)
-            .mask(gradient: .linear) {
-                (location: 0.82, opacity: 1)
-                (location: 0.94, opacity: 0.55)
-                (location: 1, opacity: 0)
-            }
-        }
+        .background(Color.snowfinDeepNavy)
         .onChange(of: focusedPoster) {
             updateSelectedPoster()
         }

@@ -234,9 +234,17 @@ extension View {
     }
 
     @ViewBuilder
-    func letterPickerBar(filterViewModel: FilterViewModel?) -> some View {
+    func letterPickerBar(
+        filterViewModel: FilterViewModel?,
+        preferredLetter: ItemLetter? = nil,
+        onLetterFocused: ((ItemLetter) -> Void)? = nil
+    ) -> some View {
         modifier(
-            LetterPickerBarModifier(viewModel: filterViewModel)
+            LetterPickerBarModifier(
+                viewModel: filterViewModel,
+                preferredLetter: preferredLetter,
+                onLetterFocused: onLetterFocused
+            )
         )
     }
 
@@ -323,12 +331,21 @@ extension View {
     @ViewBuilder
     func posterBorder() -> some View {
         overlay {
+            #if os(tvOS)
+            Rectangle()
+                .stroke(
+                    .white.opacity(0.1),
+                    lineWidth: 1
+                )
+                .clipped()
+            #else
             ContainerRelativeShape()
                 .stroke(
                     .white.opacity(0.1),
                     lineWidth: 1
                 )
                 .clipped()
+            #endif
         }
     }
 
@@ -336,12 +353,16 @@ extension View {
     func posterCornerRadius(
         _ type: PosterDisplayType
     ) -> some View {
+        #if os(tvOS)
+        self
+        #else
         switch type {
         case .landscape:
             cornerRadius(ratio: 1 / 30, of: \.width)
         case .portrait, .square:
             cornerRadius(ratio: 0.0375, of: \.width)
         }
+        #endif
     }
 
     @ViewBuilder

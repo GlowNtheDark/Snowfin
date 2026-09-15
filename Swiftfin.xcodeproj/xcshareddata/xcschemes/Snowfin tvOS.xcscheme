@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2630"
+   LastUpgradeVersion = "2660"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -15,8 +15,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5358705F2669D21600D05A09"
-               BuildableName = "Swiftfin tvOS.app"
-               BlueprintName = "Swiftfin tvOS"
+               BuildableName = "Screen.app"
+               BlueprintName = "Snowfin tvOS"
                ReferencedContainer = "container:Swiftfin.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -45,8 +45,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5358705F2669D21600D05A09"
-            BuildableName = "Swiftfin tvOS.app"
-            BlueprintName = "Swiftfin tvOS"
+            BuildableName = "Screen.app"
+            BlueprintName = "Snowfin tvOS"
             ReferencedContainer = "container:Swiftfin.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,8 +62,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5358705F2669D21600D05A09"
-            BuildableName = "Swiftfin tvOS.app"
-            BlueprintName = "Swiftfin tvOS"
+            BuildableName = "Screen.app"
+            BlueprintName = "Snowfin tvOS"
             ReferencedContainer = "container:Swiftfin.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

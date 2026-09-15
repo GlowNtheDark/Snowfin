@@ -108,10 +108,17 @@ private struct OverlayToastContent: View {
         .padding(contentPadding)
         .frame(minHeight: minHeight)
         .backport
-        .glassEffect(
-            .regular.interactive(!UIDevice.isTV),
-            in: .capsule
-        )
+        #if os(tvOS)
+            .glassEffect(
+                .regular.interactive(false),
+                in: .rect
+            )
+        #else
+            .glassEffect(
+                .regular.interactive(!UIDevice.isTV),
+                in: .capsule
+            )
+        #endif
     }
 
     private var contentPadding: EdgeInsets {

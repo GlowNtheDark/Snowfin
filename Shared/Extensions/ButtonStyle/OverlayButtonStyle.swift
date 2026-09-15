@@ -19,7 +19,11 @@ extension VideoPlayer.PlaybackControls {
             if #available(iOS 26.0, *), UIDevice.supportsLiquidGlass {
                 content
                     .buttonStyle(OverlayGlassButtonStyle(onPressed: onPressed))
+                #if os(tvOS)
+                    .buttonBorderShape(.roundedRectangle(radius: 0))
+                #else
                     .buttonBorderShape(.circle)
+                #endif
             } else {
                 content
                     .buttonStyle(OverlayButtonStyle(onPressed: onPressed))
@@ -92,7 +96,10 @@ extension VideoPlayer.PlaybackControls {
 
         #if os(tvOS)
         private func tvOSBody(_ configuration: Configuration) -> some View {
-            configuration.label
+            let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255)
+            let snowfinDeepNavy = Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255)
+
+            return configuration.label
                 .labelStyle(.iconOnly)
                 .font(.body)
                 .fontWeight(.semibold)
@@ -102,14 +109,14 @@ extension VideoPlayer.PlaybackControls {
                 .backport
                 .glassEffect(
                     .regular.selection(
-                        tint: .white,
-                        foregroundColor: .black
+                        tint: snowfinIceBlue,
+                        foregroundColor: snowfinDeepNavy
                     ),
-                    in: .circle
+                    in: .rect
                 )
                 .isSelected(isFocused)
                 .scaleEffect(configuration.isPressed ? 0.90 : isFocused ? 1.1 : 1)
-                .shadow(color: isFocused ? .black.opacity(0.5) : .clear, radius: isFocused ? 10 : 0)
+                .shadow(color: isFocused ? snowfinIceBlue.opacity(0.38) : .clear, radius: isFocused ? 18 : 0)
                 .animation(.linear(duration: 0.1), value: isFocused)
                 .animation(.bouncy(duration: 0.25, extraBounce: 0.25), value: configuration.isPressed)
                 .onChange(of: configuration.isPressed) {

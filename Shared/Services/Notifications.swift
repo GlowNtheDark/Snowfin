@@ -117,6 +117,12 @@ extension Notifications.Key {
         Key("didSendStopReport")
     }
 
+    #if os(tvOS)
+    static var didSendResumeProgressReport: Key<Void> {
+        Key("didSendResumeProgressReport")
+    }
+    #endif
+
     static var didRequestGlobalRefresh: Key<Void> {
         Key("didRequestGlobalRefresh")
     }

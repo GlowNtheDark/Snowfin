@@ -8,6 +8,7 @@
 
 import FactoryKit
 import Foundation
+import Logging
 import Nuke
 import Pulse
 import UIKit
@@ -63,8 +64,9 @@ extension ImagePipeline.Swiftfin {
 
     /// The default `ImagePipeline` to use for images that are typically posters
     /// or server user images that should be presentable with an active connection.
-    static let posters: ImagePipeline = ImagePipeline(delegate: SwiftfinImagePipelineDelegate()) { config in
+    static let posters: ImagePipeline = ImagePipeline(delegate: SwiftfinImagePipelineDelegate(logMetrics: true)) { config in
         config.dataCache = DataCache.Swiftfin.posters
+        config.isUsingPrepareForDisplay = true
 
         let dataLoader = DataLoader(
             configuration: .swiftfin
@@ -95,10 +97,95 @@ extension ImagePipeline.Swiftfin {
     static let other: ImagePipeline = ImagePipeline(configuration: .withURLCache)
 }
 
-final class SwiftfinImagePipelineDelegate: ImagePipeline.Delegate {
+final class SwiftfinImagePipelineDelegate: ImagePipeline.Delegate, @unchecked Sendable {
+
+    private struct Metrics {
+        var cancellations = 0
+        var completions = 0
+        var dataLoads = 0
+        var diskHits = 0
+        var failures = 0
+        var memoryHits = 0
+        var uncachedResponses = 0
+    }
+
+    private let lock = NSLock()
+    private let logMetrics: Bool
+    private let logger = Logger.swiftfin()
+    private var lastReportedCompletions = 0
+    private var metrics = Metrics()
+
+    init(logMetrics: Bool = false) {
+        self.logMetrics = logMetrics
+    }
+
+    private func record(_ update: (inout Metrics) -> Void) {
+        guard logMetrics else { return }
+
+        let snapshot: Metrics?
+
+        lock.lock()
+        update(&metrics)
+        if metrics.completions > lastReportedCompletions, metrics.completions.isMultiple(of: 25) {
+            lastReportedCompletions = metrics.completions
+            snapshot = metrics
+        } else {
+            snapshot = nil
+        }
+        lock.unlock()
+
+        guard let snapshot else { return }
+
+        logger.debug(
+            """
+            Poster image pipeline metrics: completed=\(snapshot.completions), memoryHits=\(snapshot.memoryHits), \
+            diskHits=\(snapshot.diskHits), dataLoads=\(snapshot.dataLoads), \
+            uncachedResponses=\(snapshot.uncachedResponses), cancelled=\(snapshot.cancellations), \
+            failures=\(snapshot.failures)
+            """
+        )
+    }
 
     func cacheKey(for request: ImageRequest, pipeline: ImagePipeline) -> String? {
         guard let url = request.url else { return nil }
         return ImagePipeline.cacheKey(for: url)
+    }
+
+    @ImagePipelineActor
+    func willLoadData(
+        for request: ImageRequest,
+        urlRequest: URLRequest,
+        pipeline: ImagePipeline
+    ) async throws -> URLRequest {
+        record { $0.dataLoads += 1 }
+        return urlRequest
+    }
+
+    func imageTask(
+        _ task: ImageTask,
+        didReceiveEvent event: ImageTask.Event,
+        pipeline: ImagePipeline
+    ) {
+        guard case let .finished(result) = event else { return }
+
+        switch result {
+        case let .success(response):
+            record { metrics in
+                metrics.completions += 1
+
+                switch response.cacheType {
+                case .memory:
+                    metrics.memoryHits += 1
+                case .disk:
+                    metrics.diskHits += 1
+                case nil:
+                    metrics.uncachedResponses += 1
+                }
+            }
+        case .failure(.cancelled):
+            record { $0.cancellations += 1 }
+        case .failure:
+            record { $0.failures += 1 }
+        }
     }
 }

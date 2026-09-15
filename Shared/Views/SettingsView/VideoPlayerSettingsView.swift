@@ -35,6 +35,15 @@ struct VideoPlayerSettingsView: View {
     @Default(.VideoPlayer.resumeOffset)
     private var resumeOffset
 
+    // MARK: - Media Segment Defaults
+
+    @Default(.VideoPlayer.Segments.introBehavior)
+    private var snowfinIntroBehavior
+    @Default(.VideoPlayer.Segments.creditsBehavior)
+    private var snowfinCreditsBehavior
+    @Default(.VideoPlayer.Segments.countdownDuration)
+    private var snowfinCountdownDuration
+
     // MARK: - Slider Defaults
 
     @Default(.VideoPlayer.Overlay.chapterSlider)
@@ -89,6 +98,8 @@ struct VideoPlayerSettingsView: View {
 
             resumeSettings
 
+            mediaSegmentSettings
+
             sliderSettings
 
             supplementSettings
@@ -108,6 +119,24 @@ struct VideoPlayerSettingsView: View {
             if viewModel.background.is(.updating) || viewModel.background.is(.refreshing) {
                 ProgressView()
             }
+        }
+    }
+
+    // MARK: - Media Segments
+
+    @ViewBuilder
+    private var mediaSegmentSettings: some View {
+        Section {
+            PlatformPicker("Intro", selection: $snowfinIntroBehavior)
+            PlatformPicker("Credits / Outro", selection: $snowfinCreditsBehavior)
+
+            if snowfinCreditsBehavior == .countdownAutoplay {
+                PlatformPicker("Autoplay Countdown", selection: $snowfinCountdownDuration)
+            }
+        } header: {
+            Text("Media Segments")
+        } footer: {
+            Text("Uses Intro and Outro timestamps supplied by the Jellyfin server.")
         }
     }
 
