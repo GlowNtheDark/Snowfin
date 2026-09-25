@@ -1,7 +1,8 @@
 # Codex workflow
 
-Stable rules live in [AGENTS.md](../AGENTS.md). A future prompt can state the outcome,
-scope, and special constraints without repeating the workflow.
+Keep Codex prompts short and task-specific: state the outcome, scope, and special
+constraints. Stable repo guidance belongs in [AGENTS.md](../AGENTS.md) and relevant
+docs rather than being repeated in each prompt.
 
 ## Task lifecycle
 
@@ -13,10 +14,8 @@ scope, and special constraints without repeating the workflow.
    for non-crashing UI/behavior bugs, apply the two-pass limit and exceptions in
    [AGENTS.md](../AGENTS.md). Report unresolved work without claiming it passed.
 
-Do not restart broad exploration once the responsible path is known. Apply the
-[delegation and token rules](../AGENTS.md): one lead by default, meaningful bounded
-subtasks only, targeted reads, and no speculative edit loops. Model selection should
-match task difficulty and available tools; this repo does not pin a model or pricing.
+Use [AGENTS.md](../AGENTS.md) for repo scope, model roles, delegation, investigation,
+and the two-pass limit. This document covers planning, deferred findings, and doc upkeep.
 
 ## Plans and deferred findings
 
@@ -45,6 +44,5 @@ This repository follows that approach. [OpenAI best practices](https://learn.cha
 Codex discovers instruction files along the project-root-to-working-directory path,
 with `AGENTS.override.md` taking precedence over `AGENTS.md` in the same directory.
 Linked docs are read on demand; links do not automatically load every specification.
-No nested overrides, new skills, global settings, or permission changes are needed
-for this bootstrap. [OpenAI instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+[OpenAI instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 (reviewed 2026-09-14).

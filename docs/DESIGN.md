@@ -13,6 +13,13 @@ and [MainTabView.swift](../Shared/Coordinators/Tabs/MainTabView.swift).
 - General buttons communicate focus with an outline, restrained glow, and small scale.
   Focus treatment is surface-specific: Search uses compact outline controls and
   Play Next currently uses neutral dark actions. Preserve those distinctions.
+- Home poster artwork stays at a fixed scale during focus movement; its outline,
+  restrained accent halo, and press feedback remain active. Home uses a 10% opacity
+  focus halo and no completed-progress glow; the focused outline and completed bar
+  remain unchanged.
+- Unfocused Home posters use 85% title opacity and an 8% black artwork overlay;
+  focused posters restore full title and artwork emphasis with a 0.1-second ease-out.
+  Secondary metadata, badges, progress indicators, and shelf headings are unaffected.
 - Use the collapsible sidebar and direct entry into media rows. Section headings
   are labels, not extra navigation destinations. Keep routine profile information
   out of the main menu/content screens.

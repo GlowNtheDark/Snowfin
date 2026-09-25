@@ -49,7 +49,12 @@ struct PosterImage<Element: Poster>: View {
 
     private var imagePriority: ImageRequest.Priority {
         #if os(tvOS)
-        isFocused ? .high : .normal
+        // Keep Home's Nuke request context stable while focus moves between posters.
+        if environment.homeTileCoordinator != nil {
+            .normal
+        } else {
+            isFocused ? .high : .normal
+        }
         #else
         .high
         #endif

@@ -21,3 +21,12 @@ Other navigation should likewise return through the screen that launched it.
 
 See [Episode Details](episode-details.md), [focus restoration](focus-restoration.md),
 and [navigation implementation](../design-docs/navigation-stack.md).
+
+## TV Shows tab lifetime
+
+Within a signed-in tvOS session, TV Shows preloads and retains its content and
+browsing state across tab changes. Refreshes preserve the last loaded collection
+until its replacement is available, including a genuinely empty replacement.
+Inactive TV Shows must not take focus, accept input, appear in accessibility, or
+present routes. Right/Select retains the existing explicit entry-to-first-item
+behavior. See the [tab lifetime implementation](../design-docs/navigation-stack.md#retained-tv-shows-tab).

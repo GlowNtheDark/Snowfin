@@ -19,7 +19,67 @@ enum PosterHStackMetrics {
         EdgeInsets.edgePadding / 2
         #endif
     }()
+
+    #if os(tvOS)
+    // Approximately 30% wider than the previous five/seven-column rows.
+    static let landscapeColumns: CGFloat = 4
+    static let portraitColumns: CGFloat = 5.75
+    #endif
 }
+
+#if os(tvOS)
+final class PosterHStackFocusController {
+
+    private weak var collectionView: UICollectionView?
+
+    func register(from view: UIView) {
+        var ancestor = view.superview
+        while let current = ancestor {
+            if let collection = current as? UICollectionView {
+                register(collection)
+                return
+            }
+            ancestor = current.superview
+        }
+    }
+
+    func scrollFocusedPoster(at index: Int, forceLayout: Bool) {
+        collectionView?.scrollFocusedPoster(at: index, forceLayout: forceLayout)
+    }
+
+    private func register(_ collection: UICollectionView) {
+        guard collectionView !== collection else { return }
+        collectionView = collection
+        collection.configurePosterHStackFocusScrolling()
+    }
+
+    private func collectionView(in view: UIView) -> UICollectionView? {
+        var ancestor: UIView? = view
+
+        while let current = ancestor {
+            let probeFrame = view.convert(view.bounds, to: current)
+            if let collection = collectionViews(in: current).first(where: { collection in
+                collection.convert(collection.bounds, to: current).intersects(probeFrame)
+            }) {
+                return collection
+            }
+            ancestor = current.superview
+        }
+
+        return nil
+    }
+
+    private func collectionViews(in view: UIView) -> [UICollectionView] {
+        if let collection = view as? UICollectionView {
+            return [collection]
+        }
+
+        return view.subviews.flatMap { subview in
+            collectionViews(in: subview)
+        }
+    }
+}
+#endif
 
 struct PosterHStack<
     Data: Collection
@@ -34,6 +94,11 @@ struct PosterHStack<
         destination: .memoryCache,
         maxConcurrentRequestCount: UIDevice.isTV ? 3 : 2
     )
+
+    #if os(tvOS)
+    @State
+    private var focusController = PosterHStackFocusController()
+    #endif
 
     let elements: Data
     let displayType: PosterDisplayType
@@ -55,7 +120,9 @@ struct PosterHStack<
     private var layout: CollectionHStackLayout {
         #if os(tvOS)
         .grid(
-            columns: displayType == .landscape ? 5 : 7,
+            columns: displayType == .landscape
+                ? PosterHStackMetrics.landscapeColumns
+                : PosterHStackMetrics.portraitColumns,
             rows: 1,
             columnTrailingInset: 0
         )
@@ -111,6 +178,14 @@ struct PosterHStack<
         #endif
     }
 
+    private var posterScrollBehavior: CollectionHStackScrollBehavior {
+        #if os(tvOS)
+        .continuous
+        #else
+        .continuousLeadingEdge
+        #endif
+    }
+
     private func prefetchRequests(for elements: [Data.Element]) -> [ImageRequest] {
         elements.compactMap { element -> ImageRequest? in
             var resolvedEnvironment = element.resolveEnvironment(environment)
@@ -149,23 +224,28 @@ struct PosterHStack<
             .environment(\.homeFocusTile, homeTiles.first { tile in
                 FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
             })
+            .environment(\.posterHStackFocusController, focusController)
+            .environment(\.posterHStackFocusIndex, elements.firstIndex(of: item))
             #endif
         }
         .clipsToBounds(false)
-        .insets(horizontal: horizontalInset)
-        .itemSpacing(PosterHStackMetrics.itemSpacing)
-        .onPrefetchingElements { elements in
-            imagePrefetcher.startPrefetching(
-                with: prefetchRequests(for: elements)
-            )
-        }
-        .onCancelPrefetchingElements { elements in
-            imagePrefetcher.stopPrefetching(
-                with: prefetchRequests(for: elements)
-            )
-        }
-        .scrollBehavior(.continuousLeadingEdge)
-        .withViewContext(.isThumb)
+        #if os(tvOS)
+            .allowBouncing(false)
+        #endif
+            .insets(horizontal: horizontalInset)
+            .itemSpacing(PosterHStackMetrics.itemSpacing)
+            .onPrefetchingElements { elements in
+                imagePrefetcher.startPrefetching(
+                    with: prefetchRequests(for: elements)
+                )
+            }
+            .onCancelPrefetchingElements { elements in
+                imagePrefetcher.stopPrefetching(
+                    with: prefetchRequests(for: elements)
+                )
+            }
+            .scrollBehavior(posterScrollBehavior)
+            .withViewContext(.isThumb)
         #if os(tvOS)
             .preference(key: HomeFocusRowsKey.self, value: environment.homeTileCoordinator == nil ? [] : [
                 HomeFocusRow(
@@ -178,3 +258,68 @@ struct PosterHStack<
         #endif
     }
 }
+
+#if os(tvOS)
+extension EnvironmentValues {
+    @Entry
+    var posterHStackFocusController: PosterHStackFocusController? = nil
+    @Entry
+    var posterHStackFocusIndex: Int? = nil
+}
+
+private extension UICollectionView {
+
+    func scrollFocusedPoster(at index: Int, forceLayout: Bool) {
+        guard window != nil,
+              numberOfSections > 0,
+              numberOfItems(inSection: 0) > index else { return }
+
+        if forceLayout {
+            layoutIfNeeded()
+        }
+
+        guard let layout = collectionViewLayout as? UICollectionViewFlowLayout,
+              let attributes = layout.layoutAttributesForItem(at: IndexPath(item: index, section: 0))
+        else { return }
+
+        let leadingInset = layout.sectionInset.left
+        let trailingInset = layout.sectionInset.right
+        let visibleLeadingEdge = contentOffset.x + leadingInset
+        let visibleTrailingEdge = contentOffset.x + bounds.width - trailingInset
+
+        let targetOffset: CGFloat
+        if attributes.frame.minX < visibleLeadingEdge {
+            targetOffset = attributes.frame.minX - leadingInset
+        } else if attributes.frame.maxX > visibleTrailingEdge {
+            targetOffset = attributes.frame.maxX - (bounds.width - trailingInset)
+        } else {
+            return
+        }
+
+        let maximumOffset = max(0, contentSize.width - bounds.width)
+        let clampedOffset = targetOffset.clamped(to: 0 ... maximumOffset)
+        guard abs(clampedOffset - contentOffset.x) > 0.5 else { return }
+
+        setContentOffset(contentOffset, animated: false)
+        bounces = false
+        alwaysBounceHorizontal = false
+        UIView.animate(
+            withDuration: 0.19,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]
+        ) {
+            self.setContentOffset(
+                CGPoint(x: clampedOffset, y: self.contentOffset.y),
+                animated: false
+            )
+        }
+    }
+
+    func configurePosterHStackFocusScrolling() {
+        bounces = false
+        alwaysBounceHorizontal = false
+        decelerationRate = .fast
+    }
+}
+
+#endif

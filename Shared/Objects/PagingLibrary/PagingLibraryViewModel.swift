@@ -73,7 +73,16 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     @Published
     var elements: IdentifiedArrayOf<Element>
     @Published
-    var environment: Environment
+    var environment: Environment {
+        didSet {
+            if automaticallyRefreshes, oldValue != environment {
+                queryGeneration += 1
+                collectionGeneration += 1
+                requestAutomaticRefresh()
+            }
+        }
+    }
+
     @Published
     var searchElements: IdentifiedArrayOf<Element>
     @Published
@@ -83,6 +92,19 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
     let library: Library
     let pageSize: Int
+    let automaticallyRefreshes: Bool
+
+    // Opted into only by the retained tvOS TV Shows tab. A successful empty
+    // response counts as loaded; collection emptiness is not a loading flag.
+    @Published
+    private(set) var hasLoadedAutomatically = false
+    private var lastAutomaticRefresh = Date.distantPast
+    private var automaticRefreshActive = false
+    private var automaticRefreshPending = false
+    private var automaticRefreshTask: AnyCancellable?
+    private var queryGeneration = 0
+    private var collectionGeneration = 0
+    private let automaticRefreshInterval: TimeInterval = 300
 
     private var hasNextPage: Bool
     private var hasNextSearchPage: Bool
@@ -115,8 +137,10 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
     init(
         library: Library,
-        pageSize: Int = defaultPagingLibraryPageSize
+        pageSize: Int = defaultPagingLibraryPageSize,
+        automaticallyRefreshes: Bool = false
     ) {
+        self.automaticallyRefreshes = automaticallyRefreshes
         self.elements = IdentifiedArray([], uniquingIDsWith: { existing, _ in existing })
         self.environment = library.environment ?? .default
         self.searchElements = IdentifiedArray([], uniquingIDsWith: { existing, _ in existing })
@@ -131,6 +155,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
             .publisher
             .sink { [weak self] id in
                 self?.removeDeletedItem(withID: id)
+                self?.invalidateAutomaticCollection()
             }
             .store(in: &cancellables)
 
@@ -141,8 +166,30 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
                 updateItemUserData(userData)
                 library.onItemUserDataChanged(viewModel: self, userData: userData)
+                invalidateAutomaticCollection()
             }
             .store(in: &cancellables)
+
+        if automaticallyRefreshes {
+            Publishers.MergeMany([
+                Notifications[.itemMetadataDidChange].publisher.map { _ in () }.eraseToAnyPublisher(),
+                Notifications[.didSendStopReport].publisher.map { _ in () }.eraseToAnyPublisher(),
+                Notifications[.didRequestGlobalRefresh].publisher.map { _ in () }.eraseToAnyPublisher(),
+                Notifications[.didChangeServerConnection].publisher.map { _ in () }.eraseToAnyPublisher(),
+            ])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.invalidateAutomaticCollection()
+            }
+            .store(in: &cancellables)
+
+            Timer.publish(every: 60, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    self?.refreshAutomaticallyIfStale()
+                }
+                .store(in: &cancellables)
+        }
 
         $searchQuery
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -154,8 +201,66 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
             .store(in: &cancellables)
     }
 
+    func setAutomaticRefreshActive(_ active: Bool) {
+        guard automaticallyRefreshes else { return }
+        automaticRefreshActive = active
+        if active {
+            refreshAutomaticallyIfStale()
+        }
+    }
+
+    func refreshAutomaticallyIfStale() {
+        guard automaticallyRefreshes, automaticRefreshActive else { return }
+        // A timer or tab entry during a fetch is not a new invalidation.
+        guard automaticRefreshTask == nil else { return }
+        if automaticRefreshPending || Date.now.timeIntervalSince(lastAutomaticRefresh) >= automaticRefreshInterval {
+            requestAutomaticRefresh()
+        }
+    }
+
+    private func invalidateAutomaticCollection() {
+        guard automaticallyRefreshes else { return }
+        // Reject snapshots started before an accepted user-data change/deletion.
+        collectionGeneration += 1
+        requestAutomaticRefresh()
+    }
+
+    private func requestAutomaticRefresh() {
+        automaticRefreshPending = true
+        guard automaticRefreshActive, automaticRefreshTask == nil else { return }
+
+        automaticRefreshTask = Task { @MainActor [weak self] in
+            // Batch bursts of related notifications before starting network work.
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, let self else { return }
+            defer { automaticRefreshTask = nil }
+
+            while automaticRefreshPending, automaticRefreshActive, !Task.isCancelled {
+                automaticRefreshPending = false
+                if hasLoadedAutomatically {
+                    await background.refresh()
+                } else {
+                    await refresh()
+                }
+            }
+        }
+        .asAnyCancellable()
+    }
+
+    private func didLoadAutomaticCollection() {
+        guard automaticallyRefreshes else { return }
+        hasLoadedAutomatically = true
+        lastAutomaticRefresh = .now
+    }
+
     func refreshForEnvironmentChange() {
-        if isSearchActive {
+        if automaticallyRefreshes {
+            // Collection invalidation is synchronous in environment.didSet, so
+            // an older response cannot publish while waiting for view updates.
+            if isSearchActive {
+                search(query: normalizedSearchQuery)
+            }
+        } else if isSearchActive {
             search(query: normalizedSearchQuery)
         } else {
             refresh()
@@ -243,7 +348,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     private func _refresh() async throws {
         hasNextPage = true
 
-        if StateTask.isBackground {
+        if StateTask.isBackground || (automaticallyRefreshes && hasLoadedAutomatically) {
             try await replaceElements()
         } else {
             elements.removeAll()
@@ -254,6 +359,9 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     @Function(\Action.Cases.getNextPage)
     private func _getNextPage() async throws {
         guard hasNextPage else { return }
+        // The retained TV library already fetches the entire collection. Do not
+        // let a bottom-edge callback start another request during replacement.
+        guard !automaticallyRefreshes || automaticRefreshTask == nil else { return }
         await _actuallyGetNextPage()
     }
 
@@ -261,21 +369,25 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     private func __actuallyGetNextPage() async throws {
         guard hasNextPage else { return }
 
+        let generation = collectionGeneration
         let nextPageElements = try await retrievePage(offset: elements.count)
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, generation == collectionGeneration else { return }
 
         hasNextPage = !library.loadsEntireCollection && !(nextPageElements.count < pageSize)
         elements.append(contentsOf: nextPageElements)
+        didLoadAutomaticCollection()
     }
 
     private func replaceElements() async throws {
+        let generation = collectionGeneration
         let newElements = try await retrievePage(offset: 0)
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, generation == collectionGeneration else { return }
 
         hasNextPage = !library.loadsEntireCollection && !(newElements.count < pageSize)
         elements = IdentifiedArray(newElements, uniquingIDsWith: { existing, _ in existing })
+        didLoadAutomaticCollection()
     }
 
     private func retrievePage(offset: Int) async throws -> [Element] {
@@ -315,6 +427,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
               hasNextSearchPage
         else { return }
 
+        let generation = queryGeneration
         let nextPageElements = try await searchableLibrary.retrieveSearchPage(
             query: query,
             environment: environment,
@@ -322,6 +435,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         )
 
         guard !Task.isCancelled,
+              generation == queryGeneration,
               query == normalizedSearchQuery
         else { return }
 

@@ -10,16 +10,6 @@ import JellyfinAPI
 import SwiftUI
 
 struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
-
-    @FocusState
-    private var isSectionFocused
-
-    @FocusedValue(\.focusedPoster)
-    private var focusedPoster
-
-    @State
-    private var selectedPoster: AnyPoster?
-
     private let action: (Item) -> Void
     private let items: [Item]
     private let topContent: (Item) -> TopContent
@@ -33,6 +23,64 @@ struct CinematicItemSelector<Item: Poster, TopContent: View>: View {
         self.action = action
         self.topContent = topContent
     }
+
+    var body: some View {
+        // Home Continue Watching has no changing top content, so keep poster
+        // focus updates out of the shelf's parent view.
+        if TopContent.self == EmptyView.self {
+            CinematicItemSelectorWithoutTopContent(
+                items: items,
+                action: action
+            )
+        } else {
+            FocusDrivenCinematicItemSelector(
+                items: items,
+                action: action,
+                topContent: topContent
+            )
+        }
+    }
+}
+
+private struct CinematicItemSelectorWithoutTopContent<Item: Poster>: View {
+
+    @FocusState
+    private var isSectionFocused
+
+    let items: [Item]
+    let action: (Item) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PosterHStack(
+                elements: items,
+                displayType: .portrait,
+                size: .small
+            ) { item, _ in
+                action(item)
+            }
+            .environment(\.launchFocusFirstPoster, items.first.map { AnyPoster($0) })
+        }
+        .background(Color.snowfinDeepNavy)
+        .focusSection()
+        .focused($isSectionFocused)
+    }
+}
+
+private struct FocusDrivenCinematicItemSelector<Item: Poster, TopContent: View>: View {
+
+    @FocusState
+    private var isSectionFocused
+
+    @FocusedValue(\.focusedPoster)
+    private var focusedPoster
+
+    @State
+    private var selectedPoster: AnyPoster?
+
+    let items: [Item]
+    let action: (Item) -> Void
+    let topContent: (Item) -> TopContent
 
     private var resolvedSelectedPoster: AnyPoster? {
         selectedPoster ?? items.first.map { AnyPoster($0) }

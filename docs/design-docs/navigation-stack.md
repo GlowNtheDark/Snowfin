@@ -37,3 +37,17 @@ item presentations need explicit tracing if a future task changes that flow.
 
 See [focus system](focus-system.md) for restoration gating and
 [playback lifecycle](playback-lifecycle.md) for player teardown.
+
+## Retained TV Shows tab
+
+The tvOS host keeps TV Shows mounted from signed-in tab creation until that tab
+hierarchy ends. Its existing `PagingLibraryView` owns the single paging model,
+filter model (through `ItemLibrary`), and grid/letter/focus state. Other tabs keep
+their selected-only mounting policy. Sidebar previews and Right/Select entry events
+retain their existing meaning; Right/Select still scrolls to and focuses the first item.
+
+Inactive TV Shows is transparent, disabled, excluded from hit testing and
+accessibility, and guarded against grid focus/entry callbacks. An environment binding
+reads current tab activity even in delayed callbacks. `NavigationInjectionView`
+exposes nil presentation bindings while inactive and ignores dismissal writes then,
+preserving the underlying coordinator routes for reactivation.

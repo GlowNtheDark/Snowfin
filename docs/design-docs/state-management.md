@@ -55,3 +55,27 @@ Queries are bounded by page limits; this is not an exhaustive local watch-histor
 index. Missing IDs/dates can affect deduplication and ordering. Inspect actual payloads
 before diagnosing a report. The [product contract](../product-specs/continue-watching.md)
 describes the intended result; these query details describe the current mechanism.
+
+## TV Shows session loading
+
+Only the retained tvOS TV Shows tab opts into `PagingLibraryViewModel` automatic
+refresh. Its first active-scene appearance starts the existing model's initial
+load, without requiring tab selection. A successful response, including an empty
+one, marks initial loading complete. Subsequent refreshes replace the collection
+in the background; existing content stays visible during requests and failures.
+
+A 60-second timer checks a five-minute freshness window while the scene is active.
+Scene activation and tab entry also check freshness. Item user-data, metadata,
+delete, accepted playback-stop, global-refresh, and connection-change signals
+invalidate the collection. A single worker batches signals for 350 ms and drains
+one pending refresh at a time; signals during a request require a follow-up.
+Filter/sort changes use that same worker. Query and collection generations reject
+obsolete responses before publication, including snapshots predating user-data
+changes/deletions. Existing matching-ID updates remain immediate. Search keeps its
+own paging state and rejects results from an obsolete filter/sort environment.
+
+This adds no item database/cache or separate preloader. The tradeoff is retaining
+one full TV series collection and grid, plus moving its initial item/filter requests
+into signed-in startup. In-flight work may finish when the scene becomes inactive;
+new automatic requests wait until activation. Initial failures remain retryable by
+the freshness checks. Movies, Home, and iOS do not enable this policy.

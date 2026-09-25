@@ -34,6 +34,12 @@ struct PosterButton<Item: Poster>: View {
     private var initialTabCandidateFocused
     @Environment(\.homeTileCoordinator)
     private var homeTileCoordinator
+    @Environment(\.homeFocusGroup)
+    private var homeFocusGroup
+    @Environment(\.posterHStackFocusController)
+    private var posterHStackFocusController
+    @Environment(\.posterHStackFocusIndex)
+    private var posterHStackFocusIndex
     @Environment(\.homeFocusTile)
     private var homeFocusTile
     #endif
@@ -67,6 +73,23 @@ struct PosterButton<Item: Poster>: View {
             .glassEffect(in: .rect)
     }
 
+    #if os(tvOS)
+    private var removesRecentlyAddedMoviesShadows: Bool {
+        homeFocusGroup == "recently-added-movies"
+    }
+
+    private var focusedPosterScale: CGFloat {
+        guard isFocused else { return 1 }
+        if posterHStackFocusController != nil {
+            return 1.06
+        }
+        if homeTileCoordinator == nil {
+            return 1.035
+        }
+        return homeFocusGroup == "recently-added-movies" ? 1.06 : 1
+    }
+    #endif
+
     @ViewBuilder
     private func posterImage(overlay: some View) -> some View {
         PosterImage(
@@ -75,26 +98,43 @@ struct PosterButton<Item: Poster>: View {
             size: size
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay { overlay.posterStyle(displayType) }
-        .contentShape(.contextMenuPreview, Rectangle())
-        .matchedTransitionSource(id: "item", in: namespace)
-        .subtleShadow()
         #if os(tvOS)
             .overlay {
-                Rectangle()
-                    .stroke(
-                        accentColor.opacity(isFocused ? 0.95 : 0),
-                        lineWidth: 3
-                    )
+                if homeTileCoordinator != nil {
+                    Rectangle()
+                        .fill(Color.black.opacity(isFocused ? 0 : 0.08))
+                        .animation(.easeOut(duration: 0.1), value: isFocused)
+                        .allowsHitTesting(false)
+                }
             }
-            .scaleEffect(isFocused ? 1.035 : 1)
-            .shadow(
-                color: isFocused ? accentColor.opacity(0.28) : .clear,
+        #endif
+            .overlay { overlay.posterStyle(displayType) }
+                .contentShape(.contextMenuPreview, Rectangle())
+                .matchedTransitionSource(id: "item", in: namespace)
+        #if os(tvOS)
+            .if(!removesRecentlyAddedMoviesShadows) { $0.subtleShadow() }
+        #else
+            .subtleShadow()
+        #endif
+        #if os(tvOS)
+        .overlay {
+            Rectangle()
+                .stroke(
+                    accentColor.opacity(isFocused ? 0.95 : 0),
+                    lineWidth: 3
+                )
+        }
+        // Horizontal poster shelves keep artwork stable while they scroll.
+        .scaleEffect(focusedPosterScale)
+        .if(!removesRecentlyAddedMoviesShadows) {
+            $0.shadow(
+                color: isFocused ? accentColor.opacity(homeTileCoordinator == nil ? 0.28 : 0.10) : .clear,
                 radius: isFocused ? 16 : 0
             )
-            .animation(.easeOut(duration: 0.16), value: isFocused)
+        }
+        .animation(.easeOut(duration: 0.16), value: isFocused)
         #else
-            .hoverEffect(.highlight)
+        .hoverEffect(.highlight)
         #endif
     }
 
@@ -145,6 +185,16 @@ struct PosterButton<Item: Poster>: View {
                 guard focused, launchFocusFirstPoster == AnyPoster(item) else { return }
                 initialTabCandidateFocused?()
             }
+            .onChange(of: isFocused) { _, focused in
+                guard focused else { return }
+                DispatchQueue.main.async {
+                    guard isFocused, let index = posterHStackFocusIndex else { return }
+                    posterHStackFocusController?.scrollFocusedPoster(
+                        at: index,
+                        forceLayout: homeTileCoordinator == nil
+                    )
+                }
+            }
             .modifier(HomeTileFocusRegistration(
                 coordinator: homeTileCoordinator,
                 tile: homeFocusTile,
@@ -159,6 +209,17 @@ struct PosterButton<Item: Poster>: View {
                                 initialTabCandidateFocused?()
                             }
                         }
+                    )
+                    .allowsHitTesting(false)
+                }
+            }
+            .background {
+                if let posterHStackFocusController,
+                   posterHStackFocusIndex == 0
+                {
+                    LaunchFocusCandidateProbe(
+                        onReady: {},
+                        onLayout: { posterHStackFocusController.register(from: $0) }
                     )
                     .allowsHitTesting(false)
                 }

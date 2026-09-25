@@ -19,6 +19,16 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     @Default(.Customization.Library.style)
     private var defaultLibraryStyle
 
+    @Environment(\.isTabContentActive)
+    private var tabContentActivity
+
+    private var isTabContentActive: Bool {
+        tabContentActivity.wrappedValue
+    }
+
+    @Environment(\.scenePhase)
+    private var scenePhase
+
     @Namespace
     private var namespace
 
@@ -80,9 +90,12 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         rememberIndividualLibraryStyle ? $parentLibraryStyle : $defaultLibraryStyle
     }
 
-    init(library: Library) {
+    init(library: Library, automaticallyRefreshes: Bool = false) {
         self._parentLibraryStyle = StoredValue(.User.libraryStyle(id: library.parent.pagingLibraryID))
-        self._viewModel = StateObject(wrappedValue: PagingLibraryViewModel(library: library))
+        self._viewModel = StateObject(wrappedValue: PagingLibraryViewModel(
+            library: library,
+            automaticallyRefreshes: automaticallyRefreshes
+        ))
     }
 
     @ViewBuilder
@@ -111,6 +124,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 #endif
             }
             .onReachedBottomEdge(offset: .offset(300)) {
+                guard isTabContentActive else { return }
                 if viewModel.isSearchActive {
                     viewModel.getNextSearchPage()
                 } else {
@@ -133,11 +147,12 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             .focusSection()
         #endif
             .onReceive(tabItemSelected) { event in
-                if event.isRepeat, event.isRoot {
+                if isTabContentActive, event.isRepeat, event.isRoot {
                     #if os(tvOS)
                     gridProxy.scrollToTop(animated: false)
                     focusedElementID = nil
                     DispatchQueue.main.async {
+                        guard isTabContentActive else { return }
                         focusedElementID = viewModel.displayedElements.first?.id
                     }
                     #else
@@ -163,26 +178,35 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         }
     }
 
+    @ViewBuilder
+    private var loadedContent: some View {
+        if viewModel.isSearchActive, viewModel.background.is(.searching) {
+            ProgressView()
+        } else if viewModel.displayedElements.isEmpty {
+            ContentUnavailableView(
+                viewModel.isSearchActive ? L10n.noResults.localizedCapitalized : L10n.noItems.localizedCapitalized,
+                systemImage: viewModel.isSearchActive ? "magnifyingglass" : "rectangle.on.rectangle.slash"
+            )
+            .focusable(isTabContentActive)
+        } else {
+            elementsView
+        }
+    }
+
     var body: some View {
         viewModel.library.makeLibraryBody(viewModel: viewModel) {
             ZStack {
-                switch viewModel.state {
-                case .initial, .refreshing:
-                    ProgressView()
-                case .content:
-                    if viewModel.isSearchActive, viewModel.background.is(.searching) {
+                if viewModel.automaticallyRefreshes, viewModel.hasLoadedAutomatically {
+                    loadedContent
+                } else {
+                    switch viewModel.state {
+                    case .initial, .refreshing:
                         ProgressView()
-                    } else if viewModel.displayedElements.isEmpty {
-                        ContentUnavailableView(
-                            viewModel.isSearchActive ? L10n.noResults.localizedCapitalized : L10n.noItems.localizedCapitalized,
-                            systemImage: viewModel.isSearchActive ? "magnifyingglass" : "rectangle.on.rectangle.slash"
-                        )
-                        .focusable()
-                    } else {
-                        elementsView
+                    case .content:
+                        loadedContent
+                    case .error:
+                        viewModel.error.map(ErrorView.init)
                     }
-                case .error:
-                    viewModel.error.map(ErrorView.init)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -198,6 +222,14 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         #if os(iOS)
         .toolbarTitleDisplayMode(router.isRootOfPath ? .inlineLarge : .inline)
         #endif
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.setAutomaticRefreshActive(phase == .active)
+        }
+        .onChange(of: isTabContentActive) { _, active in
+            if active {
+                viewModel.refreshAutomaticallyIfStale()
+            }
+        }
         .onChange(of: viewModel.environment) {
             viewModel.refreshForEnvironmentChange()
         }
@@ -223,6 +255,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             restoreLetterPositionIfNeeded()
         }
         .onAppear {
+            viewModel.setAutomaticRefreshActive(scenePhase == .active)
             gridLocatorID = UUID()
             isLetterRestorePending = viewModel.letterScrollTarget != nil
 
@@ -231,6 +264,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             }
         }
         .onDisappear {
+            viewModel.setAutomaticRefreshActive(false)
             isLetterRestorePending = viewModel.letterScrollTarget != nil
             focusedElementID = nil
             gridScrollCoordinator.locatorView = nil
@@ -238,13 +272,18 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         }
         #endif
         .onReceive(viewModel.events) { event in
+                guard isTabContentActive else { return }
                 switch event {
                 case let .gotRandomItem(element):
                     element.libraryDidSelectElement(router: router, in: namespace)
                 }
             }
             .onFirstAppear {
-                viewModel.refresh()
+                if viewModel.automaticallyRefreshes {
+                    viewModel.setAutomaticRefreshActive(scenePhase == .active)
+                } else {
+                    viewModel.refresh()
+                }
             }
         #if os(iOS)
             .navigationBarMenuButton(
@@ -257,7 +296,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     #if os(tvOS)
     private func restoreLetterPositionIfNeeded() {
-        guard isLetterRestorePending,
+        guard isTabContentActive, isLetterRestorePending,
               let letter = viewModel.letterScrollTarget,
               let index = viewModel.displayedElements.firstIndex(where: { $0.id == savedFocusedElementID }) ??
               indexOfFirstElement(for: letter)
@@ -266,13 +305,14 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         isLetterRestorePending = false
         let elementID = viewModel.displayedElements[index].id
         gridScrollCoordinator.scrollToItem(at: index) {
+            guard isTabContentActive else { return }
             focusedElementID = elementID
         }
     }
 
     @discardableResult
     private func scrollToLetter(_ letter: ItemLetter?) -> Bool {
-        guard let letter,
+        guard isTabContentActive, let letter,
               let index = indexOfFirstElement(for: letter)
         else { return false }
 

@@ -74,7 +74,8 @@ struct MainTabView: View {
             TabItem.library(
                 title: L10n.tvShowsCapitalized,
                 systemName: "tv",
-                filters: .init(itemTypes: [.series])
+                filters: .init(itemTypes: [.series]),
+                keepsContentAlive: true
             )
             TabItem.library(
                 title: L10n.movies,
@@ -186,29 +187,43 @@ struct MainTabView: View {
 
     @ViewBuilder
     private func selectedTabContent() -> some View {
-        if let tab = tabCoordinator.tabs.first(where: { $0.item.id == displayedTabID }) {
-            NavigationInjectionView(
-                coordinator: tab.coordinator
-            ) {
-                tab.item.content
-            }
-            .environmentObject(tabCoordinator)
-            .environment(\.tabItemSelected, tab.publisher)
-            .id(tab.item.id)
-            .environment(\.initialTabCandidateReady) {
-                requestInitialHomeContentFocus(for: tab)
-            }
-            .environment(\.initialTabCandidateFocused) {
-                initialHomeContentFocusAcquired(for: tab)
-            }
-            .environment(\.registerHomeFocus) { coordinator, navigationCoordinator in
-                guard tab.item.id == tabCoordinator.tabs.first?.item.id else { return }
-                homePlaybackCoordinator = coordinator
-                homeNavigationCoordinator = navigationCoordinator
-            }
-            .onExitCommand {
-                guard !protectsHomePlaybackReturn else { return }
-                returnToSidebar(tabID: tab.item.id)
+        ZStack {
+            ForEach(
+                tabCoordinator.tabs.filter { $0.item.keepsContentAlive || $0.item.id == displayedTabID },
+                id: \.item.id
+            ) { tab in
+                let isActive = tab.item.id == displayedTabID
+                NavigationInjectionView(
+                    coordinator: tab.coordinator
+                ) {
+                    tab.item.content
+                }
+                .environmentObject(tabCoordinator)
+                .environment(\.tabItemSelected, tab.publisher)
+                .id(tab.item.id)
+                .environment(\.isTabContentActive, tab.item.keepsContentAlive ? Binding(
+                    get: { tab.item.id == displayedTabID },
+                    set: { _ in }
+                ) : .constant(true))
+                .opacity(isActive ? 1 : 0)
+                .disabled(!isActive)
+                .allowsHitTesting(isActive)
+                .accessibilityHidden(!isActive)
+                .environment(\.initialTabCandidateReady) {
+                    requestInitialHomeContentFocus(for: tab)
+                }
+                .environment(\.initialTabCandidateFocused) {
+                    initialHomeContentFocusAcquired(for: tab)
+                }
+                .environment(\.registerHomeFocus) { coordinator, navigationCoordinator in
+                    guard tab.item.id == tabCoordinator.tabs.first?.item.id else { return }
+                    homePlaybackCoordinator = coordinator
+                    homeNavigationCoordinator = navigationCoordinator
+                }
+                .onExitCommand {
+                    guard isActive, !protectsHomePlaybackReturn else { return }
+                    returnToSidebar(tabID: tab.item.id)
+                }
             }
         }
     }
@@ -306,7 +321,7 @@ struct MainTabView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .background {
                 Rectangle()
-                    .fill(Color.black)
+                    .fill(Color.snowfinDeepNavy)
                     .overlay(alignment: .trailing) {
                         Rectangle()
                             .fill(Color.snowfinIceBlue.opacity(0.2))
@@ -419,6 +434,7 @@ private struct SnowfinSidebarButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
+
 #endif
 
 #if os(iOS)

@@ -466,6 +466,13 @@ private struct BaseItemDtoPosterLabel: View {
         @Environment(\.posterDisplayType)
         private var posterDisplayType
 
+        #if os(tvOS)
+        @Environment(\.homeTileCoordinator)
+        private var homeTileCoordinator
+        @Environment(\.isFocused)
+        private var isFocused
+        #endif
+
         private let content: [AnyView]
 
         private var details: [AnyView] {
@@ -492,6 +499,13 @@ private struct BaseItemDtoPosterLabel: View {
                         .font(.footnote)
                         .multilineTextAlignment(.leading)
                         .lineLimit(details.isEmpty ? 2 : 1, reservesSpace: true)
+                    #if os(tvOS)
+                        .if(homeTileCoordinator != nil) { title in
+                            title
+                                .opacity(isFocused ? 1 : 0.85)
+                                .animation(.easeOut(duration: 0.1), value: isFocused)
+                        }
+                    #endif
 
                     DotHStack {
                         ForEach(details.indices, id: \.self) { index in

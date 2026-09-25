@@ -14,6 +14,11 @@ struct ProgressIndicator: View {
     @Default(.accentColor)
     private var accentColor
 
+    #if os(tvOS)
+    @Environment(\.homeTileCoordinator)
+    private var homeTileCoordinator
+    #endif
+
     let title: String?
     let progress: Double
     let posterDisplayType: PosterDisplayType
@@ -25,6 +30,15 @@ struct ProgressIndicator: View {
         #else
         accentColor
         #endif
+    }
+
+    private var completedGlowColor: Color {
+        #if os(tvOS)
+        if homeTileCoordinator != nil {
+            return .clear
+        }
+        #endif
+        return isCompleted ? progressColor.opacity(0.6) : .clear
     }
 
     private var progressHeight: CGFloat {
@@ -42,7 +56,7 @@ struct ProgressIndicator: View {
             .scaleEffect(x: progress, y: 1, anchor: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: progressHeight)
-            .shadow(color: isCompleted ? progressColor.opacity(0.6) : .clear, radius: 5)
+            .shadow(color: completedGlowColor, radius: 5)
     }
 
     @ViewBuilder
@@ -59,7 +73,7 @@ struct ProgressIndicator: View {
                 .progressViewStyle(.playback)
                 .foregroundStyle(progressColor)
                 .frame(height: progressHeight)
-                .shadow(color: isCompleted ? progressColor.opacity(0.6) : .clear, radius: 5)
+                .shadow(color: completedGlowColor, radius: 5)
         }
         .padding(.bottom, 5)
         .padding(.horizontal, 5)

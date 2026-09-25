@@ -14,6 +14,8 @@ Prefer the originating tile. When it disappears, current TV behavior chooses:
 
 For an unchanged tile, retain it even if its index changes. Reveal virtualized/offscreen
 content before requesting focus, and avoid letting sidebar focus interrupt the return.
+When focus returns from the sidebar, restore the last active Home row and tile when
+available; use the nearest tile in that row, then the first available Home row.
 Initial Home entry, details-local focus, and Search entry are separate concerns.
 
 See [focus mechanics](../design-docs/focus-system.md) and the required

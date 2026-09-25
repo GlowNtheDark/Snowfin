@@ -24,6 +24,13 @@ struct PresentationControllerShouldDismissPreferenceKey: PreferenceKey {
 
 struct NavigationInjectionView: View {
 
+    @Environment(\.isTabContentActive)
+    private var tabContentActivity
+
+    private var isTabContentActive: Bool {
+        tabContentActivity.wrappedValue
+    }
+
     @StateObject
     private var coordinator: NavigationCoordinator
 
@@ -38,6 +45,19 @@ struct NavigationInjectionView: View {
     ) {
         _coordinator = StateObject(wrappedValue: coordinator())
         self.content = AnyView(content())
+    }
+
+    // Hiding a retained tab must dismiss its UI without discarding its routes.
+    private func activePresentation(
+        _ presentation: Binding<NavigationCoordinator.PresentedRoute?>
+    ) -> Binding<NavigationCoordinator.PresentedRoute?> {
+        Binding(
+            get: { isTabContentActive ? presentation.wrappedValue : nil },
+            set: { value in
+                guard isTabContentActive else { return }
+                presentation.wrappedValue = value
+            }
+        )
     }
 
     var body: some View {
@@ -57,8 +77,9 @@ struct NavigationInjectionView: View {
         .environmentObject(coordinator)
         #if os(tvOS)
             .fullScreenCover(
-                item: $coordinator.presentedSheet
+                item: activePresentation($coordinator.presentedSheet)
             ) {
+                guard isTabContentActive else { return }
                 coordinator.presentedSheet = nil
             } content: { presentedRoute in
                 NavigationInjectionView(coordinator: presentedRoute.coordinator) {
@@ -67,7 +88,7 @@ struct NavigationInjectionView: View {
                 .background(.regularMaterial)
             }
             .fullScreenCover(
-                item: $coordinator.presentedFullScreen
+                item: activePresentation($coordinator.presentedFullScreen)
             ) { presentedRoute in
                 NavigationInjectionView(coordinator: presentedRoute.coordinator) {
                     presentedRoute.route.destination
@@ -112,4 +133,10 @@ struct NavigationInjectionView: View {
             }
         #endif
     }
+}
+
+// Ordinary navigation hosts remain active unless a retained tab opts out.
+extension EnvironmentValues {
+    @Entry
+    var isTabContentActive: Binding<Bool> = .constant(true)
 }

@@ -47,14 +47,13 @@ Make the smallest coherent change that solves the task.
 - Do not rewrite working systems or add speculative abstractions.
 - Do not change unrelated product behavior.
 - Preserve existing uncommitted work; inspect the diff before and after edits.
-- Keep tvOS product changes platform-scoped and preserve iOS behavior unless asked otherwise.
+- Keep work scoped to Screen, the tvOS Jellyfin application; preserve iOS behavior unless asked otherwise.
 
 ## Investigation
 
-Trace the relevant call path and state ownership before editing.
-Identify the smallest responsible set of files; stop broad exploration once known.
-Prefer the existing mechanism over adding a parallel one.
-Use source paths in the docs as starting points, then verify the current code.
+Trace the relevant call path and state ownership before editing. Use relevant docs as
+entry points, then identify the smallest responsible set of files. Stop broad
+exploration once that set is known; prefer the existing mechanism over a parallel one.
 
 ## Two-pass rule
 
@@ -71,23 +70,21 @@ Use [QUALITY.md](docs/QUALITY.md) to select proportional verification.
 Prefer focused checks; do not repeatedly run broad suites without new changes,
 a failure, or a concrete unresolved concern. Avoid tests that duplicate implementation
 or exist solely to inflate coverage. A build does not prove tvOS focus behavior.
+For runtime work, physical Apple TV behavior is authoritative. See
+[QUALITY.md](docs/QUALITY.md) for focus, scrolling, playback, and performance validation.
 
-## Delegation
+## Model roles and delegation
 
-Default to one lead agent. Use at most one subagent unless unusually strong,
-independent work justifies more. Delegate only to materially save time or context.
-Use higher-capability reasoning for architecture, integration, cross-file root causes,
-difficult crashes, and complex state/navigation. Use lower-cost reasoning for narrow
-tracing, mechanical edits, and straightforward visual tweaks when available.
-Do not spawn agents just because delegation is available.
+Use GPT-6 Sol as the default lead and orchestrator for normal implementation, everyday
+debugging, and work that needs judgment. Use GPT-6 Luna for repo exploration, file
+tracing, triage, small localized edits, and scoped subtasks. Use GPT-6 Astra for
+difficult root causes, architecture or cross-cutting changes, and stubborn regressions.
+Use it as lead or as an independent second opinion when that can change the decision.
 
-## Token efficiency
-
-Favor targeted `rg` searches, narrow reads, small diffs, concise planning, and focused validation.
-Avoid rereading understood files, rediscovering mapped architecture, speculative edit
-loops, unrelated documentation, and oversized status summaries.
-Use a short plan only when the task benefits from one; substantial work belongs in
-[active plans](docs/exec-plans/active/), using the [workflow](docs/CODEX_WORKFLOW.md).
+Keep one lead and at most one subagent. Delegate only independent, bounded work that
+materially improves the result or saves time; the lead integrates and reviews the work.
+Do not add model or reasoning recommendations to normal task prompts; use project
+defaults and this guide unless the user explicitly asks otherwise.
 
 ## Completion
 

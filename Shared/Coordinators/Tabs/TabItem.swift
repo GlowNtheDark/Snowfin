@@ -13,6 +13,7 @@ import SwiftUI
 @MainActor
 struct TabItem: Displayable, @MainActor Identifiable, @MainActor Hashable {
 
+    let keepsContentAlive: Bool
     let content: AnyView
     let displayTitle: String
     let id: String
@@ -22,8 +23,10 @@ struct TabItem: Displayable, @MainActor Identifiable, @MainActor Hashable {
         id: String,
         title: String,
         systemImage: String,
+        keepsContentAlive: Bool = false,
         @ViewBuilder content: () -> some View
     ) {
+        self.keepsContentAlive = keepsContentAlive
         self.content = AnyView(content())
         self.id = id
         self.displayTitle = title
@@ -83,18 +86,21 @@ extension TabItem {
     static func library(
         title: String,
         systemName: String,
-        filters: ItemFilterCollection
+        filters: ItemFilterCollection,
+        keepsContentAlive: Bool = false
     ) -> TabItem {
         TabItem(
             id: "library-\(UUID().uuidString)",
             title: title,
-            systemImage: systemName
+            systemImage: systemName,
+            keepsContentAlive: keepsContentAlive
         ) {
             PagingLibraryView(
                 library: ItemLibrary(
                     parent: BaseItemDto(name: title),
                     filters: filters
-                )
+                ),
+                automaticallyRefreshes: keepsContentAlive
             )
             .if(UIDevice.isTV) { view in
                 view.toolbar(.hidden, for: .navigationBar)

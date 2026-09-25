@@ -1,0 +1,6 @@
+# Screen project defaults. Repo behavior and task routing live in AGENTS.md.
+model = "gpt-6-sol"
+
+[agents]
+max_concurrent_threads_per_session = 1
+default_subagent_model = "gpt-6-luna"
