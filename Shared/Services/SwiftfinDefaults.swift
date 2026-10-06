@@ -81,6 +81,8 @@ extension Defaults.Keys {
     static let backgroundSignOutInterval: Key<TimeInterval> = AppKey("backgroundSignOutInterval", default: 3600)
     static let backgroundTimeStamp: Key<Date> = AppKey("backgroundTimeStamp", default: Date.now)
     static let lastSignedInUserID: Key<UserSessionState> = AppKey("lastSignedInUserID", default: .signedOut)
+    static let selectUserLastUsedUserID: Key<String> = AppKey("selectUserLastUsedUserID", default: .empty)
+    static let selectUserLastUsedServerID: Key<String> = AppKey("selectUserLastUsedServerID", default: .empty)
     static let lastServerInformationRefreshDate: Key<Date> = AppKey("lastServerInformationRefreshDate", default: .distantPast)
 
     static let selectUserDisplayType: Key<LibraryDisplayType> = AppKey("selectUserDisplayType", default: .grid)

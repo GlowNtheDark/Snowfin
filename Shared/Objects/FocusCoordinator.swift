@@ -311,6 +311,12 @@ private struct CoordinatedFocusModifier: ViewModifier {
     private var isFocused: Bool
 
     let id: String
+    let consumesRequestOnAcquisition: Bool
+
+    private func consumeRequestIfNeeded() {
+        guard consumesRequestOnAcquisition, coordinator.request == id else { return }
+        coordinator.clearRequest()
+    }
 
     private func apply(_ request: String?) {
         guard let request else { return }
@@ -326,9 +332,15 @@ private struct CoordinatedFocusModifier: ViewModifier {
             .onAppear {
                 apply(coordinator.request)
                 coordinator.update(id, isFocused: isFocused)
+                if isFocused {
+                    consumeRequestIfNeeded()
+                }
             }
             .onChange(of: isFocused) {
                 coordinator.update(id, isFocused: isFocused)
+                if isFocused {
+                    consumeRequestIfNeeded()
+                }
             }
         #if os(tvOS)
             .onReceive(coordinator.$request) { request in
@@ -388,8 +400,8 @@ private struct CoordinatedFocusSelectionModifier: ViewModifier {
 
 extension View {
 
-    func coordinatedFocus(_ id: String) -> some View {
-        modifier(CoordinatedFocusModifier(id: id))
+    func coordinatedFocus(_ id: String, consumesRequestOnAcquisition: Bool = false) -> some View {
+        modifier(CoordinatedFocusModifier(id: id, consumesRequestOnAcquisition: consumesRequestOnAcquisition))
     }
 
     func coordinatedFocus(

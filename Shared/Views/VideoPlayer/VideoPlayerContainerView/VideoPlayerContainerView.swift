@@ -250,6 +250,21 @@ extension VideoPlayer {
             return controller
         }()
 
+        override var preferredFocusEnvironments: [UIFocusEnvironment] {
+            #if os(tvOS)
+            let isPlaybackControlSurfacePresented = containerState.isPresentingPlaybackDropdown ||
+                containerState.isPresentingPlaybackEpisodes ||
+                (containerState.isPresentingOverlay &&
+                    !containerState.isPresentingSupplement &&
+                    !containerState.isPresentingSegmentOverlay)
+
+            if isPlaybackControlSurfacePresented {
+                return [playbackControlsViewController]
+            }
+            #endif
+            return super.preferredFocusEnvironments
+        }
+
         private lazy var supplementContainerViewController: HostingController<AnyView> = {
             let content = SupplementContainerView()
                 .environmentObject(containerState)
@@ -372,6 +387,7 @@ extension VideoPlayer {
         #if os(tvOS)
         let onPressEvent = OnPressEvent()
         private var lastTouchPokeTime: CFTimeInterval = 0
+        private var didClosePlaybackDropdownAtMenuPressBegan = false
         #endif
 
         init(
@@ -413,6 +429,43 @@ extension VideoPlayer {
             location: CGPoint,
             state: UIGestureRecognizer.State
         ) {
+            #if os(tvOS)
+            guard !containerState.isPresentingPlaybackDropdown,
+                  !containerState.isPresentingPlaybackEpisodes
+            else { return }
+
+            if state == .began {
+                self.view.layer.removeAllAnimations()
+                didStartPanningWithSupplement = containerState.selectedSupplement != nil
+
+                if !didStartPanningWithSupplement {
+                    didStartPanningUpWithoutOverlay = !containerState.isPresentingOverlay
+                    if didStartPanningUpWithoutOverlay {
+                        containerState.isPresentingOverlay = true
+                    }
+                }
+            }
+
+            if !didStartPanningWithSupplement {
+                if state == .ended {
+                    let translationMin: CGFloat = containerState.isCompact ? compactMinimumTranslation : regularMinimumTranslation
+                    let didSwipeUpToEpisodes = !didStartPanningUpWithoutOverlay &&
+                        (translation.y < -translationMin || velocity < -1000) &&
+                        manager.queue?.episodeQueue != nil
+
+                    if didSwipeUpToEpisodes {
+                        containerState.isPresentingPlaybackEpisodes = true
+                    }
+
+                    didStartPanningUpWithoutOverlay = false
+                } else if state == .cancelled {
+                    didStartPanningUpWithoutOverlay = false
+                }
+
+                return
+            }
+            #endif
+
             guard let supplementBottomAnchor,
                   let supplementHeightAnchor,
                   let playerCompactBottomAnchor
@@ -608,14 +661,51 @@ extension VideoPlayer {
             }
 
             #if os(tvOS)
-            let gesture = UITapGestureRecognizer(target: self, action: #selector(handleMenuEnded))
-            gesture.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
-            view.addGestureRecognizer(gesture)
-
             containerState.$isPresentingOverlay
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] isPresenting in
-                    self?.supplementContainerView.isUserInteractionEnabled = isPresenting
+                    guard let self else { return }
+                    self.supplementContainerView.isUserInteractionEnabled =
+                        isPresenting &&
+                        !self.containerState.isPresentingPlaybackDropdown &&
+                        !self.containerState.isPresentingPlaybackEpisodes
+
+                    let shouldFocusPlaybackHUD = isPresenting &&
+                        !self.containerState.isPresentingSupplement &&
+                        !self.containerState.isPresentingPlaybackDropdown &&
+                        !self.containerState.isPresentingPlaybackEpisodes &&
+                        !self.containerState.isPresentingSegmentOverlay
+
+                    if shouldFocusPlaybackHUD {
+                        self.setNeedsFocusUpdate()
+                        self.updateFocusIfNeeded()
+                    }
+                }
+                .store(in: &cancellables)
+
+            containerState.$isPresentingPlaybackDropdown
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isPresenting in
+                    guard let self else { return }
+                    let isAnotherPlaybackSurfacePresented = isPresenting || self.containerState.isPresentingPlaybackEpisodes
+                    self.supplementContainerView.isHidden = isAnotherPlaybackSurfacePresented
+                    self.supplementContainerView.isUserInteractionEnabled =
+                        !isAnotherPlaybackSurfacePresented && self.containerState.isPresentingOverlay
+                    self.setNeedsFocusUpdate()
+                    self.updateFocusIfNeeded()
+                }
+                .store(in: &cancellables)
+
+            containerState.$isPresentingPlaybackEpisodes
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isPresenting in
+                    guard let self else { return }
+                    let isAnotherPlaybackSurfacePresented = isPresenting || self.containerState.isPresentingPlaybackDropdown
+                    self.supplementContainerView.isHidden = isAnotherPlaybackSurfacePresented
+                    self.supplementContainerView.isUserInteractionEnabled =
+                        !isAnotherPlaybackSurfacePresented && self.containerState.isPresentingOverlay
+                    self.setNeedsFocusUpdate()
+                    self.updateFocusIfNeeded()
                 }
                 .store(in: &cancellables)
             #endif
@@ -811,8 +901,14 @@ extension VideoPlayer {
 
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
             for press in presses {
-                switch press.type {
-                case .playPause, .select, .menu:
+                let pressType = press.type.normalizedRemoteType
+                switch pressType {
+                case .playPause, .select:
+                    continue
+                case .menu:
+                    if containerState.closePlaybackDropdownForMenuPress() {
+                        didClosePlaybackDropdownAtMenuPressBegan = true
+                    }
                     continue
                 default:
                     let defaultAction: () -> Void = { [weak self] in
@@ -822,7 +918,7 @@ extension VideoPlayer {
 
                     onPressEvent.send(
                         .init(
-                            type: press.type,
+                            type: pressType,
                             phase: press.phase,
                             defaultAction: defaultAction
                         )
@@ -833,13 +929,19 @@ extension VideoPlayer {
 
         override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
             for press in presses {
-                switch press.type {
+                let pressType = press.type.normalizedRemoteType
+                switch pressType {
                 case .playPause:
                     handlePlayPauseEnded()
                 case .select:
                     handleSelectEnded(press, event: event)
                 case .menu:
-                    handleMenuEnded()
+                    if didClosePlaybackDropdownAtMenuPressBegan {
+                        didClosePlaybackDropdownAtMenuPressBegan = false
+                        releasePlaybackOverlayMenuDismissalGuard()
+                    } else {
+                        handleMenuEnded()
+                    }
                 default:
                     let defaultAction: () -> Void = { [weak self] in
                         guard let self else { return }
@@ -848,7 +950,7 @@ extension VideoPlayer {
 
                     onPressEvent.send(
                         .init(
-                            type: press.type,
+                            type: pressType,
                             phase: press.phase,
                             defaultAction: defaultAction
                         )
@@ -863,6 +965,16 @@ extension VideoPlayer {
                    case .countdown = presentation.kind
                 {
                     manager.snowfinSegmentCoordinator.playNextEpisode()
+                }
+                return
+            }
+
+            if containerState.isPresentingPlaybackDropdown {
+                switch manager.playbackRequestStatus {
+                case .playing:
+                    manager.setPlaybackRequestStatus(status: .paused)
+                case .paused:
+                    manager.setPlaybackRequestStatus(status: .playing)
                 }
                 return
             }
@@ -896,6 +1008,11 @@ extension VideoPlayer {
                 return
             }
 
+            if containerState.isPresentingPlaybackDropdown {
+                forwardPressesEnded([press], event: event)
+                return
+            }
+
             if !containerState.isPresentingOverlay {
                 containerState.isPresentingOverlay = true
                 containerState.timer.poke()
@@ -918,9 +1035,24 @@ extension VideoPlayer {
             }
         }
 
-        @objc
-        private func handleMenuEnded() {
-            if manager.snowfinSegmentCoordinator.cancelCountdown() {
+        func handleMenuEnded() {
+            if containerState.closePlaybackDropdownForMenuPress() {
+                releasePlaybackOverlayMenuDismissalGuard()
+                return
+            } else if containerState.isPresentingPlaybackEpisodes {
+                containerState.isPlaybackOverlayMenuDismissalGuarded = true
+                containerState.isPresentingPlaybackEpisodes = false
+                containerState.isProgressBarFocused = false
+                containerState.timer.poke()
+                releasePlaybackOverlayMenuDismissalGuard()
+                return
+            } else if manager.snowfinSegmentCoordinator.presentation != nil {
+                containerState.isPlaybackOverlayMenuDismissalGuarded = true
+                let consumed = manager.snowfinSegmentCoordinator.handleMenuBack()
+                if manager.snowfinSegmentCoordinator.presentation == nil {
+                    containerState.isPresentingOverlay = true
+                }
+                releasePlaybackOverlayMenuDismissalGuard()
                 return
             } else if containerState.isScrubbing {
                 containerState.cancelScrub()
@@ -936,6 +1068,12 @@ extension VideoPlayer {
                 containerState.isPresentingCloseConfirmation = true
             } else {
                 manager.stop()
+            }
+        }
+
+        private func releasePlaybackOverlayMenuDismissalGuard() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.containerState.isPlaybackOverlayMenuDismissalGuarded = false
             }
         }
         #endif
@@ -959,6 +1097,16 @@ extension VideoPlayer.UIVideoPlayerContainerViewController {
 
         fileprivate let defaultAction: () -> Void
 
+        init(
+            type: UIPress.PressType,
+            phase: UIPress.Phase,
+            defaultAction: @escaping () -> Void
+        ) {
+            self.type = type.normalizedRemoteType
+            self.phase = phase
+            self.defaultAction = defaultAction
+        }
+
         func resolve(_ resolution: Resolution) {
             if resolution == .fallback {
                 defaultAction()
@@ -967,5 +1115,20 @@ extension VideoPlayer.UIVideoPlayerContainerViewController {
     }
 
     typealias OnPressEvent = EventPublisher<PressEvent>
+}
+
+private extension UIPress.PressType {
+
+    var normalizedRemoteType: Self {
+        // tvOS 27's simulator remote reports these standard remote actions using HID-style raw values.
+        switch rawValue {
+        case 2079: .rightArrow
+        case 2080: .leftArrow
+        case 2081: .downArrow
+        case 2082: .upArrow
+        case 2041: .menu
+        default: self
+        }
+    }
 }
 #endif

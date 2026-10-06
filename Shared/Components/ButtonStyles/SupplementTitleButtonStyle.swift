@@ -6,12 +6,16 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerView {
 
     #if os(tvOS)
     struct SupplementTitleButtonStyle: ButtonStyle {
+
+        @Default(.accentColor)
+        private var accentColor
 
         @Environment(\.isFocused)
         private var isFocused
@@ -31,20 +35,22 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
             configuration.label
                 .font(.body)
                 .fontWeight(.semibold)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
                 .frame(minHeight: 56)
         }
 
         private func glassBody(_ configuration: Configuration) -> some View {
             baseLabel(configuration)
-                .foregroundStyle(isSelected ? .black : .white)
+                .foregroundStyle(isFocused || isSelected ? accentColor.overlayColor : .white)
                 .glassEffect(
                     .regular
-                        .tint(isSelected ? .white : nil)
+                        .tint(isFocused || isSelected ? accentColor : nil)
                         .interactive(isFocused),
-                    in: Rectangle()
+                    in: Capsule()
                 )
+                .scaleEffect(isFocused ? 1.06 : 1)
+                .shadow(color: isFocused ? accentColor.opacity(0.3) : .clear, radius: isFocused ? 14 : 0)
                 .opacity(inactiveSelectedOpacity)
                 .animation(.easeInOut(duration: 0.1), value: isFocused)
                 .animation(.easeInOut(duration: 0.1), value: isSelected)
@@ -52,29 +58,32 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
 
         private func legacyBody(_ configuration: Configuration) -> some View {
             baseLabel(configuration)
-                .foregroundStyle(isSelected ? .black : .white)
+                .foregroundStyle(isFocused || isSelected ? accentColor.overlayColor : .white)
                 .background {
-                    if isSelected {
-                        Rectangle()
-                            .fill(Color.white)
+                    if isFocused {
+                        Capsule()
+                            .fill(accentColor)
+                    } else if isSelected {
+                        Capsule()
+                            .fill(accentColor.opacity(0.34))
                     } else {
-                        Rectangle()
+                        Capsule()
                             .fill(Material.ultraThinMaterial)
                             .background {
-                                Rectangle()
+                                Capsule()
                                     .fill(.white.opacity(0.2))
                             }
                     }
                 }
                 .overlay {
-                    Rectangle()
-                        .stroke(.white.opacity(0.1), lineWidth: 1)
+                    Capsule()
+                        .stroke(isFocused ? accentColor.opacity(0.72) : .white.opacity(0.16), lineWidth: 1)
                 }
-                .clipShape(Rectangle())
+                .clipShape(Capsule())
                 .subtleShadow()
                 .opacity(inactiveSelectedOpacity)
                 .scaleEffect(isFocused ? 1.06 : 1)
-                .shadow(color: isFocused ? .black.opacity(0.5) : .clear, radius: isFocused ? 10 : 0)
+                .shadow(color: isFocused ? accentColor.opacity(0.3) : .clear, radius: isFocused ? 14 : 0)
                 .animation(.easeInOut(duration: 0.1), value: isFocused)
                 .animation(.easeInOut(duration: 0.1), value: isSelected)
         }

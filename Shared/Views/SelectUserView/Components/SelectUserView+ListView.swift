@@ -19,12 +19,14 @@ extension SelectUserView {
         private var selectedUsers: Set<UserState>
 
         private let users: [UserItem]
+        private let focusTarget: FocusState<SelectUserFocusTarget?>.Binding
         private let serverSelection: SelectUserServerSelection
         private let action: (UserState) -> Void
         private let onDelete: (UserState) -> Void
 
         init(
             userItems: [UserItem],
+            focusTarget: FocusState<SelectUserFocusTarget?>.Binding,
             isEditing: Binding<Bool>,
             selectedUsers: Binding<Set<UserState>>,
             serverSelection: SelectUserServerSelection,
@@ -32,6 +34,7 @@ extension SelectUserView {
             onDelete: @escaping (UserState) -> Void
         ) {
             self.users = userItems
+            self.focusTarget = focusTarget
             self._isEditing = isEditing
             self._selectedUsers = selectedUsers
             self.serverSelection = serverSelection
@@ -83,18 +86,21 @@ extension SelectUserView {
                         }
                     }
                     .isSelected(selectedUsers.contains(item.user))
+                    #if os(tvOS)
+                        .focused(focusTarget, equals: .user(id: item.user.id))
+                    #endif
                     #if os(iOS)
-                        .swipeActions {
-                            if !isEditing {
-                                Button(
-                                    L10n.delete,
-                                    systemImage: "trash"
-                                ) {
-                                    onDelete(item.user)
-                                }
-                                .tint(.red)
+                    .swipeActions {
+                        if !isEditing {
+                            Button(
+                                L10n.delete,
+                                systemImage: "trash"
+                            ) {
+                                onDelete(item.user)
                             }
+                            .tint(.red)
                         }
+                    }
                     #endif
                 }
                 .listRowBackground(Color.clear)

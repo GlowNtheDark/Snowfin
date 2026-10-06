@@ -89,11 +89,13 @@ extension SelectUserView {
             .frame(maxWidth: .infinity)
             .focusSection()
             .edgePadding([.bottom, .horizontal])
-            .defaultFocus(
-                $isCenterButtonFocused,
-                true,
-                priority: .userInitiated
-            )
+            #if os(iOS)
+                .defaultFocus(
+                    $isCenterButtonFocused,
+                    true,
+                    priority: .userInitiated
+                )
+            #endif
         }
 
         @ViewBuilder

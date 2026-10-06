@@ -24,6 +24,19 @@ struct MediaInfoSupplement: MediaPlayerSupplement {
     var videoPlayerBody: some PlatformView {
         InfoOverlay(item: item)
     }
+
+    #if os(tvOS)
+    func videoPlayerBody(
+        focusedRestartAction: FocusState<Bool>.Binding,
+        onRestart: @escaping () -> Void
+    ) -> some PlatformView {
+        InfoOverlay(
+            item: item,
+            focusedRestartAction: focusedRestartAction,
+            onRestart: onRestart
+        )
+    }
+    #endif
 }
 
 extension MediaInfoSupplement {
@@ -41,8 +54,28 @@ extension MediaInfoSupplement {
         @State
         private var item: BaseItemDto
 
-        init(item: BaseItemDto) {
+        private let focusedRestartAction: FocusState<Bool>.Binding?
+        private let onRestart: (() -> Void)?
+
+        private var restartActionTitle: String {
+            #if os(tvOS)
+            if item.type == .episode {
+                // swiftlint:disable:next hard_coded_display_string
+                return "Restart Episode"
+            }
+            #endif
+
+            return L10n.fromBeginning
+        }
+
+        init(
+            item: BaseItemDto,
+            focusedRestartAction: FocusState<Bool>.Binding? = nil,
+            onRestart: (() -> Void)? = nil
+        ) {
             self._item = State(initialValue: item)
+            self.focusedRestartAction = focusedRestartAction
+            self.onRestart = onRestart
         }
 
         @ViewBuilder
@@ -72,18 +105,34 @@ extension MediaInfoSupplement {
         }
 
         @ViewBuilder
-        private var fromBeginningButton: some View {
+        private var restartButton: some View {
             Button {
                 manager.proxy?.setSeconds(.zero)
                 manager.setPlaybackRequestStatus(status: .playing)
-                containerState.select(supplement: nil)
+                if let onRestart {
+                    onRestart()
+                } else {
+                    containerState.select(supplement: nil)
+                }
             } label: {
-                Label(L10n.fromBeginning, systemImage: "play.fill")
+                Label(restartActionTitle, systemImage: "play.fill")
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
             .buttonStyle(.supplementAction)
-            .frame(height: UIDevice.isTV ? 80 : 40)
+        }
+
+        @ViewBuilder
+        private var fromBeginningButton: some View {
+            if let focusedRestartAction {
+                restartButton
+                    .focused(focusedRestartAction)
+                    .frame(height: UIDevice.isTV ? 80 : 40)
+            } else {
+                restartButton
+                    .focusable(true)
+                    .frame(height: UIDevice.isTV ? 80 : 40)
+            }
         }
 
         // TODO: may need to be a layout for correct overview frame
@@ -185,7 +234,7 @@ extension MediaInfoSupplement {
 
                 if !item.isLiveStream {
                     AlternateLayoutView {
-                        Label(L10n.fromBeginning, systemImage: "play.fill")
+                        Label(restartActionTitle, systemImage: "play.fill")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .padding()

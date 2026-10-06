@@ -38,6 +38,30 @@ presentation/disappearance stop handling in [`NativeVideoPlayer`](../../Shared/C
 Do not equate disappearance with Home visibility; [navigation](navigation-stack.md)
 and [focus](focus-system.md) own the return path.
 
+On tvOS, the custom player's dropdown is composed in
+[`PlaybackControls+Dropdown`](<../../Swiftfin tvOS/Views/VideoPlayer/PlaybackControls/PlaybackControls+Dropdown.swift>)
+over the existing player layer. Its settings reuse the existing quality, audio, and
+subtitle action views; Info and Technical Details reuse the manager's media and
+playback-information supplements. `VideoPlayerContainerState` owns dropdown visibility
+and focus requests, while the UIKit container routes remote presses and guards the
+full-screen presentation from dismissing on the same Menu press that closes either
+custom surface. This surface does not own playback, session, progress, segment, or
+queue state.
+
+The UIKit container's tvOS upward-pan handling reveals a hidden HUD on the first swipe
+and opens Episodes only when the HUD was already visible. It does not select the first
+legacy supplement (Info). Menu dismissal closes dropdown, Episodes, then the normal
+HUD before reaching the existing player-exit path.
+
+The tvOS-only Episodes shelf is presented independently by the custom playback
+controls from `VideoPlayerContainerState`; it is not a `selectedSupplement` and does
+not share the dropdown's visibility/focus state. `EpisodeMediaPlayerQueue` supplies
+the existing series/season paging model and selection provider. The shelf selects via
+`MediaPlayerManager.playNewItem`, preserving the ordinary replacement and resume
+behavior rather than the completion-marking Play Next path. Back closes the shelf
+before the existing player dismissal handler can stop playback. The shelf neither
+pauses playback nor reports progress itself.
+
 ## Segments and Play Next
 
 [`SnowfinPlaybackSegmentCoordinator`](../../Shared/Snowfin/PlaybackSegments/SnowfinPlaybackSegmentCoordinator.swift)
@@ -52,6 +76,14 @@ Play Next calls `playNewItemCompletingCurrent`; selecting another Continue Watch
 item calls `playNewItem`. Natural-end handling separately checks near-runtime completion
 and the user's next-episode autoplay setting. Trace the relevant path rather than
 assuming all transitions share one completion policy.
+
+The segment overlay gives Skip Intro, Play Next, and Keep Watching their own focused
+actions. Keep Watching closes the segment UI and leaves the current item playing;
+Play Next retains the completion-marking replacement path above. Menu is handled by
+the segment coordinator before the HUD/player stack: Back on intro dismisses only its
+prompt, Back during countdown cancels the countdown and retains the choice, and a later
+Back dismisses the remaining Play Next presentation. These dismissals restore HUD
+Play/Pause focus. Continue Watching selection continues to use ordinary `playNewItem`.
 
 The current candidate UI is implemented inside the custom player overlay today;
 that implementation does not establish the final intended design.

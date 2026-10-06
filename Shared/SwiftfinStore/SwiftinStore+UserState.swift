@@ -27,17 +27,35 @@ extension UserState {
 
     typealias Key = StoredValues.Key
 
-    var accessToken: String {
+    var accessToken: String? {
         get {
-            guard let accessToken = Container.shared.keychainService().get("\(id)-accessToken") else {
-                assertionFailure("access token missing in keychain")
-                return ""
-            }
-
+            let accessToken = Container.shared.keychainService().get("\(id)-accessToken")
+            guard let accessToken, !accessToken.isEmpty else { return nil }
             return accessToken
         }
         nonmutating set {
-            Container.shared.keychainService().set(newValue, forKey: "\(id)-accessToken")
+            let key = "\(id)-accessToken"
+            guard let newValue, !newValue.isEmpty else {
+                Container.shared.keychainService().delete(key)
+                return
+            }
+
+            Container.shared.keychainService().set(newValue, forKey: key)
+        }
+    }
+
+    func storeAccessToken(_ accessToken: String) throws {
+        let keychain = Container.shared.keychainService()
+        let key = "\(id)-accessToken"
+
+        guard keychain.set(accessToken, forKey: key) else {
+            let status = keychain.lastResultCode
+            throw ErrorMessage("Unable to securely store the access token in Keychain (status \(status)).")
+        }
+
+        guard keychain.get(key) == accessToken else {
+            let status = keychain.lastResultCode
+            throw ErrorMessage("Unable to verify the access token in Keychain (status \(status)).")
         }
     }
 
@@ -122,6 +140,10 @@ extension UserState {
     /// Must pass the server to create a JellyfinClient
     /// with an access token
     func getUserData(server: ServerState) async throws -> UserDto {
+        guard let accessToken else {
+            throw UserSessionError.missingAccessToken(userID: id)
+        }
+
         let client = JellyfinClient(
             configuration: .swiftfinConfiguration(url: server.effectiveServerURL, accessToken: accessToken),
             sessionConfiguration: .swiftfin,

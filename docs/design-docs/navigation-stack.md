@@ -1,5 +1,9 @@
 # Navigation implementation
 
+For app-wide tvOS directional behavior, focus ownership, dismissal ordering, and
+restoration requirements, see the [authoritative focus/navigation contract](focus-navigation-contract.md).
+This document remains the source map for route and presentation ownership.
+
 Contract: [navigation](../product-specs/navigation.md).
 
 [`TabCoordinator`](../../Shared/Coordinators/Tabs/TabCoordinator.swift) keeps selection

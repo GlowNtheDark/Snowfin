@@ -214,7 +214,9 @@ extension VideoPlayer.UIVideoPlayerContainerViewController {
                         .focusable(containerState.isPresentingSupplement)
                         .focused($focusedElement, equals: .focusBoundary)
 
+                    #if os(iOS)
                     tabButtons
+                    #endif
 
                     supplementContent
                         .isVisible(containerState.isPresentingSupplement)
@@ -255,6 +257,22 @@ extension VideoPlayer.UIVideoPlayerContainerViewController {
                     containerState.select(supplement: nil)
                 }
             }
+            #if os(tvOS)
+            .onMoveCommand { direction in
+                guard direction == .down,
+                      !containerState.isPresentingPlaybackDropdown,
+                      !containerState.isPresentingPlaybackEpisodes
+                else { return }
+
+                if containerState.isScrubbing {
+                    containerState.cancelScrub()
+                }
+                if containerState.isPresentingSupplement {
+                    containerState.select(supplement: nil)
+                }
+                containerState.isPresentingPlaybackDropdown = true
+            }
+            #endif
             #if os(iOS)
             .onChange(of: containerState.selectedSupplement?.id) { _, id in
                 containerState.containerView?.presentSupplementContainer(id != nil)

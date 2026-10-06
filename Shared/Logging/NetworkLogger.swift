@@ -16,6 +16,9 @@ extension NetworkLogger {
 
     static func swiftfin() -> NetworkLogger {
         var configuration = NetworkLogger.Configuration()
+        configuration.sensitiveHeaders = ["Authorization", "X-Emby-Token"]
+        configuration.sensitiveQueryItems = ["api_key"]
+        configuration.sensitiveDataFields = ["AccessToken"]
 
         configuration.willHandleEvent = { event -> LoggerStore.Event? in
             if case var LoggerStore.Event.networkTaskCompleted(task) = event {

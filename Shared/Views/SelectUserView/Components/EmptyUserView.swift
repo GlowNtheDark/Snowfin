@@ -12,6 +12,7 @@ extension SelectUserView {
 
     struct EmptyUserView: View {
 
+        let focusTarget: FocusState<SelectUserFocusTarget?>.Binding
         let action: () -> Void
 
         private let columns: CGFloat = UIDevice.isPhone ? 2 : 5
@@ -51,6 +52,7 @@ extension SelectUserView {
             .buttonBorderShape(.circle)
             #if os(tvOS)
                 .buttonStyle(.borderless)
+                .focused(focusTarget, equals: .addUser)
             #endif
         }
 
@@ -61,6 +63,14 @@ extension SelectUserView {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .focusSection()
             }
+        }
+
+        init(
+            focusTarget: FocusState<SelectUserFocusTarget?>.Binding,
+            action: @escaping () -> Void
+        ) {
+            self.focusTarget = focusTarget
+            self.action = action
         }
     }
 }

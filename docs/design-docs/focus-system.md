@@ -1,5 +1,9 @@
 # Focus system
 
+The authoritative app-wide directional, Back-stack, entry-focus, and restoration
+contract is [tvOS focus and navigation](focus-navigation-contract.md). This document
+describes current focus ownership and mechanisms; it does not override that contract.
+
 Contract: [focus restoration](../product-specs/focus-restoration.md).
 
 [`FocusCoordinator`](../../Shared/Objects/FocusCoordinator.swift) publishes focused IDs

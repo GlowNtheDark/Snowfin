@@ -10,6 +10,15 @@ import Combine
 import Foundation
 import SwiftUI
 
+#if os(tvOS)
+enum PlaybackDropdownFocusRequest: Equatable {
+    case section(Int)
+    case setting(Int)
+    case restartEpisode
+    case technicalDetailsFirstRow
+}
+#endif
+
 // TODO: turned into spaghetti to get out, clean up with a better state system
 // TODO: verify timer states
 // TODO: for tvOS, some kind of focus token system
@@ -35,9 +44,17 @@ class VideoPlayerContainerState: ObservableObject {
     @Published
     var isPresentingPlaybackControls: Bool = false
 
-    /// A native focus overlay is currently handling tvOS remote input.
+    /// An intro/credits segment overlay currently owns tvOS remote input.
     @Published
-    var isPresentingSegmentOverlay: Bool = false
+    var isPresentingSegmentOverlay: Bool = false {
+        didSet {
+            if isPresentingSegmentOverlay {
+                timer.stop()
+            } else if !isPlaybackOverlaySurfacePresented {
+                timer.poke()
+            }
+        }
+    }
 
     // TODO: replace with graph dependency package
     func setPlaybackControlsVisibility() {
@@ -82,7 +99,7 @@ class VideoPlayerContainerState: ObservableObject {
             setPlaybackControlsVisibility()
             presentationControllerShouldDismiss = isPresentingOverlay && !isPresentingSupplement
 
-            if isPresentingOverlay, !isPresentingSupplement {
+            if isPresentingOverlay, !isPresentingSupplement, !isPlaybackOverlaySurfacePresented {
                 timer.poke()
             }
         }
@@ -96,7 +113,7 @@ class VideoPlayerContainerState: ObservableObject {
 
             if isPresentingSupplement {
                 timer.stop()
-            } else {
+            } else if !isPlaybackOverlaySurfacePresented {
                 isGuestSupplement = false
                 timer.poke()
             }
@@ -108,7 +125,7 @@ class VideoPlayerContainerState: ObservableObject {
         didSet {
             if isScrubbing {
                 timer.stop()
-            } else {
+            } else if !isPlaybackOverlaySurfacePresented {
                 timer.poke()
             }
         }
@@ -151,7 +168,74 @@ class VideoPlayerContainerState: ObservableObject {
     @Published
     var isPresentingCloseConfirmation: Bool = false
 
-    var scrubOriginSeconds: Duration?
+    #if os(tvOS)
+    /// The custom tvOS player dropdown is open above the video.
+    @Published
+    var isPresentingPlaybackDropdown: Bool = false {
+        didSet {
+            isPlaybackDropdownTopNavigationFocused = isPresentingPlaybackDropdown
+
+            if isPresentingPlaybackDropdown {
+                playbackDropdownSectionIndex = 0
+                playbackDropdownSettingIndex = 0
+                playbackDropdownFocusRequest = .section(0)
+                isTechnicalDetailsContentFocused = false
+                timer.stop()
+            } else {
+                isTechnicalDetailsContentFocused = false
+                timer.poke()
+            }
+        }
+    }
+
+    /// The custom tvOS player Episodes shelf is open above the video.
+    @Published
+    var isPresentingPlaybackEpisodes: Bool = false {
+        didSet {
+            if isPresentingPlaybackEpisodes {
+                timer.stop()
+            } else if !isPresentingPlaybackDropdown {
+                timer.poke()
+            }
+        }
+    }
+
+    /// True while focus is on the dropdown's top-level section navigation.
+    @Published
+    var isPlaybackDropdownTopNavigationFocused: Bool = false
+
+    /// True while focus is inside the dropdown's Technical Details rows.
+    @Published
+    var isTechnicalDetailsContentFocused = false
+
+    @Published
+    var playbackDropdownSectionIndex: Int = 0
+
+    @Published
+    var playbackDropdownSettingIndex: Int = 0
+
+    @Published
+    var playbackDropdownFocusRequest: PlaybackDropdownFocusRequest?
+
+    @Published
+    var isPlaybackOverlayMenuDismissalGuarded = false
+
+    func closePlaybackDropdownForMenuPress() -> Bool {
+        guard isPresentingPlaybackDropdown else { return false }
+
+        isPlaybackOverlayMenuDismissalGuarded = true
+
+        if isTechnicalDetailsContentFocused {
+            isTechnicalDetailsContentFocused = false
+            isPlaybackDropdownTopNavigationFocused = true
+            playbackDropdownFocusRequest = .section(playbackDropdownSectionIndex)
+            return true
+        }
+
+        isPresentingPlaybackDropdown = false
+        return true
+    }
+    #endif
 
     func commitScrub() {
         guard isScrubbing else { return }
@@ -159,7 +243,6 @@ class VideoPlayerContainerState: ObservableObject {
         manager?.proxy?.setSeconds(scrubbedSeconds.value)
         manager?.setPlaybackRequestStatus(status: .playing)
         isScrubbing = false
-        scrubOriginSeconds = nil
     }
 
     func cancelScrub() {
@@ -170,7 +253,6 @@ class VideoPlayerContainerState: ObservableObject {
         }
 
         isScrubbing = false
-        scrubOriginSeconds = nil
     }
 
     func setPresentedSupplementStyle(_ style: MediaPlayerSupplementPresentationStyle?) {
@@ -181,10 +263,23 @@ class VideoPlayerContainerState: ObservableObject {
     private var jumpProgressCancellable: AnyCancellable?
     private var timerCancellable: AnyCancellable?
 
+    private var isPlaybackOverlaySurfacePresented: Bool {
+        #if os(tvOS)
+        isPresentingPlaybackDropdown || isPresentingPlaybackEpisodes || isPresentingSegmentOverlay
+        #else
+        false
+        #endif
+    }
+
     init() {
         timerCancellable = timer.sink { [weak self] in
             guard let self else { return }
-            guard !isScrubbing, !isPresentingSupplement, manager?.playbackRequestStatus != .paused else { return }
+            guard !isScrubbing,
+                  !isPresentingSupplement,
+                  !isPresentingSegmentOverlay,
+                  !isPlaybackOverlaySurfacePresented,
+                  manager?.playbackRequestStatus != .paused
+            else { return }
 
             withAnimation(.linear(duration: 0.25)) {
                 self.isPresentingOverlay = false

@@ -17,6 +17,12 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
 
     struct PlaybackSettings: View {
 
+        let showsCurrentSelection: Bool
+
+        init(showsCurrentSelection: Bool = false) {
+            self.showsCurrentSelection = showsCurrentSelection
+        }
+
         @EnvironmentObject
         private var manager: MediaPlayerManager
 
@@ -32,6 +38,29 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
                     requestedBitrate: requestedBitrate,
                     modifyItem: modifyItem
                 )
+            }
+        }
+
+        private func qualitySelectionTitle(playbackItem: MediaPlayerItem) -> String {
+            playbackItem.requestedBitrate.displayTitle
+        }
+
+        @ViewBuilder
+        private func menuLabel(title: String, playbackItem: MediaPlayerItem) -> some View {
+            if showsCurrentSelection {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(qualitySelectionTitle(playbackItem: playbackItem))
+                        .font(.headline)
+                        .lineLimit(2)
+
+                    Text(L10n.quality)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                .contentShape(Rectangle())
+            } else {
+                Label(title, systemImage: VideoPlayerActionButton.playbackSettings.systemImage)
             }
         }
 
@@ -103,10 +132,7 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
                         }
                     }
                 } label: {
-                    Label(
-                        menuTitle,
-                        systemImage: VideoPlayerActionButton.playbackSettings.systemImage
-                    )
+                    menuLabel(title: menuTitle, playbackItem: playbackItem)
                 }
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.primary, .secondary)

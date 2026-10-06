@@ -23,6 +23,8 @@ extension VideoPlayer.PlaybackControls {
 
         @Default(.VideoPlayer.Overlay.chapterSlider)
         private var chapterSlider
+        @Default(.accentColor)
+        private var accentColor
 
         @EnvironmentObject
         private var containerState: VideoPlayerContainerState
@@ -31,7 +33,7 @@ extension VideoPlayer.PlaybackControls {
         @EnvironmentObject
         private var scrubbedSecondsBox: PublishedBox<Duration>
 
-        @FocusState
+        @FocusState.Binding
         private var isFocused: Bool
 
         @State
@@ -42,8 +44,12 @@ extension VideoPlayer.PlaybackControls {
 
         private let previewImageHeight: CGFloat = 200
 
+        init(focused: FocusState<Bool>.Binding) {
+            self._isFocused = focused
+        }
+
         private var sliderHeight: CGFloat {
-            isScrubbing ? 20 : 14
+            isScrubbing ? 24 : 20
         }
 
         private var isScrubbing: Bool {
@@ -62,21 +68,6 @@ extension VideoPlayer.PlaybackControls {
             guard progress.isFinite else { return 0 }
 
             return clamp(progress, min: 0, max: 1)
-        }
-
-        private var currentProgress: Double? {
-            guard isScrubbing,
-                  let runtime = manager.item.runtime,
-                  runtime > .zero
-            else {
-                return nil
-            }
-
-            let currentSeconds = containerState.scrubOriginSeconds ?? manager.seconds
-            let progress = (currentSeconds / runtime) * 100
-            guard progress.isFinite else { return nil }
-
-            return clamp(progress, min: 0, max: 100)
         }
 
         private var videoSizeAspectRatio: CGFloat {
@@ -112,12 +103,12 @@ extension VideoPlayer.PlaybackControls {
             Text(L10n.live)
                 .font(UIDevice.isTV ? .caption : .subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(accentColor.overlayColor)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
                 .background {
                     Rectangle()
-                        .fill(Color.gray)
+                        .fill(accentColor)
                 }
         }
 
@@ -139,18 +130,15 @@ extension VideoPlayer.PlaybackControls {
                         return (manager.item.runtime ?? .zero) * (clamp($0, min: 0, max: 100) / 100)
                     }
                 ),
-                currentProgress: currentProgress,
                 total: 100,
                 isScrollingEnabled: manager.playbackRequestStatus == .paused && manager.state != .loadingItem
             )
             .onEditingChanged { isEditing in
-                if isEditing {
-                    if containerState.scrubOriginSeconds == nil {
-                        containerState.scrubOriginSeconds = manager.seconds
-                    }
-                    isScrubbing = true
-                }
+                guard isEditing else { return } // Release ends the gesture; Select commits the pending seek.
+                isScrubbing = true
             }
+            .focusable()
+            .focused($isFocused)
             .if(chapterSlider) { view in
                 if let chapters = manager.item.fullChapterInfo, chapters.isNotEmpty {
                     view.inverseMask { ChapterTrackMask(chapters: chapters, runtime: manager.item.runtime ?? .zero) }
@@ -188,10 +176,12 @@ extension VideoPlayer.PlaybackControls {
                         .foregroundStyle(.white, Color.lightGray)
                 }
             }
-            .focused($isFocused)
             .foregroundStyle(Color.white.opacity(0.75))
             .overlay(alignment: .topLeading) {
                 previewImage
+            }
+            .onAppear {
+                isFocused = true
             }
             .onChange(of: isFocused) {
                 containerState.isProgressBarFocused = isFocused

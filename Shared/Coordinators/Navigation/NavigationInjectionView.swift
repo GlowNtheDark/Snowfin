@@ -49,12 +49,14 @@ struct NavigationInjectionView: View {
 
     // Hiding a retained tab must dismiss its UI without discarding its routes.
     private func activePresentation(
-        _ presentation: Binding<NavigationCoordinator.PresentedRoute?>
+        _ presentation: Binding<NavigationCoordinator.PresentedRoute?>,
+        canDismiss: Bool = true
     ) -> Binding<NavigationCoordinator.PresentedRoute?> {
         Binding(
             get: { isTabContentActive ? presentation.wrappedValue : nil },
             set: { value in
                 guard isTabContentActive else { return }
+                guard value != nil || canDismiss else { return }
                 presentation.wrappedValue = value
             }
         )
@@ -88,12 +90,17 @@ struct NavigationInjectionView: View {
                 .background(.regularMaterial)
             }
             .fullScreenCover(
-                item: activePresentation($coordinator.presentedFullScreen)
+                item: activePresentation(
+                    $coordinator.presentedFullScreen,
+                    canDismiss: isPresentationInteractive
+                )
             ) { presentedRoute in
                 NavigationInjectionView(coordinator: presentedRoute.coordinator) {
                     presentedRoute.route.destination
+                        .environment(\.isCurrentPresentationDismissible, $isPresentationInteractive)
                 }
             }
+            .interactiveDismissDisabled(!isPresentationInteractive)
         #else
             .sheet(
                 item: $coordinator.presentedSheet
@@ -139,4 +146,7 @@ struct NavigationInjectionView: View {
 extension EnvironmentValues {
     @Entry
     var isTabContentActive: Binding<Bool> = .constant(true)
+
+    @Entry
+    var isCurrentPresentationDismissible: Binding<Bool> = .constant(true)
 }

@@ -53,6 +53,10 @@ class AnyMediaPlayerQueue: MediaPlayerQueue {
 
     private var wrapped: any MediaPlayerQueue
 
+    var episodeQueue: EpisodeMediaPlayerQueue? {
+        wrapped as? EpisodeMediaPlayerQueue
+    }
+
     var displayTitle: String {
         wrapped.displayTitle
     }

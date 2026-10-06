@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 // TODO: refine segment animations when swiping fast
@@ -15,19 +16,16 @@ struct VideoPlayerSlider<Value: BinaryFloatingPoint>: View {
     @Binding
     private var value: Value
 
-    private let currentProgress: Value?
     private let total: Value
     private let isScrollingEnabled: Bool
     private var onEditingChanged: (Bool) -> Void
 
     init(
         value: Binding<Value>,
-        currentProgress: Value?,
         total: Value,
         isScrollingEnabled: Bool = true
     ) {
         self._value = value
-        self.currentProgress = currentProgress
         self.total = total
         self.isScrollingEnabled = isScrollingEnabled
         self.onEditingChanged = { _ in }
@@ -38,7 +36,6 @@ struct VideoPlayerSlider<Value: BinaryFloatingPoint>: View {
             value: $value,
             total: total,
             isScrollingEnabled: isScrollingEnabled,
-            originProgress: currentProgress,
             onEditingChanged: onEditingChanged
         ) {
             VideoPlayerSliderContent()
@@ -55,6 +52,9 @@ extension VideoPlayerSlider {
 
 private struct VideoPlayerSliderContent: SliderContentView {
 
+    @Default(.accentColor)
+    private var accentColor
+
     @Environment(\.isEnabled)
     private var isEnabled
 
@@ -63,54 +63,18 @@ private struct VideoPlayerSliderContent: SliderContentView {
     @EnvironmentObject
     var sliderState: SliderContainerState<Double>
 
-    private let tickWidth: CGFloat = 3
+    private let tickWidth: CGFloat = 8
 
     private var activeColor: Color {
-        isEnabled ? Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255) : .lightGray
+        isEnabled ? accentColor : .lightGray
     }
 
     private var scrubbedProgress: Double {
         progress(for: sliderState.value)
     }
 
-    private var currentProgress: Double? {
-        sliderState.originValue.map(progress(for:))
-    }
-
-    private var committedProgress: Double {
-        guard let currentProgress else {
-            return scrubbedProgress
-        }
-
-        return min(scrubbedProgress, currentProgress)
-    }
-
-    private var pendingProgress: Double? {
-        guard let currentProgress else {
-            return nil
-        }
-
-        return max(scrubbedProgress, currentProgress)
-    }
-
-    private var shouldShowCurrentTick: Bool {
-        guard let currentProgress else {
-            return false
-        }
-
-        return abs(currentProgress - scrubbedProgress) > 0.001
-    }
-
-    private var visibleTickProgress: Double? {
-        if shouldShowCurrentTick {
-            return currentProgress
-        }
-
-        if !sliderState.isFocused {
-            return scrubbedProgress
-        }
-
-        return nil
+    private var visibleTickProgress: Double {
+        scrubbedProgress
     }
 
     private func progress(for value: Double) -> Double {
@@ -137,31 +101,34 @@ private struct VideoPlayerSliderContent: SliderContentView {
 
     private func tickOffset(for progress: Double, in width: CGFloat) -> CGFloat {
         guard progress.isFinite, width.isFinite, width > 0 else { return 0 }
-        return clamp(width * progress - tickWidth / 2, min: 0, max: max(0, width - tickWidth))
+        // The leading-aligned stack places this tick's center at the normalized track position.
+        return width * progress - tickWidth / 2
     }
 
     var body: some View {
         GeometryReader { proxy in
+            let trackHeight: CGFloat = sliderState.isFocused ? 10 : 8
+            let trackSize = CGSize(width: proxy.size.width, height: trackHeight)
+
             ZStack(alignment: .leading) {
-                Rectangle()
-                    .fill(Color.white.opacity(0.22))
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.22))
 
-                if sliderState.isFocused, let pendingProgress {
-                    progressSegment(progress: pendingProgress, in: proxy.size)
-                        .foregroundStyle(Color.white.opacity(0.45))
-                }
-
-                if sliderState.isFocused {
-                    progressSegment(progress: committedProgress, in: proxy.size)
+                    progressSegment(progress: scrubbedProgress, in: trackSize)
                         .foregroundStyle(activeColor)
                 }
+                .frame(height: trackHeight)
+                .clipShape(Rectangle())
 
-                if let visibleTickProgress {
-                    Rectangle()
-                        .fill(Color.white)
-                        .frame(width: tickWidth)
-                        .offset(x: tickOffset(for: visibleTickProgress, in: proxy.size.width))
-                }
+                Rectangle()
+                    .fill(activeColor)
+                    .frame(width: tickWidth, height: max(trackHeight, proxy.size.height - 2))
+                    .overlay {
+                        Rectangle()
+                            .stroke(Color.white.opacity(0.94), lineWidth: 1)
+                    }
+                    .offset(x: tickOffset(for: visibleTickProgress, in: proxy.size.width))
             }
             .clipShape(Rectangle())
         }
@@ -170,9 +137,8 @@ private struct VideoPlayerSliderContent: SliderContentView {
                 containerState.cancelScrub()
             }
         }
-        .opacity(sliderState.isFocused ? 1 : 0.7)
+        .opacity(sliderState.isFocused ? 1 : 0.94)
         .animation(.linear(duration: 0.1), value: sliderState.value)
         .animation(.easeInOut(duration: 0.2), value: sliderState.isFocused)
-        .animation(.easeInOut(duration: 0.2), value: sliderState.originValue != nil)
     }
 }

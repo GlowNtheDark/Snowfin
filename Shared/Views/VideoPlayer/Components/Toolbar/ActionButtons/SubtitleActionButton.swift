@@ -12,6 +12,12 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
 
     struct Subtitles: View {
 
+        let showsCurrentSelection: Bool
+
+        init(showsCurrentSelection: Bool = false) {
+            self.showsCurrentSelection = showsCurrentSelection
+        }
+
         @ViewContextContains(.isInMenu)
         private var isInMenu
 
@@ -39,6 +45,38 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
             }
         }
 
+        private func selectionTitle(playbackItem: MediaPlayerItem) -> String {
+            guard let selectedSubtitleStreamIndex,
+                  selectedSubtitleStreamIndex != -1,
+                  let selectedSubtitleStream = playbackItem.subtitleStreams.first(where: { $0.index == selectedSubtitleStreamIndex })
+            else { return L10n.none }
+
+            if let displayTitle = selectedSubtitleStream.displayTitle, !displayTitle.isEmpty {
+                return displayTitle
+            }
+
+            return selectedSubtitleStream.language ?? L10n.unknown
+        }
+
+        @ViewBuilder
+        private func menuLabel(playbackItem: MediaPlayerItem) -> some View {
+            if showsCurrentSelection {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(selectionTitle(playbackItem: playbackItem))
+                        .font(.headline)
+                        .lineLimit(2)
+
+                    Text(L10n.subtitles)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                .contentShape(Rectangle())
+            } else {
+                Label(L10n.subtitles, systemImage: systemImage)
+            }
+        }
+
         var body: some View {
             if let playbackItem = manager.playbackItem {
                 Menu {
@@ -50,7 +88,7 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
                         }
                     }
                 } label: {
-                    Label(L10n.subtitles, systemImage: systemImage)
+                    menuLabel(playbackItem: playbackItem)
                 }
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.primary, .secondary)

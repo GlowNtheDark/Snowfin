@@ -26,6 +26,11 @@ struct VideoPlayer: View {
     @Router
     private var router
 
+    #if os(tvOS)
+    @Environment(\.isCurrentPresentationDismissible)
+    private var isCurrentPresentationDismissible
+    #endif
+
     // TODO: move audio/subtitle offset to container state?
     @State
     private var audioOffset: Duration = .zero
@@ -82,7 +87,17 @@ struct VideoPlayer: View {
             manager.start()
         }
         #if os(tvOS)
+        .onChange(of: containerState.isPresentingPlaybackDropdown) { _, _ in
+            updateCurrentPresentationDismissibility()
+        }
+        .onChange(of: containerState.isPresentingPlaybackEpisodes) { _, _ in
+            updateCurrentPresentationDismissibility()
+        }
+        .onChange(of: containerState.isPlaybackOverlayMenuDismissalGuarded) { _, _ in
+            updateCurrentPresentationDismissibility()
+        }
         .onReceive(manager.snowfinSegmentCoordinator.$presentation) { _ in
+            updateCurrentPresentationDismissibility()
             isNextEpisodeTransitionPresented = manager.snowfinSegmentCoordinator.isNextEpisodeTransitionPresented
         }
         #endif
@@ -153,4 +168,14 @@ struct VideoPlayer: View {
                     Text(L10n.unableToLoadThisItem)
                 }
     }
+
+    #if os(tvOS)
+    private func updateCurrentPresentationDismissibility() {
+        isCurrentPresentationDismissible.wrappedValue =
+            !containerState.isPresentingPlaybackDropdown &&
+            !containerState.isPresentingPlaybackEpisodes &&
+            manager.snowfinSegmentCoordinator.presentation == nil &&
+            !containerState.isPlaybackOverlayMenuDismissalGuarded
+    }
+    #endif
 }

@@ -9,8 +9,6 @@
 import Defaults
 import SwiftUI
 
-// TODO: remember last focused user for tvOS focus
-
 extension SelectUserView {
 
     struct GridView: PlatformView {
@@ -22,11 +20,13 @@ extension SelectUserView {
 
         private let onDelete: (UserState) -> Void
         private let action: (UserState) -> Void
+        private let focusTarget: FocusState<SelectUserFocusTarget?>.Binding
         private let serverSelection: SelectUserServerSelection
         private let userItems: [UserItem]
 
         init(
             userItems: [UserItem],
+            focusTarget: FocusState<SelectUserFocusTarget?>.Binding,
             isEditing: Binding<Bool>,
             selectedUsers: Binding<Set<UserState>>,
             serverSelection: SelectUserServerSelection,
@@ -34,6 +34,7 @@ extension SelectUserView {
             onDelete: @escaping (UserState) -> Void
         ) {
             self.userItems = userItems
+            self.focusTarget = focusTarget
             self._isEditing = isEditing
             self._selectedUsers = selectedUsers
             self.serverSelection = serverSelection
@@ -57,6 +58,9 @@ extension SelectUserView {
                 onDelete(item.user)
             }
             .isSelected(selectedUsers.contains(item.user))
+            #if os(tvOS)
+                .focused(focusTarget, equals: .user(id: item.user.id))
+            #endif
         }
 
         var iOSView: some View {

@@ -10,6 +10,7 @@ import Combine
 import Defaults
 import FactoryKit
 import Foundation
+import Get
 import JellyfinAPI
 import KeychainSwift
 import Logging
@@ -83,7 +84,8 @@ final class UserSessionManager: ObservableObject {
                 Defaults[.lastSignedInUserID] = .signedOut
             }
 
-            try await updateCurrentSession(with: resolveStoredSession())
+            let restoredSession = try await resolveStoredSession()
+            await updateCurrentSession(with: restoredSession)
         } catch {
             logger.error(
                 "Unable to restore launch session",
@@ -97,20 +99,35 @@ final class UserSessionManager: ObservableObject {
     @MainActor
     private func refreshCurrentSession() async {
         do {
-            try await updateCurrentSession(with: resolveStoredSession())
+            let restoredSession = try await resolveStoredSession()
+            await updateCurrentSession(with: restoredSession)
         } catch {
             logger.error(
                 "Unable to refresh current user session",
                 metadata: ["error": .string(error.localizedDescription)]
             )
-            await updateCurrentSession(with: nil)
+
+            if shouldInvalidateCurrentSession(for: error) {
+                await updateCurrentSession(with: nil)
+            }
         }
     }
 
     @MainActor
-    func signIn(userID: String) async throws {
+    func signIn(userID: String, serverID: String? = nil) async throws {
         Defaults[.lastSignedInUserID] = .signedIn(userID: userID)
-        try await updateCurrentSession(with: resolveStoredSession())
+        let signedInSession: UserSession?
+        do {
+            signedInSession = try await resolveStoredSession(userID: userID, serverID: serverID)
+        } catch {
+            if shouldInvalidateCurrentSession(for: error) {
+                await updateCurrentSession(with: nil)
+            }
+
+            throw error
+        }
+
+        await updateCurrentSession(with: signedInSession)
 
         Task {
             await refreshServerInformationIfNeeded(reason: .explicitSignIn)
@@ -309,6 +326,11 @@ final class UserSessionManager: ObservableObject {
         currentSession = newSession
         Container.shared.currentUserSession.reset()
 
+        if let newSession {
+            Defaults[.selectUserLastUsedUserID] = newSession.user.id
+            Defaults[.selectUserLastUsedServerID] = newSession.server.id
+        }
+
         if previousSession?.server.id != newSession?.server.id || previousSession?.user.id != newSession?.user.id {
             Container.shared.mediaPlayerManager.reset()
         }
@@ -325,22 +347,103 @@ final class UserSessionManager: ObservableObject {
         newSession?.didStart()
     }
 
-    private func resolveStoredSession() throws -> UserSession? {
-        guard case let .signedIn(userId) = Defaults[.lastSignedInUserID] else { return nil }
+    private func resolveStoredSession(
+        userID requestedUserID: String? = nil,
+        serverID requestedServerID: String? = nil
+    ) async throws -> UserSession? {
+        let userID: String
+        if let requestedUserID {
+            userID = requestedUserID
+        } else {
+            guard case let .signedIn(storedUserID) = Defaults[.lastSignedInUserID] else { return nil }
+            userID = storedUserID
+        }
 
-        guard let user = StoredValues[.User.users].first(where: { $0.id == userId }) else {
+        guard let user = StoredValues[.User.users].first(where: {
+            $0.id == userID && (requestedServerID == nil || $0.serverID == requestedServerID)
+        }) else {
             Defaults[.lastSignedInUserID] = .signedOut
-            throw UserSessionError.invalidStoredSession(userID: userId)
+            throw UserSessionError.invalidStoredSession(userID: userID)
         }
 
         guard let server = StoredValues[.Server.servers].first(where: { $0.id == user.serverID }) else {
             Defaults[.lastSignedInUserID] = .signedOut
-            throw UserSessionError.invalidStoredSession(userID: userId)
+            throw UserSessionError.invalidStoredSession(userID: userID)
         }
 
-        return .init(
+        guard let accessToken = user.accessToken else {
+            Defaults[.lastSignedInUserID] = .signedOut
+            logger.warning("Stored session is missing its access token; returning to the signed-out state")
+            throw UserSessionError.missingAccessToken(userID: userID)
+        }
+
+        let session = UserSession(
             server: server,
-            user: user
+            user: user,
+            accessToken: accessToken
         )
+
+        do {
+            let response = try await session.client.send(Paths.getCurrentUser)
+            guard response.value.id == userID else {
+                user.accessToken = nil
+                Defaults[.lastSignedInUserID] = .signedOut
+                logger.warning(
+                    "Stored access token resolved to a different user; cleared the credential",
+                    metadata: [
+                        "userID": .string(userID),
+                        "serverID": .string(server.id),
+                        "endpoint": .string("/Users/Me"),
+                        "status": .string("200"),
+                    ]
+                )
+                throw UserSessionError.rejectedAccessToken(userID: userID)
+            }
+        } catch {
+            guard isUnauthorizedResponse(error) else { throw error }
+
+            user.accessToken = nil
+            Defaults[.lastSignedInUserID] = .signedOut
+            logger.warning(
+                "Server rejected the stored access token; cleared the credential and returned to sign-in",
+                metadata: [
+                    "userID": .string(userID),
+                    "serverID": .string(server.id),
+                    "endpoint": .string("/Users/Me"),
+                    "status": .string("401"),
+                ]
+            )
+            throw UserSessionError.rejectedAccessToken(userID: userID)
+        }
+
+        logger.debug(
+            "Validated stored session credentials",
+            metadata: [
+                "userID": .string(userID),
+                "serverID": .string(server.id),
+                "endpoint": .string("/Users/Me"),
+            ]
+        )
+
+        return session
+    }
+
+    private func isUnauthorizedResponse(_ error: Error) -> Bool {
+        guard let error = error as? APIError else { return false }
+        if case .unacceptableStatusCode(401) = error {
+            return true
+        }
+        return false
+    }
+
+    private func shouldInvalidateCurrentSession(for error: Error) -> Bool {
+        guard let sessionError = error as? UserSessionError else { return false }
+
+        switch sessionError {
+        case .invalidStoredSession, .missingAccessToken, .rejectedAccessToken:
+            return true
+        case .missingCurrentSession:
+            return false
+        }
     }
 }

@@ -28,6 +28,7 @@ Select only the documents needed for the task:
 | Validation or build failure | [Quality and build commands](docs/QUALITY.md) |
 | Workflow or substantial planning | [Codex workflow](docs/CODEX_WORKFLOW.md) |
 | Navigation or dismissal | [Navigation contract](docs/product-specs/navigation.md), [implementation](docs/design-docs/navigation-stack.md) |
+| Focus, remote input, screen transitions, or dismissal | [Authoritative tvOS focus/navigation contract](docs/design-docs/focus-navigation-contract.md), plus the owning product spec and implementation map |
 | Home content | [Home](docs/product-specs/home.md), [Continue Watching](docs/product-specs/continue-watching.md) |
 | Episode details | [Episode Details](docs/product-specs/episode-details.md) |
 | Playback | [Playback contract](docs/product-specs/playback.md), [lifecycle](docs/design-docs/playback-lifecycle.md) |
@@ -38,6 +39,13 @@ Select only the documents needed for the task:
 
 Do not load this entire table's destinations for every task.
 Follow further links only when needed to answer the task; links are not a reading checklist.
+
+For any tvOS task involving focus, remote input, screen transitions, menus, or
+dismissal, consult [the focus/navigation contract](docs/design-docs/focus-navigation-contract.md)
+as the authoritative app-wide directional and restoration reference. It separates
+intended behavior from observed implementation and unresolved runtime evidence; use
+the linked product spec for product intent and implementation docs/source for current
+ownership.
 
 ## Scope discipline
 
@@ -75,11 +83,12 @@ For runtime work, physical Apple TV behavior is authoritative. See
 
 ## Model roles and delegation
 
-Use GPT-6 Sol as the default lead and orchestrator for normal implementation, everyday
-debugging, and work that needs judgment. Use GPT-6 Luna for repo exploration, file
-tracing, triage, small localized edits, and scoped subtasks. Use GPT-6 Astra for
-difficult root causes, architecture or cross-cutting changes, and stubborn regressions.
-Use it as lead or as an independent second opinion when that can change the decision.
+Use GPT-6 Luna as the default lead and orchestrator for normal implementation,
+everyday debugging, repo exploration, file tracing, triage, small localized edits,
+and scoped subtasks. Escalate to GPT-6 Sol for work needing more judgment or
+complexity. Use GPT-6 Astra for the hardest root causes, architecture or
+cross-cutting changes, and stubborn regressions. Use it as lead or as an
+independent second opinion when that can change the decision.
 
 Keep one lead and at most one subagent. Delegate only independent, bounded work that
 materially improves the result or saves time; the lead integrates and reviews the work.

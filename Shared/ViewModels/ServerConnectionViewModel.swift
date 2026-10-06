@@ -130,7 +130,7 @@ final class ServerConnectionViewModel: ViewModel {
         do {
             _ = try await ServerConnectionManager.test(
                 connection: connection,
-                accessToken: userSession?.user.accessToken,
+                accessToken: userSession?.accessToken,
                 matchingServerID: server.id
             )
             let state = ServerConnection.TestState.success
@@ -158,7 +158,7 @@ final class ServerConnectionViewModel: ViewModel {
         } else {
             _ = await ServerConnectionManager.evaluate(
                 server: server,
-                accessToken: userSession?.user.accessToken,
+                accessToken: userSession?.accessToken,
                 context: NetworkConnectionContext.current()
             )
         }

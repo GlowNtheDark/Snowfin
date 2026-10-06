@@ -49,7 +49,7 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
     lazy var previousItemPublisher: Published<MediaPlayerItemProvider?>.Publisher = $previousItem
 
     private var currentAdjacentEpisodesTask: AnyCancellable?
-    private let seasonsViewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
+    let seasonsViewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
 
     init(episode: BaseItemDto) {
         self.seasonsViewModel = PagingLibraryViewModel(
@@ -65,6 +65,18 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
 
     var videoPlayerBody: some PlatformView {
         EpisodeOverlay(viewModel: seasonsViewModel)
+    }
+
+    static func select(episode: BaseItemDto, using manager: MediaPlayerManager) {
+        let provider = MediaPlayerItemProvider(item: episode) { [manager] item, modifyItem in
+            try await MediaPlayerItem.build(
+                for: item,
+                requestedBitrate: manager.playbackBitrate,
+                modifyItem: modifyItem
+            )
+        }
+
+        manager.playNewItem(provider: provider)
     }
 
     private func didReceive(newItem: MediaPlayerItem?) {
@@ -206,15 +218,7 @@ extension EpisodeMediaPlayerQueue {
         }
 
         private func select(episode: BaseItemDto) {
-            let provider = MediaPlayerItemProvider(item: episode) { [manager] item, modifyItem in
-                try await MediaPlayerItem.build(
-                    for: item,
-                    requestedBitrate: manager.playbackBitrate,
-                    modifyItem: modifyItem
-                )
-            }
-
-            manager.playNewItem(provider: provider)
+            EpisodeMediaPlayerQueue.select(episode: episode, using: manager)
         }
 
         private func selectInitialSeason() {

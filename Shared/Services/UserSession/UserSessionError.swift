@@ -9,5 +9,7 @@
 enum UserSessionError: Error {
 
     case invalidStoredSession(userID: String)
+    case missingAccessToken(userID: String)
     case missingCurrentSession
+    case rejectedAccessToken(userID: String)
 }

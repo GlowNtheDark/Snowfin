@@ -42,6 +42,24 @@ At bootstrap, CI specifies Xcode 26.6 and the `Snowfin tvOS` scheme. Verify loca
 Xcode selection, available destinations, and existing Carthage/package artifacts
 before treating an environment failure as a source defect.
 
+For Codex interaction on the Apple TV 4K (3rd generation, 1080p) simulator, use
+[`Scripts/build-install-tvos-simulator.sh`](../Scripts/build-install-tvos-simulator.sh).
+It pins the `Snowfin tvOS` Debug product, Team ID, bundle ID, app-group entitlement,
+and a dedicated DerivedData directory; it verifies Xcode's Simulator entitlement
+manifests and existing app-group registration before installing the built product
+in place. The simulator executable
+uses an ad hoc code signature, while Xcode's `Screen.app-Simulated.xcent` carries
+`application-identifier` (`36VR7266B9.com.snowfin.tvos`) and
+`com.apple.security.application-groups` (`group.com.snowfin.tvos`). The application
+identifier is also the default Keychain access group for this target. Keep the app
+installed and use the script for updates; do not uninstall it or use
+`xcodebuild install`, which can replace the app with a different launcher product
+and create a new data container.
+
+The generic simulator command below is compile-only. `CODE_SIGNING_ALLOWED=NO`
+does not produce the Simulator entitlement manifests and its product must not be
+installed or launched for Keychain validation.
+
 ```sh
 xcode-select -p
 xcodebuild -project Swiftfin.xcodeproj -scheme 'Snowfin tvOS' -showdestinations

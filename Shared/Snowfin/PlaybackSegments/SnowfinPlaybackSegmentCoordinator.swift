@@ -16,7 +16,7 @@ import JellyfinAPI
 final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
 
     struct Presentation {
-        enum Kind {
+        enum Kind: Equatable {
             case intro
             case nextEpisode
             case countdown
@@ -52,6 +52,7 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     private var segments: [SnowfinPlaybackSegment] = []
     private var handledSegmentIDs: Set<String> = []
     private var previousSeconds: Duration = .zero
+    private var playbackTimeUpdateGeneration = 0
     private var itemStartSeconds: Duration = .zero
     private var currentItemID: String?
     private var activeSegment: SnowfinPlaybackSegment?
@@ -102,7 +103,6 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
 
             do {
                 guard let userSession = Container.shared.currentUserSession() else {
-                    self.log("Segment retrieval skipped: missing user session", itemID: itemID)
                     return
                 }
 
@@ -123,8 +123,11 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
                 )
 
                 if let current = self.manager?.seconds {
+                    let updateGeneration = self.playbackTimeUpdateGeneration
                     self.evaluateCrossings(from: self.itemStartSeconds, to: current)
-                    self.previousSeconds = current
+                    if self.playbackTimeUpdateGeneration == updateGeneration {
+                        self.previousSeconds = current
+                    }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -157,9 +160,43 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         log("Intro skipped", segment: segment)
     }
 
+    /// Consumes Back for the currently visible intro or credits/Play Next state.
+    /// A running countdown is cancelled first; a later Back dismisses the resulting
+    /// Play Next choice before the player HUD or route can receive it.
+    func handleMenuBack() -> Bool {
+        guard let presentation else { return false }
+
+        switch presentation.kind {
+        case .intro:
+            let segment = activeSegment
+            activeSegment = nil
+            dismissOverlay()
+            if let segment {
+                log("Intro prompt dismissed with Back", segment: segment)
+            }
+
+        case .countdown:
+            if cancelCountdown() {
+                return true
+            }
+            dismissCreditsPresentation()
+
+        case .nextEpisode:
+            dismissCreditsPresentation()
+        }
+
+        return true
+    }
+
     func playNextEpisode() {
-        guard let manager, let provider = nextItemProvider else { return }
+        guard let manager,
+              let provider = nextItemProvider,
+              let segment = activeSegment ?? pendingCreditsSegment
+        else { return }
+
         countdownTask?.cancel()
+        countdownTask = nil
+        handledSegmentIDs.insert(segment.id)
         dismissOverlay()
         activeSegment = nil
         pendingCreditsSegment = nil
@@ -194,23 +231,27 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
 
     @discardableResult
     func cancelCountdown() -> Bool {
-        guard let countdownTask,
-              let segment = activeSegment ?? pendingCreditsSegment
+        guard let segment = activeSegment ?? pendingCreditsSegment,
+              let presentation,
+              case .countdown = presentation.kind
         else { return false }
 
-        countdownTask.cancel()
+        countdownTask?.cancel()
         self.countdownTask = nil
         cancelledCountdownSegmentIDs.insert(segment.id)
 
-        if let presentation, case .countdown = presentation.kind {
-            self.presentation = .init(kind: .nextEpisode, item: presentation.item, remainingSeconds: nil)
-        }
+        self.presentation = .init(kind: .nextEpisode, item: presentation.item, remainingSeconds: nil)
+        isOverlayPresented = true
 
         log("Credits countdown cancelled", segment: segment)
         return true
     }
 
     private func playbackTimeDidChange(to current: Duration) {
+        playbackTimeUpdateGeneration &+= 1
+        let updateGeneration = playbackTimeUpdateGeneration
+        let previous = previousSeconds
+
         guard currentItemID != nil else {
             previousSeconds = current
             return
@@ -223,10 +264,10 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
             }
         }
 
-        evaluateCrossings(from: previousSeconds, to: current)
+        evaluateCrossings(from: previous, to: current)
         // A segment action can synchronously update manager.seconds (for example,
         // an intro seek). Do not overwrite that nested update with the old time.
-        if manager?.seconds == current {
+        if playbackTimeUpdateGeneration == updateGeneration {
             previousSeconds = current
         }
     }
@@ -235,7 +276,12 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         guard current >= previous else { return }
 
         for segment in segments where !handledSegmentIDs.contains(segment.id) {
-            guard segment.startWasCrossed(from: previous, to: current) else { continue }
+            // A seek can cross an entire segment in one update. Only react when
+            // playback actually lands inside the segment, rather than showing a
+            // stale prompt or seeking backwards after the segment has passed.
+            guard segment.contains(current) else { continue }
+            guard segment.startWasCrossed(from: previous, to: current) || segment.contains(previous) else { continue }
+
             handledSegmentIDs.insert(segment.id)
             log("Entered \(segment.type.rawValue) segment", segment: segment)
 
@@ -368,6 +414,19 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
     private func dismissOverlay() {
         isOverlayPresented = false
         presentation = nil
+    }
+
+    private func dismissCreditsPresentation() {
+        let segment = activeSegment ?? pendingCreditsSegment
+        countdownTask?.cancel()
+        countdownTask = nil
+        activeSegment = nil
+        pendingCreditsSegment = nil
+        dismissOverlay()
+        if let segment {
+            handledSegmentIDs.insert(segment.id)
+            log("Credits / Play Next presentation dismissed with Back", segment: segment)
+        }
     }
 
     private func log(_ message: String, itemID: String? = nil) {

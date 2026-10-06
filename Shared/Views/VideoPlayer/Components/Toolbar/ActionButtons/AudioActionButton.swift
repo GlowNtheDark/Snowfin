@@ -12,6 +12,12 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
 
     struct Audio: View {
 
+        let showsCurrentSelection: Bool
+
+        init(showsCurrentSelection: Bool = false) {
+            self.showsCurrentSelection = showsCurrentSelection
+        }
+
         @ViewContextContains(.isInMenu)
         private var isInMenu
 
@@ -45,6 +51,45 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
             }
         }
 
+        private func selectionTitle(playbackItem: MediaPlayerItem) -> String {
+            guard let selectedAudioStream = playbackItem.audioStreams.first(where: { $0.index == selectedAudioStreamIndex }) else {
+                return L10n.none
+            }
+
+            if let displayTitle = selectedAudioStream.displayTitle, !displayTitle.isEmpty {
+                return displayTitle
+            }
+
+            let details = [
+                selectedAudioStream.language,
+                selectedAudioStream.codec?.uppercased(),
+                selectedAudioStream.channelLayout ?? selectedAudioStream.channels?.description,
+            ]
+                .compactMap(\.self)
+                .filter { !$0.isEmpty }
+
+            return details.isEmpty ? L10n.unknown : details.joined(separator: " • ")
+        }
+
+        @ViewBuilder
+        private func menuLabel(playbackItem: MediaPlayerItem) -> some View {
+            if showsCurrentSelection {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(selectionTitle(playbackItem: playbackItem))
+                        .font(.headline)
+                        .lineLimit(2)
+
+                    Text(L10n.audio)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                .contentShape(Rectangle())
+            } else {
+                Label(L10n.audio, systemImage: systemImage)
+            }
+        }
+
         var body: some View {
             if let playbackItem = manager.playbackItem {
                 Menu {
@@ -56,7 +101,7 @@ extension VideoPlayer.PlaybackControls.Toolbar.ActionButtons {
                         }
                     }
                 } label: {
-                    Label(L10n.audio, systemImage: systemImage)
+                    menuLabel(playbackItem: playbackItem)
                 }
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.primary, .secondary)

@@ -17,6 +17,19 @@ extension VideoPlayer.PlaybackControls {
         case backward
     }
 
+    func adjustProgressSeek(forward: Bool) {
+        guard let runtime = manager.item.runtime, runtime > .zero else { return }
+
+        let currentPosition = containerState.isScrubbing
+            ? containerState.scrubbedSeconds.value
+            : manager.seconds
+        let interval = forward ? jumpForwardInterval.rawValue : jumpBackwardInterval.rawValue
+        let requestedPosition = currentPosition + (interval * (forward ? 1 : -1))
+
+        containerState.scrubbedSeconds.value = min(max(requestedPosition, .zero), runtime)
+        containerState.isScrubbing = true
+    }
+
     func startSpeedBoost() {
         guard !isSpeedBoosting else { return }
 

@@ -33,6 +33,9 @@ struct SearchView: View {
     @EnvironmentObject
     private var searchFocus: TVSearchFocusCoordinator
 
+    @Router
+    private var router
+
     @Default(.accentColor)
     private var accentColor
 
@@ -76,14 +79,44 @@ struct SearchView: View {
         focusedSearchTarget = .field
     }
 
-    private func focusSearchContent() {
+    private var firstSearchResultGroupID: String? {
+        guard viewModel.canSearch, viewModel.isNotEmpty else { return nil }
+
+        switch viewModel.state {
+        case .error:
+            return nil
+        case .initial, .searching:
+            break
+        }
+
+        return viewModel.itemContentGroupViewModel.groups.first?.id
+    }
+
+    private func focusSearchContent(from inputTarget: SearchFocusTarget) {
+        guard let firstSearchResultGroupID else {
+            switch inputTarget {
+            case .field:
+                focusedSearchTarget = .key(characterStripKeys[0])
+            case .key:
+                focusedSearchTarget = .field
+            }
+            return
+        }
+
         searchFocus.cancelEntry()
         focusedSearchTarget = nil
+        focusCoordinator.focus(firstSearchResultGroupID)
+    }
 
-        if viewModel.canSearch,
-           let firstGroup = viewModel.itemContentGroupViewModel.groups.first
-        {
-            focusCoordinator.focus(firstGroup.id)
+    private func restoreSearchFocus() {
+        let groups = viewModel.itemContentGroupViewModel.groups
+
+        if let lastFocusedGroup = groups.first(where: { focusCoordinator.lastFocusedIDs.contains($0.id) }) {
+            searchFocus.cancelEntry()
+            focusedSearchTarget = nil
+            focusCoordinator.focus(lastFocusedGroup.id)
+        } else {
+            focusedSearchTarget = .field
         }
     }
 
@@ -130,7 +163,7 @@ struct SearchView: View {
         .onTapGesture(perform: beginEditing)
         .onMoveCommand { direction in
             if direction == .down {
-                focusSearchContent()
+                focusSearchContent(from: .field)
             }
         }
     }
@@ -192,7 +225,7 @@ struct SearchView: View {
         }
         .onMoveCommand { direction in
             if direction == .down {
-                focusSearchContent()
+                focusSearchContent(from: .key(key))
             }
         }
     }
@@ -259,13 +292,21 @@ struct SearchView: View {
             .toolbarTitleDisplayMode(.inline)
         #if os(tvOS)
             .onAppear {
-                fulfillSearchEntry()
+                if searchFocus.hasPendingEntry {
+                    fulfillSearchEntry()
+                } else {
+                    restoreSearchFocus()
+                }
             }
             .onDisappear {
                 searchFocus.cancelEntry()
             }
             .onReceive(searchFocus.$entryRequest) { _ in
                 fulfillSearchEntry()
+            }
+            .onChange(of: router.isRootOfPath) { _, isRoot in
+                guard isRoot else { return }
+                restoreSearchFocus()
             }
             .onChange(of: focusedSearchTarget) {
                 if focusedSearchTarget != nil {

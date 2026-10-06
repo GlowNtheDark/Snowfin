@@ -212,7 +212,7 @@ final class ServerConnectionManager: ObservableObject {
         let currentConnection = userSession.server.activeServerConnection
         let resolution = await Self.evaluate(
             server: userSession.server,
-            accessToken: userSession.user.accessToken,
+            accessToken: userSession.accessToken,
             context: context
         )
         guard !Task.isCancelled else { return }

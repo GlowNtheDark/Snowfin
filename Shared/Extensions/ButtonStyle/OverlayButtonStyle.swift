@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 extension VideoPlayer.PlaybackControls {
@@ -16,18 +17,19 @@ extension VideoPlayer.PlaybackControls {
 
         @ViewBuilder
         func body(content: Content) -> some View {
+            #if os(tvOS)
+            content
+                .buttonStyle(OverlayButtonStyle(onPressed: onPressed))
+            #else
             if #available(iOS 26.0, *), UIDevice.supportsLiquidGlass {
                 content
                     .buttonStyle(OverlayGlassButtonStyle(onPressed: onPressed))
-                #if os(tvOS)
-                    .buttonBorderShape(.roundedRectangle(radius: 0))
-                #else
                     .buttonBorderShape(.circle)
-                #endif
             } else {
                 content
                     .buttonStyle(OverlayButtonStyle(onPressed: onPressed))
             }
+            #endif
         }
     }
 
@@ -50,6 +52,9 @@ extension VideoPlayer.PlaybackControls {
     }
 
     struct OverlayButtonStyle: ButtonStyle {
+
+        @Default(.accentColor)
+        private var accentColor
 
         @Environment(\.isEnabled)
         private var isEnabled
@@ -96,27 +101,23 @@ extension VideoPlayer.PlaybackControls {
 
         #if os(tvOS)
         private func tvOSBody(_ configuration: Configuration) -> some View {
-            let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255)
-            let snowfinDeepNavy = Color(red: 4 / 255, green: 20 / 255, blue: 38 / 255)
+            let glass = isFocused ? BackportGlass.regular.selection(
+                tint: accentColor,
+                foregroundColor: accentColor.overlayColor
+            ) : .regular
 
             return configuration.label
                 .labelStyle(.iconOnly)
                 .font(.body)
                 .fontWeight(.semibold)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .frame(minHeight: 56)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minWidth: 56, minHeight: 56)
                 .backport
-                .glassEffect(
-                    .regular.selection(
-                        tint: snowfinIceBlue,
-                        foregroundColor: snowfinDeepNavy
-                    ),
-                    in: .rect
-                )
+                .glassEffect(glass.interactive(isFocused), in: .capsule)
                 .isSelected(isFocused)
-                .scaleEffect(configuration.isPressed ? 0.90 : isFocused ? 1.1 : 1)
-                .shadow(color: isFocused ? snowfinIceBlue.opacity(0.38) : .clear, radius: isFocused ? 18 : 0)
+                .scaleEffect(configuration.isPressed ? 0.94 : isFocused ? 1.08 : 1)
+                .shadow(color: isFocused ? accentColor.opacity(0.34) : .clear, radius: isFocused ? 16 : 0)
                 .animation(.linear(duration: 0.1), value: isFocused)
                 .animation(.bouncy(duration: 0.25, extraBounce: 0.25), value: configuration.isPressed)
                 .onChange(of: configuration.isPressed) {

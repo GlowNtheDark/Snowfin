@@ -16,6 +16,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
     private enum FocusedAction: Hashable {
         case intro
         case playNext
+        case keepWatching
     }
 
     @ObservedObject
@@ -45,6 +46,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                 case .intro:
                     Button("Skip Intro") {
                         coordinator.skipIntro()
+                        containerState.isPresentingOverlay = true
                     }
                     .focused($focusedAction, equals: .intro)
                     .buttonStyle(.borderedProminent)
@@ -79,6 +81,10 @@ struct SnowfinPlaybackSegmentOverlay: View {
 
         Task { @MainActor in
             await Task.yield()
+            guard coordinator.isOverlayPresented,
+                  coordinator.presentation?.kind == presentation.kind
+            else { return }
+
             switch presentation.kind {
             case .intro:
                 focusedAction = .intro
@@ -307,6 +313,27 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         countdownIndicator(remaining: remaining)
 
                         Button {
+                            coordinator.keepWatching()
+                            containerState.isPresentingOverlay = true
+                        } label: {
+                            Text("Keep Watching")
+                                .font(.system(size: 20, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .frame(width: 216, height: 46)
+                        }
+                        .focused($focusedAction, equals: .keepWatching)
+                        .onMoveCommand { direction in
+                            switch direction {
+                            case .up, .down, .left, .right:
+                                focusedAction = .playNext
+                            default:
+                                break
+                            }
+                        }
+                        .buttonStyle(ScreenPlayNextButtonStyle())
+
+                        Button {
                             coordinator.playNextEpisode()
                         } label: {
                             Text("Play Next")
@@ -318,8 +345,21 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         .focused($focusedAction, equals: .playNext)
                         .prefersDefaultFocus(true, in: nextEpisodeFocusScope)
                         .onMoveCommand { direction in
-                            if direction == .down {
-                                allowsContinueWatchingFocus = true
+                            switch direction {
+                            case .down:
+                                if continueWatchingViewModel.hasResumeItems {
+                                    allowsContinueWatchingFocus = true
+                                } else {
+                                    focusedAction = .playNext
+                                }
+                            case .up:
+                                allowsContinueWatchingFocus = false
+                                focusedAction = .playNext
+                            case .left, .right:
+                                allowsContinueWatchingFocus = false
+                                focusedAction = .keepWatching
+                            default:
+                                break
                             }
                         }
                         .buttonStyle(ScreenPlayNextButtonStyle())
