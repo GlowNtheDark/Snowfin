@@ -47,6 +47,45 @@ intended behavior from observed implementation and unresolved runtime evidence; 
 the linked product spec for product intent and implementation docs/source for current
 ownership.
 
+## Focus and navigation contract discipline
+
+`docs/design-docs/focus-navigation-contract.md` is the source of truth for expected
+tvOS focus, navigation, Back behavior, restoration, and layered-surface behavior.
+
+By default, treat this contract as read-only. Do not edit it merely because the
+implementation differs from it; an implementation/contract mismatch is a regression
+unless Jamie explicitly requested that behavior change. Update the contract only when
+Jamie explicitly requests a behavior change and explicitly authorizes updating the
+contract for that change.
+
+Before editing any task that changes UI structure, focusable controls, navigation,
+shelf/card geometry, route hierarchy, overlays, Details screens, Settings, Home,
+Search, libraries, or playback surfaces:
+
+1. Read the relevant contract section.
+2. Identify the documented behaviors that could be affected.
+3. Preserve those behaviors unless the task explicitly changes them.
+
+After implementation:
+
+1. Runtime-test the affected contract paths on the Apple TV simulator where practical.
+2. Report each relevant behavior as `PASS`, `FAIL`, or `UNVERIFIED`.
+3. Do not call the task complete if a relevant contract behavior fails.
+4. If runtime verification is not possible, state exactly what remains unverified.
+
+Run only the relevant regression checks; do not broaden testing to unrelated app areas.
+When applicable, check initial focus, directional focus boundaries, exact target
+restoration, deterministic fallback, one-layer-at-a-time Back dismissal, focusability
+of hidden/inactive controls, parent context across child routes/surfaces, return from a
+child to the expected control/card, at most one navigation-layer transition per remote
+press, and the absence of delay-based corrective focus jumps.
+
+When Jamie explicitly requests a behavior change that supersedes the existing
+contract, update both implementation and contract. Describe the new expected user
+behavior in the contract, not implementation details. Everything outside that
+explicitly changed behavior remains authoritative and must still pass regression
+testing.
+
 ## Scope discipline
 
 Make the smallest coherent change that solves the task.
