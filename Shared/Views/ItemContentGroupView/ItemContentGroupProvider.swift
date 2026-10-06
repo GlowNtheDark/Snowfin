@@ -62,6 +62,21 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         )
     }
 
+    func refreshItem() async throws {
+        let userSession = try requireUserSession()
+        let refreshedItem = try await item.getFullItem(userSession: userSession)
+        item = refreshedItem
+
+        guard let mediaPlayerItemProvider,
+              mediaPlayerItemProvider.item.id == refreshedItem.id
+        else { return }
+
+        self.mediaPlayerItemProvider = refreshedItem.getPlaybackItemProvider(
+            userSession: userSession,
+            mediaSource: mediaPlayerItemProvider.mediaSource
+        )
+    }
+
     @ContentGroupBuilder
     private func _makeGroups(item: BaseItemDto, itemID: String) async throws -> [any ContentGroup] {
 

@@ -156,7 +156,9 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             let request = Paths.reportPlaybackStopped(info)
             try await send(request)
             #if os(tvOS)
-            Notifications[.didSendStopReport].post()
+            if let itemID = item.baseItem.id {
+                Notifications[.didSendStopReport].post(itemID)
+            }
             #endif
         }
     }

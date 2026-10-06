@@ -156,7 +156,7 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
                     registerHomeFocus?(focusCoordinator, navigationCoordinator)
                 }
             }
-            .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) {
+            .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) { _ in
                 if isHome {
                     focusCoordinator.homeStopReported()
                 }

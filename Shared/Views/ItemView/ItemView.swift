@@ -137,6 +137,12 @@ struct ItemView: View {
         .onFirstAppear {
             viewModel.refresh()
         }
+        #if os(tvOS)
+        .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) { itemID in
+            guard provider.id == itemID else { return }
+            Task { try? await provider.refreshItem() }
+        }
+        #endif
         .environmentObject(focusCoordinator)
         #if os(tvOS)
             .toolbarVisibility(.hidden, for: .navigationBar)
