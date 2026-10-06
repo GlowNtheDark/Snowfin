@@ -5,8 +5,15 @@ Status: established roadmap direction and behavior supported by current TV compo
 Current composition (not a fixed product mandate for every shelf): Home presents a
 Continue Watching row when content is available, followed by configured
 and server-derived media shelves. Recently Added separates movies and shows on TV;
-other shelves include optional Recently Played, library content, recommendations,
-and Popular Movies. Empty/unavailable groups need not occupy space.
+other shelves include optional Recently Played, library content, and recommendations.
+Empty/unavailable groups need not occupy space.
+
+Recently Added is ordered by library-addition recency (`DateCreated`) and answers
+“what was added to my server most recently?” Latest shelves for configured libraries
+are ordered by media release or premiere date and answer “what was released most
+recently?” Latest excludes items without a usable premiere date and items whose
+premiere date is in the future. Equal premiere dates are ordered by library-addition
+date, then sort name, for a stable result order.
 
 Do not add a separate Next Up shelf to TV Home. Eligible next episodes belong in
 [Continue Watching](continue-watching.md). Section headings are non-interactive labels.

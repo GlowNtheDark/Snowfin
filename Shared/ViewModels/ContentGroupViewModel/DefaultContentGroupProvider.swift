@@ -127,12 +127,5 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                         .contains(.series) ? .portrait : .landscape
                 )
             }
-
-        #if os(tvOS)
-        PosterGroup(
-            library: PopularMoviesLibrary(),
-            posterSize: .medium
-        )
-        #endif
     }
 }

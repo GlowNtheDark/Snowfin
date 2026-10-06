@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Foundation
 import JellyfinAPI
 
 struct LatestInLibrary: BaseItemKindLibrary {
@@ -25,15 +26,25 @@ struct LatestInLibrary: BaseItemKindLibrary {
         environment: Empty,
         pageState: LibraryPageState
     ) async throws -> [BaseItemDto] {
-        var parameters = Paths.GetLatestMediaParameters()
+        let latestPremiereDate = Date.now
+        var parameters = Paths.GetItemsParameters()
         parameters.enableUserData = true
+        parameters.includeItemTypes = libraryItemTypes
+        parameters.isRecursive = true
         parameters.limit = pageState.pageSize
+        parameters.maxPremiereDate = latestPremiereDate
         parameters.parentID = parent.id
+        parameters.sortBy = [.premiereDate, .dateCreated, .sortName]
+        parameters.sortOrder = [.descending, .descending, .ascending]
+        parameters.startIndex = pageState.pageOffset
         parameters.userID = pageState.userSession.user.id
 
-        let request = Paths.getLatestMedia(parameters: parameters)
+        let request = Paths.getItems(parameters: parameters)
         let response = try await pageState.userSession.client.send(request)
 
-        return response.value
+        return (response.value.items ?? []).filter { item in
+            guard let premiereDate = item.premiereDate else { return false }
+            return premiereDate <= latestPremiereDate
+        }
     }
 }

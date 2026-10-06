@@ -167,8 +167,8 @@ the current press. See [navigation contract](../product-specs/navigation.md#tv-s
 Home rows are dynamic and ordered from configuration/server content. Depending on
 available content they include Continue Watching, Recently Added Movies, Recently
 Added Shows, Recently Played, Recommended Programs, latest items for configured
-libraries, and Popular Movies. Empty/unavailable groups can be omitted. The heading is
-a noninteractive label on tvOS; tile controls are the focus targets.
+libraries. Empty/unavailable groups can be omitted. The heading is a noninteractive
+label on tvOS; tile controls are the focus targets.
 
 | Current focus/region | Up | Down | Left | Right | Select | Back |
 | --- | --- | --- | --- | --- | --- | --- |
