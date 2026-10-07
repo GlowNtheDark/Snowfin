@@ -15,6 +15,8 @@ import SwiftUI
 struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
 
     let id: String
+    let parentID: String?
+    let isSeriesDetails: Bool
     let playButtonItem: BaseItemDto?
     let viewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
 
@@ -27,6 +29,8 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
         playButtonItem: BaseItemDto? = nil
     ) {
         self.id = "\(parent.id ?? "parent")-episode-selector"
+        self.parentID = parent.id
+        self.isSeriesDetails = parent.type == .series
         self.playButtonItem = playButtonItem
         self.viewModel = .init(library: SeasonViewModelLibrary(parent: parent), pageSize: 100)
     }
@@ -34,6 +38,8 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
     func body(with viewModel: PagingLibraryViewModel<SeasonViewModelLibrary>) -> Body {
         Body(
             viewModel: viewModel,
+            parentID: parentID,
+            isSeriesDetails: isSeriesDetails,
             playButtonItem: playButtonItem
         )
     }
@@ -43,10 +49,14 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
         @ObservedObject
         var viewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
 
+        let parentID: String?
+        let isSeriesDetails: Bool
         let playButtonItem: BaseItemDto?
 
         @State
         private var selection: PagingLibraryViewModel<EpisodeLibrary>.ID?
+        @State
+        private var episodeCollectionRevision = 0
 
         private var selectedSeasonViewModel: PagingLibraryViewModel<EpisodeLibrary>? {
             viewModel.elements.first { $0.id == selection }
@@ -81,18 +91,37 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
             selectedSeasonViewModel.refresh()
         }
 
+        private func refreshLoadedSeasons(for itemID: String) async {
+            guard itemID == parentID else { return }
+
+            let loadedSeasons = viewModel.elements.filter {
+                $0.id == selection || $0.state != .initial
+            }
+
+            for seasonViewModel in loadedSeasons {
+                await seasonViewModel.background.refresh()
+            }
+
+            episodeCollectionRevision &+= 1
+        }
+
         @ViewBuilder
         var body: some View {
             Group {
                 if let selectedSeasonViewModel {
                     SeasonEpisodesView(
                         seasonViewModel: selectedSeasonViewModel,
+                        focusSeasonSelector: isSeriesDetails,
+                        episodeCollectionRevision: episodeCollectionRevision,
                         playButtonItem: playButtonItem
                     ) {
                         seasonSelectorView
                     }
                 } else {
-                    LoadingEpisodesView {
+                    LoadingEpisodesView(
+                        focusSeasonSelector: isSeriesDetails,
+                        episodeCollectionRevision: episodeCollectionRevision
+                    ) {
                         seasonSelectorView
                     }
                 }
@@ -107,6 +136,13 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
             .onChange(of: selection) {
                 refreshSelectedSeasonIfNeeded()
             }
+            #if os(tvOS)
+            .onReceive(Notifications[.itemShouldRefreshMetadata].publisher.receive(on: DispatchQueue.main)) { itemID in
+                Task { @MainActor in
+                    await refreshLoadedSeasons(for: itemID)
+                }
+            }
+            #endif
         }
     }
 }

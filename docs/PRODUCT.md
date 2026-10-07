@@ -19,6 +19,7 @@ compact actions, and clear remote focus.
 | --- | --- |
 | Hierarchy and Back | [Navigation](product-specs/navigation.md) |
 | Browsing entry point | [Home](product-specs/home.md) |
+| TV Show Details | [TV Show Details](product-specs/show-details.md) |
 | Episode context/actions | [Episode Details](product-specs/episode-details.md) |
 | Starting/stopping media | [Playback](product-specs/playback.md) |
 | Episode transition | [Play Next](product-specs/play-next.md) |

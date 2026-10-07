@@ -21,6 +21,11 @@ extension ItemView {
         @StoredValue(.User.enabledTrailers)
         private var enabledTrailers: TrailerSelection
 
+        #if os(tvOS)
+        @State
+        private var markUnwatchedError: Error?
+        #endif
+
         private var hasTrailers: Bool {
             if enabledTrailers.contains(.local), provider.localTrailers.isNotEmpty {
                 return true
@@ -31,6 +36,14 @@ extension ItemView {
             }
 
             return false
+        }
+
+        private var shouldShowTrailers: Bool {
+            #if os(tvOS)
+            provider.item.type != .series && hasTrailers
+            #else
+            hasTrailers
+            #endif
         }
 
         private var playedTint: Color {
@@ -97,7 +110,7 @@ extension ItemView {
             } else if (UIDevice.isTV && provider.item.canEdit) ||
                 provider.item.canBePlayed ||
                 provider.item.canBeFavorited ||
-                hasTrailers
+                shouldShowTrailers
             {
                 contentView
             }
@@ -105,7 +118,7 @@ extension ItemView {
             if (UIDevice.isTV && provider.item.canEdit) ||
                 provider.item.canBePlayed ||
                 provider.item.canBeFavorited ||
-                hasTrailers
+                shouldShowTrailers
             {
                 contentView
             }
@@ -115,6 +128,31 @@ extension ItemView {
         @ViewBuilder
         private var contentView: some View {
             HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
+
+                #if os(tvOS)
+                if provider.item.type == .series {
+                    Button {
+                        Task {
+                            do {
+                                try await provider.markSeriesUnwatched()
+                            } catch {
+                                markUnwatchedError = error
+                            }
+                        }
+                    } label: {
+                        materialLabel(
+                            L10n.markAsUnplayed,
+                            systemImage: "checkmark.circle",
+                            tint: playedTint,
+                            foregroundColor: .primary
+                        )
+                    }
+                    .frame(width: 520, height: 75)
+                    .labelStyle(.titleAndIcon)
+                    .disabled(provider.isMarkingSeriesUnwatched)
+                    .accessibilityIdentifier("show-details-mark-unwatched")
+                }
+                #endif
 
                 // MARK: Played
 
@@ -161,7 +199,7 @@ extension ItemView {
 
                 // MARK: Trailer
 
-                if hasTrailers {
+                if shouldShowTrailers {
                     TrailerMenu(
                         localTrailers: provider.localTrailers,
                         externalTrailers: provider.item.remoteTrailers ?? []
@@ -198,6 +236,9 @@ extension ItemView {
             .buttonStyle(BasicHoverButtonStyle())
             .font(.title3)
             .fontWeight(.semibold)
+            #if os(tvOS)
+                .errorMessage($markUnwatchedError)
+            #endif
         }
     }
 }

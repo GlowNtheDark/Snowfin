@@ -38,16 +38,26 @@ extension SeriesEpisodeContentGroup {
 
     struct LoadingEpisodesView<Header: View>: View {
 
+        let focusSeasonSelector: Bool
+        let episodeCollectionRevision: Int
         let header: Header
 
-        init(@ViewBuilder header: () -> Header) {
+        init(
+            focusSeasonSelector: Bool,
+            episodeCollectionRevision: Int,
+            @ViewBuilder header: () -> Header
+        ) {
+            self.focusSeasonSelector = focusSeasonSelector
+            self.episodeCollectionRevision = episodeCollectionRevision
             self.header = header()
         }
 
         var body: some View {
             EpisodeCollectionLayout(
                 elements: EpisodeElement.loadingElements,
-                preferredElementID: EpisodeElement.loadingElements.first?.id
+                preferredElementID: EpisodeElement.loadingElements.first?.id,
+                focusSeasonSelector: focusSeasonSelector,
+                episodeCollectionRevision: episodeCollectionRevision
             ) {
                 header
             } content: { element in
@@ -62,15 +72,21 @@ extension SeriesEpisodeContentGroup {
         @ObservedObject
         var seasonViewModel: PagingLibraryViewModel<EpisodeLibrary>
 
+        let focusSeasonSelector: Bool
+        let episodeCollectionRevision: Int
         let playButtonItem: BaseItemDto?
         let header: Header
 
         init(
             seasonViewModel: PagingLibraryViewModel<EpisodeLibrary>,
+            focusSeasonSelector: Bool,
+            episodeCollectionRevision: Int,
             playButtonItem: BaseItemDto?,
             @ViewBuilder header: () -> Header
         ) {
             self.seasonViewModel = seasonViewModel
+            self.focusSeasonSelector = focusSeasonSelector
+            self.episodeCollectionRevision = episodeCollectionRevision
             self.playButtonItem = playButtonItem
             self.header = header()
         }
@@ -103,7 +119,9 @@ extension SeriesEpisodeContentGroup {
         var body: some View {
             EpisodeCollectionLayout(
                 elements: elements,
-                preferredElementID: preferredElementID
+                preferredElementID: preferredElementID,
+                focusSeasonSelector: focusSeasonSelector,
+                episodeCollectionRevision: episodeCollectionRevision
             ) {
                 header
             } content: { element in
@@ -129,17 +147,23 @@ extension SeriesEpisodeContentGroup {
 
         let elements: [EpisodeElement]
         let preferredElementID: EpisodeElement.ID?
+        let focusSeasonSelector: Bool
+        let episodeCollectionRevision: Int
         let header: Header
         let content: (EpisodeElement) -> Content
 
         init(
             elements: [EpisodeElement],
             preferredElementID: EpisodeElement.ID?,
+            focusSeasonSelector: Bool = false,
+            episodeCollectionRevision: Int = 0,
             @ViewBuilder header: () -> Header,
             @ViewBuilder content: @escaping (EpisodeElement) -> Content
         ) {
             self.elements = elements
             self.preferredElementID = preferredElementID
+            self.focusSeasonSelector = focusSeasonSelector
+            self.episodeCollectionRevision = episodeCollectionRevision
             self.header = header()
             self.content = content
         }
@@ -175,6 +199,14 @@ extension SeriesEpisodeContentGroup {
             #endif
         }
 
+        private var defaultFocusedSection: FocusedSection {
+            #if os(tvOS)
+            focusSeasonSelector ? .seasons : .episodes
+            #else
+            .episodes
+            #endif
+        }
+
         var body: some View {
             ContentGroupSection {
                 CollectionHStack(
@@ -195,6 +227,7 @@ extension SeriesEpisodeContentGroup {
                     preferredElementID,
                     priority: .userInitiated
                 )
+                .id(episodeCollectionRevision)
             } header: {
                 header
                     .focusSection()
@@ -203,7 +236,7 @@ extension SeriesEpisodeContentGroup {
             .focusSection()
             .defaultFocus(
                 $focusedSection,
-                .episodes,
+                defaultFocusedSection,
                 priority: .userInitiated
             )
             .accessibilityElement(children: .contain)

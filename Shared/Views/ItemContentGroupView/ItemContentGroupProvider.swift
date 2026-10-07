@@ -22,6 +22,8 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     private(set) var mediaPlayerItemProvider: MediaPlayerItemProvider?
     @Published
     private(set) var randomBackdropItem: BaseItemDto?
+    @Published
+    private(set) var isMarkingSeriesUnwatched = false
 
     let id: String
 
@@ -132,7 +134,16 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         }
         #endif
 
-        if let genres = item.itemGenres, genres.isNotEmpty {
+        #if os(tvOS)
+        let shouldShowGenreAndStudioGroups = item.type != .series
+        #else
+        let shouldShowGenreAndStudioGroups = true
+        #endif
+
+        if shouldShowGenreAndStudioGroups,
+           let genres = item.itemGenres,
+           genres.isNotEmpty
+        {
             PillGroup(
                 displayTitle: L10n.genres,
                 id: "genres",
@@ -160,7 +171,10 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             }
         }
 
-        if let studios = item.studios, studios.isNotEmpty {
+        if shouldShowGenreAndStudioGroups,
+           let studios = item.studios,
+           studios.isNotEmpty
+        {
             PillGroup(
                 displayTitle: L10n.studios,
                 id: "studios",
@@ -316,6 +330,62 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             try await setIsPlayed(!beforeIsPlayed)
         } catch {
             item.userData?.isPlayed = beforeIsPlayed
+        }
+    }
+
+    func markSeriesUnwatched() async throws {
+        guard item.type == .series else { return }
+        guard !isMarkingSeriesUnwatched else { return }
+        guard let itemID = item.id else {
+            throw ErrorMessage(L10n.unknownError)
+        }
+
+        isMarkingSeriesUnwatched = true
+        defer { isMarkingSeriesUnwatched = false }
+
+        let updatedUserData: UserItemDataDto
+        do {
+            let request = try Paths.markUnplayedItem(
+                itemID: itemID,
+                userID: authenticatedUser.id
+            )
+            let response = try await send(request)
+            updatedUserData = response.value
+        } catch {
+            logger.error("Unable to mark series unwatched: \(error.localizedDescription)")
+
+            do {
+                try await refreshItem()
+            } catch {
+                logger.error("Unable to refresh series after failed unwatch request: \(error.localizedDescription)")
+            }
+
+            if let userData = item.userData {
+                Notifications[.itemUserDataDidChange].post(userData)
+            } else {
+                Notifications[.didRequestGlobalRefresh].post()
+            }
+            Notifications[.itemShouldRefreshMetadata].post(itemID)
+
+            throw ErrorMessage(
+                "Could not mark the series as unwatched. Jellyfin may have updated only part of the series. Refresh and check the current state. \(error.localizedDescription)"
+            )
+        }
+
+        item.userData = updatedUserData
+        Notifications[.itemUserDataDidChange].post(updatedUserData)
+        Notifications[.itemShouldRefreshMetadata].post(itemID)
+
+        do {
+            mediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
+                for: item,
+                userSession: requireUserSession()
+            )
+        } catch {
+            logger.error("Unable to refresh series playback target after unwatch: \(error.localizedDescription)")
+            throw ErrorMessage(
+                "The series was marked as unwatched, but its playback selection could not be refreshed. Reopen Show Details before playing. \(error.localizedDescription)"
+            )
         }
     }
 
