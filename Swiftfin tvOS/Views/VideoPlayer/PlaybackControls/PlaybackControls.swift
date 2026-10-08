@@ -144,7 +144,6 @@ extension VideoPlayer {
 
                     HStack(alignment: .top, spacing: 12) {
                         playPauseIndicator
-                            .offset(y: -8)
 
                         PlaybackProgress(focused: $isPlaybackProgressFocused)
                             .fixedSize(horizontal: false, vertical: true)
@@ -208,7 +207,7 @@ extension VideoPlayer {
             Image(systemName: manager.playbackRequestStatus == .paused ? "play.fill" : "pause.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(accentColor)
-                .frame(width: 24, height: 24)
+                .frame(width: 24, height: 20)
                 .focusable(false)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
