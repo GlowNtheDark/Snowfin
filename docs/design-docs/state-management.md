@@ -19,9 +19,11 @@ is not an alternative source of server media truth.
 
 Jellyfin `BaseItemDto.userData` carries `isPlayed`, `playbackPositionTicks`, and
 `lastPlayedDate`. [`ItemContentGroupProvider`](../../Shared/Views/ItemContentGroupView/ItemContentGroupProvider.swift)
-fetches the full item and resolves a playback provider. Its watched toggle updates
-optimistically, rolls back on error, and publishes the server response through
-[`Notifications`](../../Shared/Services/Notifications.swift).
+fetches the full item and resolves a playback provider. On tvOS, Movie and top-level
+series Details overlay session-scoped `ItemState` on their local metadata snapshot;
+accepted watched/favorite responses update that state through
+[`Notifications`](../../Shared/Services/Notifications.swift). The iOS Details path keeps
+its existing snapshot and optimistic action behavior.
 [`PagingLibraryViewModel`](../../Shared/Objects/PagingLibrary/PagingLibraryViewModel.swift)
 updates matching item IDs and calls each library's user-data hook.
 
@@ -101,14 +103,16 @@ shared by those owners.
 `BaseItemDto` values are copied into independent owners: each
 `PagingLibraryViewModel` holds its own `elements` and `searchElements`; each Home `PosterGroup` has its
 own paging model; the tvOS Continue row and Play Next overlay each have a resume-library
-model; Search suggestions are a separate array; Details owns an
-`ItemContentGroupProvider.item`; and Show Details creates a season model whose elements
-are further episode paging models. The observable arrays notify SwiftUI when their own
-copies change, but changing one copy does not change another.
+model; Search suggestions are a separate array; Details keeps metadata and derived
+playback/group selection in `ItemContentGroupProvider`, while Movie and top-level series
+user data comes from `ItemState`; Show Details creates a season model whose elements are
+further episode paging models. The observable arrays notify SwiftUI when their own
+copies change, but changing one copy does not change another unless that owner observes
+the shared state or handles the update event.
 
 Jellyfin item `id` is the useful canonical identity within a signed-in
 `UserSession`. `BaseItemDto.id`, `UserItemDataDto.itemID`, search/library rows, Details, and
-episode rows all use that server item ID. A shared store should be scoped to the current
+episode rows all use that server item ID. The shared store is scoped to the current
 session and keyed by item ID; a process-wide store would need a composite
 server/user/item key because user data is user-specific and IDs are server-local.
 Continue's `continue-watching` paging-library ID and the visual Home group ID
@@ -146,9 +150,14 @@ ordering changes may remove or move a tile and need the existing focus restorati
   and stop reports publish typed item updates; retained Movies/TV Shows libraries use
   those to update cards and consult the active filter/sort before querying. The older
   `didSendResumeProgressReport` signal remains for its existing subscribers.
-- `ItemContentGroupProvider` publishes its own full item. Its watched/favorite actions
-  update that item and post user-data plus metadata-refresh notifications. Other
-  Details providers do not observe the local provider's `@Published item`.
+- `ItemContentGroupProvider` retains a full-item metadata snapshot and resolves a playback
+  provider locally. Movie and top-level series Details observe the session's `ItemState`
+  for their own item; Show Details also observes the currently selected play target's
+  state for Play/Resume presentation. Accepted watched/favorite changes publish typed
+  updates, and the Details provider relays shared-state changes without rebuilding the
+  route. Playback target metadata/source selection, groups, trailers, backdrop, and
+  route/focus state remain locally owned. Home, Search, and episode-card DTOs still use
+  their existing owners.
 - Show Details episode rows are nested paging models. A series-wide Mark Unwatched
   returns user data for the series, not each loaded episode. The separate
   `itemShouldRefreshMetadata` string notification is matched to the series parent by
@@ -166,8 +175,9 @@ ordering changes may remove or move a tile and need the existing focus restorati
 - Retained tvOS Movies and TV Shows libraries use `PagingLibraryViewModel` automatic
   refresh for metadata, stop, delete, user-data, global-refresh, and connection-change
   signals. They coalesce collection queries and keep matching user-data changes
-  immediate. This improves those two collections but does not make the shared poster,
-  Home, Details, Search, and episode representations share one item state.
+  immediate. The shared poster path now covers those grids, and Movie/top-level Show
+  Details also observe the same item state. Home, Search, and episode representations
+  still use their existing owners.
 - `ServerSocketManager` already exposes a Combine event stream and command/subscription
   publishers. The app consumes playback commands and session information; activity and
   task publisher helpers also exist. No consumed Jellyfin socket event currently
@@ -227,9 +237,10 @@ The `itemUserDataDidChange` payload now supports `.userData`,
 poster and Details toggles, series-unwatch flow, and playback-completion path publish
 the returned `UserItemDataDto`. Accepted tvOS playback progress/stop reports publish
 the acknowledged ticks. Existing `didSendStopReport`, metadata-refresh, and library
-membership hooks remain available. Home consumes only same-session `.userData` updates
-through its existing group refresh path; Search, Details, episode cards, and Home posters
-do not observe `ItemState` yet.
+membership hooks remain available. Home consumes same-session `.userData` updates
+through its existing group refresh path; Home and Search have not migrated their visible
+DTOs to `ItemState`. Details migration is recorded below. Episode-card DTOs have not
+migrated.
 
 The retained Movies and TV Shows tabs explicitly opt into the shared store. Their grid
 poster wrapper observes the item state and feeds a user-data-updated copy of the same
@@ -252,10 +263,21 @@ Other libraries retain their previous refresh policy by default.
    seed the session-scoped state, and the retained Movies and TV Shows grids observe it.
    Collection ownership and filter-driven invalidation remain local. Home poster shelves
    and Search result groups still need their own migration.
-2. **Details.** Replace the provider's isolated item snapshot as the displayed state
-   with the shared item state. Keep Details-only derived providers/groups local, and
-   route accepted watched/favorite/metadata changes through the typed publisher.
-3. **Season and episode rows.** Adopt shared item state in loaded episode cards and
+2. **Completed: Movie and top-level TV Show Details.** The provider keeps full-item
+   metadata locally and overlays same-session shared user data for the Details item and
+   selected play target. Server-accepted watched/favorite changes publish typed updates;
+   the Details view and retained Movies/TV Shows cards observe the same item state. The
+   playback-stop full-item fetch and series `itemShouldRefreshMetadata` loaded-season
+   refresh remain in place for this migration phase. The exact-ID playback-stop fetch is
+   temporarily redundant for shared progress presentation, but remains for authoritative
+   metadata and playback-provider refresh. The series notification and loaded-season
+   refetch remain required for unmigrated episode rows. Details action callbacks no longer
+   mutate a private user-data copy; successful server responses publish the shared update.
+   Full snapshots seed user data only while an item's typed-update revision is still zero;
+   later snapshots refresh metadata without overwriting accepted watched/favorite/progress
+   state. Superseded fetch generations are discarded. Details routes, groups, and focus
+   ownership remain local.
+3. **Phase 3: season and episode rows.** Adopt shared item state in loaded episode cards and
    route series-wide changes to affected children. Remove the explicit loaded-season
    refresh/revision repair only after the same series-unwatch flow updates every loaded
    episode row and membership remains correct.
@@ -272,9 +294,10 @@ After each owner is migrated, the following local repairs can be retired where t
 store/event path provides equivalent behavior:
 
 - per-surface `itemShouldRefreshMetadata` plus loaded-season refresh for series-wide
-  user-data changes;
-- full Details item fetches done only to update a visible item's user data after
-  playback stop;
+  user-data changes (retain through Phase 3 episode-row migration);
+- full Details item fetches after an exact-ID playback stop (shared acknowledged ticks
+  now update presentation; retain the fetch until authoritative metadata/playback-provider
+  refresh coverage is proven);
 - Home's refresh of every candidate group for a presentation-only item change;
 - full Movies/TV Shows collection refreshes caused only by an item presentation update;
 - library-specific debounce/refetch used only to make already loaded item fields fresh.
@@ -298,3 +321,18 @@ sort order was changed to descending and restored to ascending successfully. A
 tvOS filter mutation was not exercised; the filter drawer is only attached to the iOS
 library body. Other focus boundaries and hidden-control behavior remain unverified, and
 no physical Apple TV was tested.
+
+Phase 2 changed source and passed the signed Apple TV 4K (3rd generation) 1080p
+simulator build/install. Runtime checks on the retained app session confirmed Movie and
+Show Details initially focus Play; Movie watched state updates immediately and can be
+reversed while its action retains focus; Show favorite state updates immediately and
+reverses while its action retains focus; and Back returns to the exact originating
+poster with its updated watched/favorite treatment. The Show action-to-season-selector-
+to-episode path and one-layer Back behavior passed. A series-wide Mark Unwatched
+invocation did not produce a visible state change during this run, so that mutation is
+unverified. A brief movie playback produced an acknowledged resume value: after stop,
+Details displayed `2h 15m` without reopening the route. The retained Movies poster
+remained present, but the progress fraction from this short run was too small to confirm
+visually on its compact indicator; retained-poster progress is therefore unverified.
+No manual refresh was used, and no physical Apple TV was tested. Build/install does not
+establish behavior on physical hardware.

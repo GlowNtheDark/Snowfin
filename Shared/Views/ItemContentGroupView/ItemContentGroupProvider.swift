@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Combine
 import Defaults
 import Get
 import JellyfinAPI
@@ -14,7 +15,14 @@ import SwiftUI
 final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
     @Published
-    private(set) var item: BaseItemDto
+    private var itemSnapshot: BaseItemDto
+
+    private var itemState: ItemState?
+    private var playbackItemState: ItemState?
+    private var itemStateSessionID: UUID?
+    private var observedItemStateIDs = Set<String>()
+    private var itemStateCancellables = Set<AnyCancellable>()
+    private var itemSnapshotRequestGeneration = 0
 
     @Published
     private(set) var localTrailers: [BaseItemDto] = []
@@ -27,56 +35,207 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
     let id: String
 
+    var item: BaseItemDto {
+        #if os(tvOS)
+        guard let itemState,
+              itemStateSessionID == userSession?.id
+        else { return itemSnapshot }
+
+        return itemState.applying(to: itemSnapshot)
+        #else
+        itemSnapshot
+        #endif
+    }
+
+    var currentMediaPlayerItemProvider: MediaPlayerItemProvider? {
+        #if os(tvOS)
+        guard let mediaPlayerItemProvider,
+              let playbackItemState,
+              playbackItemStateSessionMatchesCurrentUser,
+              playbackItemState.id == mediaPlayerItemProvider.item.id,
+              let userSession
+        else { return mediaPlayerItemProvider }
+
+        let updatedItem = playbackItemState.applying(to: mediaPlayerItemProvider.item)
+        return updatedItem.getPlaybackItemProvider(
+            userSession: userSession,
+            mediaSource: mediaPlayerItemProvider.mediaSource
+        ) ?? mediaPlayerItemProvider
+        #else
+        mediaPlayerItemProvider
+        #endif
+    }
+
+    private var playbackItemStateSessionMatchesCurrentUser: Bool {
+        itemStateSessionID == userSession?.id
+    }
+
     var displayTitle: String {
         item.displayTitle
     }
 
     init(item: BaseItemDto) {
         self.id = item.id ?? "Unknown"
-        self.item = item
+        self.itemSnapshot = item
         super.init()
     }
 
     init(id: String) {
         self.id = id
-        self.item = .init(id: id)
+        self.itemSnapshot = .init(id: id)
         super.init()
     }
 
     func makeGroups(environment: Empty) async throws -> [any ContentGroup] {
         let userSession = try requireUserSession()
-        let fullItem = try await item.getFullItem(userSession: userSession, sendNotification: true)
+        let seedItem = itemSnapshot
+        let itemState = bindItemState(for: seedItem, userSession: userSession)
+        let itemStateRevision = itemState?.revision
+        let requestGeneration = beginItemSnapshotRequest()
+        let fullItem = try await seedItem.getFullItem(userSession: userSession, sendNotification: true)
+        try requireCurrentSession(userSession)
+        guard requestGeneration == itemSnapshotRequestGeneration else {
+            throw CancellationError()
+        }
+        mergeSnapshotUserData(
+            from: fullItem,
+            into: itemState,
+            revisionAtStart: itemStateRevision,
+            requestGeneration: requestGeneration
+        )
+        setItemSnapshot(fullItem)
+
         let newMediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
-            for: fullItem,
+            for: item,
             userSession: userSession
         )
         let newLocalTrailers = try? await localTrailers(for: fullItem)
         let newRandomBackdropItem = try? await randomBackdropItem(for: fullItem)
 
-        item = fullItem
+        try requireCurrentSession(userSession)
+        guard requestGeneration == itemSnapshotRequestGeneration else {
+            throw CancellationError()
+        }
         localTrailers = newLocalTrailers ?? []
         mediaPlayerItemProvider = newMediaPlayerItemProvider
+        bindPlaybackItemState(to: newMediaPlayerItemProvider?.item, userSession: userSession)
         randomBackdropItem = newRandomBackdropItem
 
         return try await _makeGroups(
-            item: fullItem,
+            item: item,
             itemID: id
         )
     }
 
     func refreshItem() async throws {
         let userSession = try requireUserSession()
-        let refreshedItem = try await item.getFullItem(userSession: userSession)
-        item = refreshedItem
+        let itemState = bindItemState(for: itemSnapshot, userSession: userSession)
+        let itemStateRevision = itemState?.revision
+        let requestGeneration = beginItemSnapshotRequest()
+        let refreshedItem = try await itemSnapshot.getFullItem(userSession: userSession)
+        try requireCurrentSession(userSession)
+        guard requestGeneration == itemSnapshotRequestGeneration else { return }
+        mergeSnapshotUserData(
+            from: refreshedItem,
+            into: itemState,
+            revisionAtStart: itemStateRevision,
+            requestGeneration: requestGeneration
+        )
+        setItemSnapshot(refreshedItem)
 
         guard let mediaPlayerItemProvider,
               mediaPlayerItemProvider.item.id == refreshedItem.id
         else { return }
 
-        self.mediaPlayerItemProvider = refreshedItem.getPlaybackItemProvider(
+        let updatedItem = itemState?.applying(to: refreshedItem) ?? refreshedItem
+        let refreshedPlaybackItemProvider = updatedItem.getPlaybackItemProvider(
             userSession: userSession,
             mediaSource: mediaPlayerItemProvider.mediaSource
         )
+        self.mediaPlayerItemProvider = refreshedPlaybackItemProvider
+        bindPlaybackItemState(to: refreshedPlaybackItemProvider?.item, userSession: userSession)
+    }
+
+    private func bindItemState(for item: BaseItemDto, userSession: UserSession) -> ItemState? {
+        #if os(tvOS)
+        if itemStateSessionID != userSession.id {
+            itemStateCancellables.removeAll()
+            observedItemStateIDs.removeAll()
+            itemState = nil
+            playbackItemState = nil
+            itemStateSessionID = userSession.id
+        }
+
+        guard let state = userSession.itemStateStore.state(for: item) else { return nil }
+        itemState = state
+        observeItemState(state)
+        return state
+        #else
+        nil
+        #endif
+    }
+
+    private func bindPlaybackItemState(to item: BaseItemDto?, userSession: UserSession) {
+        #if os(tvOS)
+        guard let item,
+              let state = userSession.itemStateStore.state(for: item)
+        else {
+            playbackItemState = nil
+            return
+        }
+
+        playbackItemState = state
+        observeItemState(state)
+        #else
+        playbackItemState = nil
+        #endif
+    }
+
+    private func observeItemState(_ state: ItemState) {
+        guard observedItemStateIDs.insert(state.id).inserted else { return }
+
+        state.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &itemStateCancellables)
+    }
+
+    private func setItemSnapshot(_ item: BaseItemDto) {
+        #if os(tvOS)
+        var metadataItem = item
+        metadataItem.userData = nil
+        itemSnapshot = metadataItem
+        #else
+        itemSnapshot = item
+        #endif
+    }
+
+    private func beginItemSnapshotRequest() -> Int {
+        itemSnapshotRequestGeneration += 1
+        return itemSnapshotRequestGeneration
+    }
+
+    private func mergeSnapshotUserData(
+        from item: BaseItemDto,
+        into itemState: ItemState?,
+        revisionAtStart: UInt64?,
+        requestGeneration: Int
+    ) {
+        guard requestGeneration == itemSnapshotRequestGeneration,
+              let itemState,
+              itemStateSessionID == userSession?.id,
+              revisionAtStart == 0,
+              itemState.revision == revisionAtStart
+        else { return }
+
+        itemState.mergeSnapshot(item.userData)
+    }
+
+    private func requireCurrentSession(_ session: UserSession) throws {
+        guard userSession?.id == session.id else {
+            throw CancellationError()
+        }
     }
 
     @ContentGroupBuilder
@@ -312,24 +471,34 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     }
 
     func toggleIsFavorite() async {
-        let beforeIsFavorite = item.userData?.isFavorite ?? false
+        let beforeIsFavorite = item.userData?.isFavorite == true
+        #if !os(tvOS)
+        itemSnapshot.userData?.isFavorite = !beforeIsFavorite
+        #endif
 
-        item.userData?.isFavorite = !beforeIsFavorite
         do {
             try await setIsFavorite(!beforeIsFavorite)
         } catch {
-            item.userData?.isFavorite = beforeIsFavorite
+            #if !os(tvOS)
+            itemSnapshot.userData?.isFavorite = beforeIsFavorite
+            #endif
+            logger.error("Unable to update favorite state: \(error.localizedDescription)")
         }
     }
 
     func toggleIsPlayed() async {
-        let beforeIsPlayed = item.userData?.isPlayed ?? false
+        let beforeIsPlayed = item.userData?.isPlayed == true
+        #if !os(tvOS)
+        itemSnapshot.userData?.isPlayed = !beforeIsPlayed
+        #endif
 
-        item.userData?.isPlayed = !beforeIsPlayed
         do {
             try await setIsPlayed(!beforeIsPlayed)
         } catch {
-            item.userData?.isPlayed = beforeIsPlayed
+            #if !os(tvOS)
+            itemSnapshot.userData?.isPlayed = beforeIsPlayed
+            #endif
+            logger.error("Unable to update played state: \(error.localizedDescription)")
         }
     }
 
@@ -341,6 +510,8 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         }
 
         let userSession = try requireUserSession()
+        let itemState = bindItemState(for: itemSnapshot, userSession: userSession)
+        let requestGeneration = beginItemSnapshotRequest()
         let revision = DispatchTime.now().uptimeNanoseconds
 
         isMarkingSeriesUnwatched = true
@@ -357,21 +528,34 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         } catch {
             logger.error("Unable to mark series unwatched: \(error.localizedDescription)")
 
+            let refreshRevision = DispatchTime.now().uptimeNanoseconds
+            let revisionBeforeRefresh = itemState?.revision
+            var refreshedUserData: UserItemDataDto?
             do {
-                item = try await item.getFullItem(userSession: userSession)
+                let refreshedItem = try await itemSnapshot.getFullItem(userSession: userSession)
+                try requireCurrentSession(userSession)
+                if requestGeneration == itemSnapshotRequestGeneration {
+                    setItemSnapshot(refreshedItem)
+                    if itemState?.revision == revisionBeforeRefresh {
+                        refreshedUserData = refreshedItem.userData
+                    }
+                }
             } catch {
                 logger.error("Unable to refresh series after failed unwatch request: \(error.localizedDescription)")
             }
 
-            if let userData = item.userData {
+            if let userData = refreshedUserData {
                 Notifications[.itemUserDataDidChange].post(ItemUpdate(
                     userSessionID: userSession.id,
                     itemID: itemID,
-                    revision: revision,
+                    revision: refreshRevision,
                     change: .userData(userData)
                 ))
-            } else {
+            } else if item.userData == nil {
                 Notifications[.didRequestGlobalRefresh].post()
+            } else {
+                // A newer item update arrived while the authoritative recovery fetch was in flight.
+                // Keep that shared state and let the normal metadata refresh repair dependent rows.
             }
             Notifications[.itemShouldRefreshMetadata].post(itemID)
 
@@ -380,20 +564,25 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             )
         }
 
-        item.userData = updatedUserData
         Notifications[.itemUserDataDidChange].post(ItemUpdate(
             userSessionID: userSession.id,
             itemID: itemID,
             revision: revision,
             change: .userData(updatedUserData)
         ))
+        #if !os(tvOS)
+        itemSnapshot.userData = updatedUserData
+        #endif
         Notifications[.itemShouldRefreshMetadata].post(itemID)
 
         do {
-            mediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
+            let refreshedMediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
                 for: item,
                 userSession: userSession
             )
+            try requireCurrentSession(userSession)
+            mediaPlayerItemProvider = refreshedMediaPlayerItemProvider
+            bindPlaybackItemState(to: refreshedMediaPlayerItemProvider?.item, userSession: userSession)
         } catch {
             logger.error("Unable to refresh series playback target after unwatch: \(error.localizedDescription)")
             throw ErrorMessage(
@@ -403,7 +592,9 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     }
 
     func selectMediaSource(_ mediaSource: MediaSourceInfo?) {
-        guard let mediaPlayerItemProvider, let userSession else { return }
+        guard let mediaPlayerItemProvider = currentMediaPlayerItemProvider,
+              let userSession
+        else { return }
 
         self.mediaPlayerItemProvider = mediaPlayerItemProvider.item.getPlaybackItemProvider(
             userSession: userSession,

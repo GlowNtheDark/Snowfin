@@ -22,6 +22,10 @@ struct PlayButton: View {
     @Router
     private var router
 
+    private var currentMediaPlayerItemProvider: MediaPlayerItemProvider? {
+        provider.currentMediaPlayerItemProvider
+    }
+
     private var mediaSource: String? {
         guard provider.mediaPlayerItemProvider?.item.mediaSources?.count ?? 0 > 1 else { return nil }
         return provider.mediaPlayerItemProvider?.mediaSource?.displayTitle
@@ -52,11 +56,11 @@ struct PlayButton: View {
 
     private func play(fromBeginning: Bool = false) {
         let mediaPlayerItemProvider = if fromBeginning {
-            provider.mediaPlayerItemProvider?.modifyingItem {
+            currentMediaPlayerItemProvider?.modifyingItem {
                 $0.userData?.playbackPositionTicks = 0
             }
         } else {
-            provider.mediaPlayerItemProvider
+            currentMediaPlayerItemProvider
         }
 
         guard let mediaPlayerItemProvider else {
@@ -135,7 +139,7 @@ struct PlayButton: View {
                 Image(systemName: "play.fill")
 
                 VStack(spacing: 2) {
-                    Text(provider.mediaPlayerItemProvider?.item.playButtonLabel ?? L10n.play)
+                    Text(currentMediaPlayerItemProvider?.item.playButtonLabel ?? L10n.play)
 
                     if let mediaSource {
                         Marquee(mediaSource, speed: 40, delay: 3, fade: 5)
@@ -175,7 +179,7 @@ struct PlayButton: View {
         #endif
         .coordinatedFocus(ItemView.Component.play, consumesRequestOnAcquisition: true)
         .contextMenu {
-            if provider.mediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
+            if currentMediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
                 Button(L10n.playFromBeginning, systemImage: "gobackward") {
                     play(fromBeginning: true)
                 }
