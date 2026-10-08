@@ -50,8 +50,10 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
     private var lastRefreshDate = Date.distantPast
     private var lastRefreshSignalDate = Date.distantPast
     private var pendingHomeCollectionIDs = Set<String>()
+    private var pendingSearchCollectionIDs = Set<String>()
     @Published
     private(set) var isRefreshingHomeCollections = false
+    private var isRefreshingSearchCollections = false
 
     #if os(tvOS)
     private var homeRefreshPending = false
@@ -80,7 +82,12 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
             }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] update in
-                self?.invalidateHomeCollections(after: update)
+                guard let self else { return }
+                if provider is DefaultContentGroupProvider {
+                    invalidateHomeCollections(after: update)
+                } else if provider is SearchContentGroupProvider {
+                    invalidateSearchCollections(after: update)
+                }
             }
             .store(in: &cancellables)
         #else
@@ -193,6 +200,53 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
         lastRefreshSignalDate = .now
         pendingHomeCollectionIDs.formUnion(affectedGroupIDs)
         refreshHomeCollectionsIfPending()
+    }
+
+    private func invalidateSearchCollections(after update: ItemUpdate) {
+        guard provider is SearchContentGroupProvider else { return }
+
+        let affectedGroupIDs = candidateGroups.compactMap { group -> String? in
+            guard let group = group as? any SearchCollectionInvalidatableContentGroup,
+                  group.invalidateSearchCollection(after: update)
+            else { return nil }
+            return group.id
+        }
+        guard affectedGroupIDs.isNotEmpty else { return }
+
+        lastRefreshSignalDate = .now
+        pendingSearchCollectionIDs.formUnion(affectedGroupIDs)
+        refreshSearchCollectionsIfPending()
+    }
+
+    private func refreshSearchCollectionsIfPending() {
+        guard provider is SearchContentGroupProvider,
+              !isRefreshingSearchCollections,
+              !pendingSearchCollectionIDs.isEmpty
+        else { return }
+
+        isRefreshingSearchCollections = true
+        Task { [weak self] in
+            guard let self else { return }
+            while !pendingSearchCollectionIDs.isEmpty {
+                let groupIDs = pendingSearchCollectionIDs
+                pendingSearchCollectionIDs.removeAll()
+                let groups = candidateGroups.compactMap { group -> (any SearchCollectionInvalidatableContentGroup)? in
+                    guard groupIDs.contains(group.id) else { return nil }
+                    return group as? any SearchCollectionInvalidatableContentGroup
+                }
+
+                await withTaskGroup(of: Void.self) { taskGroup in
+                    for group in groups {
+                        taskGroup.addTask {
+                            await group.refreshSearchCollection()
+                        }
+                    }
+                }
+                resolveGroups()
+            }
+            lastRefreshDate = .now
+            isRefreshingSearchCollections = false
+        }
     }
 
     private func refreshHomeCollectionsIfPending() {

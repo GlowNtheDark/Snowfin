@@ -212,8 +212,7 @@ struct PosterHStack<
     @ViewBuilder
     private func posterButton(for item: Data.Element) -> some View {
         #if os(tvOS)
-        if environment.homeTileCoordinator != nil,
-           let baseItem = item as? BaseItemDto,
+        if let baseItem = item as? BaseItemDto,
            let itemState = environment.itemStateStore?.state(for: baseItem)
         {
             ItemStatePoster(

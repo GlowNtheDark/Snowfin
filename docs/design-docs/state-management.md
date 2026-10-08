@@ -157,9 +157,10 @@ ordering changes may remove or move a tile and need the existing focus restorati
   state for Play/Resume presentation. Accepted watched/favorite changes publish typed
   updates, and the Details provider relays shared-state changes without rebuilding the
   route. Playback target metadata/source selection, groups, trailers, backdrop, and
-  route/focus state remain locally owned. Home posters now observe the same session's
-  ItemState; Search still uses its existing owner. Episode-card metadata and routing use
-  the local DTO, with user-data presentation overlaid from that session's ItemState.
+  route/focus state remain locally owned. Home and tvOS Search result posters observe
+  the same session's ItemState. Search query/results and its title-only suggestion array
+  remain local. Episode-card metadata and routing use the local DTO, with user-data
+  presentation overlaid from that session's ItemState.
 - Show Details episode rows remain nested paging models. A series-level unplayed response
   contains one `UserItemDataDto` for the requested series, not descendant episode DTOs;
   current upstream Jellyfin `MarkUnplayedItem` returns that single item result
@@ -173,18 +174,18 @@ ordering changes may remove or move a tile and need the existing focus restorati
   the season DTO's server userData through the existing poster indicators; it does not
   recompute season aggregates from episodes. Loaded season IDs are included in the same
   authoritative reconciliation query.
-- `ContentGroupViewModel` listens for Home collection-impacting item updates and
-  metadata/global refresh signals. It targets only affected collection groups for
-  watched state, Continue membership, and deletion; focus coordination defers those
-  targeted queries while Details owns the Home return. Metadata/global refresh remains
-  broad. The Continue row and Play Next overlay keep separate list models and re-run
-  their own derivation/query paths.
+- `ContentGroupViewModel` listens for Home and Search collection-impacting item updates
+  and metadata refresh signals. It targets only affected collection groups for watched
+  state, Continue membership, and Search filter/sort results; Home deletion remains
+  targeted too. Focus coordination defers Home's targeted queries while Details owns
+  the Home return. Home global refresh remains broad. The Continue row and Play Next
+  overlay keep separate list models and re-run their own derivation/query paths.
 - Retained tvOS Movies and TV Shows libraries use `PagingLibraryViewModel` automatic
   refresh for metadata, stop, delete, user-data, global-refresh, and connection-change
   signals. They coalesce collection queries and keep matching user-data changes
   immediate. The shared poster path now covers those grids, and Movie/top-level Show
-  Details also observe the same item state. Home posters and episode cards overlay
-  same-session shared user data; Search still uses its existing owner.
+  Details also observe the same item state. Home and Search posters and episode cards
+  overlay same-session shared user data.
 - `ServerSocketManager` already exposes a Combine event stream and command/subscription
   publishers. The app consumes playback commands and session information; activity and
   task publisher helpers also exist. No consumed Jellyfin socket event currently
@@ -246,10 +247,9 @@ the returned `UserItemDataDto`. Accepted tvOS playback progress/stop reports pub
 the acknowledged ticks. The old `itemShouldRefreshMetadata` user-data repair signal was
 removed after episode cards adopted the shared store and series descendants gained an
 authoritative ID query. `didSendStopReport`, metadata, and library membership hooks remain
-for their other consumers. Home consumes same-session typed updates through shared poster
-presentation and collection-specific invalidation; Search has not migrated its visible
-DTOs to `ItemState`. Episode-card user data is session-shared; metadata remains in each
-episode DTO.
+for their other consumers. Home and Search consume same-session typed updates through
+shared poster presentation and collection-specific invalidation. Episode-card user data
+is session-shared; metadata remains in each episode DTO.
 
 The retained Movies and TV Shows tabs explicitly opt into the shared store. Their grid
 poster wrapper observes the item state and feeds a user-data-updated copy of the same
@@ -266,12 +266,12 @@ update still advances the collection generation to reject an older in-flight sna
 An initial automatic load is rescheduled if an update invalidates it before completion.
 Other libraries retain their previous refresh policy by default.
 
-### Incremental migration and eventual cleanup
+### Incremental migration and remaining scope
 
 1. **Completed: shared poster/tile path in Movies and TV Shows.** The library snapshots
    seed the session-scoped state, and the retained Movies and TV Shows grids observe it.
-   Collection ownership and filter-driven invalidation remain local. Home posters have
-   now migrated; Search result groups still need their own migration.
+   Collection ownership and filter-driven invalidation remain local. Home and Search
+   result posters use the same shared state.
 2. **Completed: Movie and top-level TV Show Details.** The provider keeps full-item
    metadata locally and overlays same-session shared user data for the Details item and
    selected play target. Server-accepted watched/favorite changes publish typed updates;
@@ -311,26 +311,42 @@ Other libraries retain their previous refresh policy by default.
    Home poster path observes session-scoped ItemState while retaining each library DTO
    and row identity. Continue, Recently Played, and deleted-item membership changes
    requery only affected Home collections. Focus deferral remains in ContentGroupViewModel.
-5. **Search suggestions and remaining libraries.** Search result groups use the shared
-   poster path; its independent suggestion array and less common DTO views need their
-   own small adapters. Search query membership/order remains Search's responsibility.
+5. **Completed: Search result cards (Phase 5; simulator validation partial).** Search
+   cards observe session-scoped `ItemState`; query text, suggestions, result-group
+   membership/order, paging, loading/error state, and focus remain Search-owned. Search
+   targets result groups whose active played/favorite traits or user-data sorts can
+   change membership/order. Presentation-only updates do not reload Search. Simulator
+   checks passed for focus movement and the Details return path; the same Arcane result
+   returned focused with its updated favorite badge. Playback progress has no clean
+   before/after card result yet, and request-error behavior remains source-reviewed but
+   runtime-unverified. Suggestions remain a title-only local DTO array.
 
-### Phase 4 Home adoption and collection invalidation
+The planned shared presentation migration is complete for tvOS Home, Movies, TV Shows,
+Search result cards, Details, and loaded episode cards. This is not a process-wide DTO
+cache. Generic tvOS Media library and nested `ItemLibrary` routes whose
+`PagingLibraryView` has not opted into `ItemState` still render user-data indicators from
+page DTOs. The file-backed Top Shelf snapshot remains a separate Home-derived
+projection. Search suggestions remain local but show titles only. iOS presentation
+paths remain unchanged and outside this migration.
 
-`ContentGroupView` supplies the current session's store only to the tvOS Home tree.
-`PosterHStack` uses the existing item-state poster wrapper only for a registered Home
-tile, so other poster surfaces and iOS keep their current path. The wrapper applies
-canonical user data to the same `BaseItemDto` metadata snapshot; card IDs, actions,
-row order, and Home focus registrations stay owned by their existing views and models.
+### Home and Search presentation adoption and collection invalidation
 
-| Home row | Phase 4 disposition | Collection responsibility |
+`ContentGroupView` supplies the current session's store to the tvOS Home tree, and
+`SearchView` supplies it to Search result groups. `PosterHStack` uses the item-state
+poster wrapper whenever that store is present, including Search cards. The wrapper
+applies canonical user data to the same `BaseItemDto` metadata snapshot; card IDs,
+actions, row order, and focus registrations stay owned by their existing views and
+models.
+
+| Surface | Disposition | Collection responsibility |
 | --- | --- | --- |
 | Continue / Cinematic Selection | Migrated | `ResumeItemsLibrary` still fetches Resume, Next Up, and recent completion data, deduplicates by series, and sorts by activity. A new positive progress value can add an unloaded item; clearing progress can remove a loaded item; watched state, accepted stop, and server-derived ordering changes target this row. Repeated positive progress refreshes are limited to one query per 30 seconds. |
 | Recently Added Movies and Shows | Migrated | `dateCreated` query and ordering stay local; user-data changes patch presentation without a collection query. |
 | Recently Played | Migrated | Existing `ItemLibrary` played filter and `datePlayed` ordering decide when watched/stop updates require a targeted query. |
 | On Now / Recommended Programs | Migrated | Server airing membership remains local; item user-data updates do not requery the row. |
 | Latest in each library | Migrated | Premiere/date-created server ordering remains local; user-data updates do not requery the row. |
-| Search suggestions and result groups | Not migrated | Remain Phase 5; Search continues to own query membership, paging, and result order. |
+| Search result groups | Migrated | Search owns query membership, order, paging, and group identity. Active user-data traits/sorts trigger targeted group refreshes; presentation-only updates use `ItemState` without a query. |
+| Search suggestions | Local title DTOs | Suggestions are separate from result cards and display only titles; no user-data-derived presentation is shown. |
 
 `ItemUpdate.CollectionImpact` marks watched/membership mutations separately from
 presentation-only favorite and progress patches. Progress updates still pass through
@@ -339,6 +355,23 @@ when the item is not loaded, and zero targets it only when the item is loaded. A
 accepted stop always targets Continue, allowing the server to remove a completed item
 or supply its next episode. Other Home `ItemLibrary` rows retain their own filter/sort
 rules. Home deletion targets only rows that still contain the item ID.
+
+Search has a targeted invalidation hook because an item that begins matching an active
+Search trait may not already be in a loaded result page. `ItemLibrary` evaluates only the
+active played/favorite filters and user-data sorts; each affected result group advances
+its collection generation and refreshes independently. The Search check also re-evaluates
+a favorite change marked presentation-only when a favorite filter/sort is active.
+Playback-position-only updates do not query Search. Query text changes still rebuild
+Search groups through the existing Search flow.
+
+| Search refresh/update path | Phase 5 disposition | Reason |
+| --- | --- | --- |
+| Query or filter change | Required; retained | Search owns query semantics, membership, result order, and paging. |
+| User-data update with an active matching trait/sort | Required; targeted to result groups whose active criteria can change | Membership/order may change, including a result not currently loaded. |
+| User-data update with no affected trait/sort | No Search query | Visible poster appearance comes from `ItemState`. |
+| Matching-ID DTO patch in `PagingLibraryViewModel` | Retained | It keeps the paging snapshot current for iOS Search and other DTO consumers; tvOS Search poster appearance reads `ItemState`. |
+| Deleted result ID | Required; retained | The paging model removes the matching element directly. |
+| Search suggestions | Retained | First-appearance lookup shows titles only and is separate from result presentation. |
 
 The old Home refresh-all path for every `.userData` update and every accepted playback
 stop was removed. The focus coordinator still observes stop reporting, and targeted

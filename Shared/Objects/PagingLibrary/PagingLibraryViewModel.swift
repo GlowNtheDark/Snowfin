@@ -382,6 +382,16 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         return Date.now.timeIntervalSince(lastHomeCollectionRefresh) >= minimumInterval
     }
 
+    func invalidateSearchCollection(after update: ItemUpdate) -> Bool {
+        guard library.shouldRefreshSearchCollection(after: update, environment: environment) else {
+            return false
+        }
+
+        // Invalidate an older in-flight query before the targeted replacement starts.
+        collectionGeneration += 1
+        return true
+    }
+
     func shouldRefreshCollection(afterDeletingItemID itemID: String) -> Bool {
         containsItem(withID: itemID)
     }
@@ -389,6 +399,10 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     func refreshCollectionForHomeChange() async {
         collectionGeneration += 1
         lastHomeCollectionRefresh = .now
+        await background.refresh()
+    }
+
+    func refreshCollectionForSearchChange() async {
         await background.refresh()
     }
 

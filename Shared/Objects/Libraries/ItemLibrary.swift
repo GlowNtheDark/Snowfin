@@ -131,6 +131,16 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
         }
     }
 
+    func shouldRefreshSearchCollection(
+        after update: ItemUpdate,
+        environment: Environment
+    ) -> Bool {
+        // Search results can gain a new matching item even when its ID is not
+        // present in the loaded page. Evaluate only the active user-data filters
+        // and sorts; presentation-only updates remain query-free otherwise.
+        shouldRefreshCollection(after: update, environment: environment)
+    }
+
     func libraryStyleOptions(environment: Environment) -> LibraryStyleOptions {
         let itemTypes = environment.filters.itemTypes.isEmpty ?
             parent.supportedItemTypes(for: environment.grouping) :

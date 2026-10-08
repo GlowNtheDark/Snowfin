@@ -7,6 +7,7 @@
 //
 
 import Defaults
+import FactoryKit
 import SwiftUI
 
 struct SearchView: View {
@@ -32,6 +33,9 @@ struct SearchView: View {
 
     @EnvironmentObject
     private var searchFocus: TVSearchFocusCoordinator
+
+    @Injected(\.currentUserSession)
+    private var currentUserSession: UserSession?
 
     @Router
     private var router
@@ -331,6 +335,7 @@ struct SearchView: View {
         #if os(tvOS)
             .edgePadding(.top)
             .focusSection()
+            .environment(\.itemStateStore, currentUserSession?.itemStateStore)
         #else
             .searchable(
                 text: $searchQuery,

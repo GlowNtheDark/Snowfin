@@ -42,6 +42,15 @@ protocol HomeCollectionInvalidatableContentGroup {
     func refreshHomeCollection() async
 }
 
+@MainActor
+protocol SearchCollectionInvalidatableContentGroup {
+
+    var id: String { get }
+
+    func invalidateSearchCollection(after update: ItemUpdate) -> Bool
+    func refreshSearchCollection() async
+}
+
 extension ContentGroup where ViewModel == Empty {
     var viewModel: Empty {
         .init()

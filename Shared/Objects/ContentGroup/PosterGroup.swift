@@ -8,7 +8,9 @@
 
 import SwiftUI
 
-struct PosterGroup<Library: PagingLibrary>: ContentGroup, HomeCollectionInvalidatableContentGroup
+struct PosterGroup<Library: PagingLibrary>: ContentGroup,
+    HomeCollectionInvalidatableContentGroup,
+    SearchCollectionInvalidatableContentGroup
     where Library.Element: LibraryElement, Library.Element: Poster
 {
 
@@ -44,6 +46,14 @@ struct PosterGroup<Library: PagingLibrary>: ContentGroup, HomeCollectionInvalida
 
     func refreshHomeCollection() async {
         await viewModel.refreshCollectionForHomeChange()
+    }
+
+    func invalidateSearchCollection(after update: ItemUpdate) -> Bool {
+        viewModel.invalidateSearchCollection(after: update)
+    }
+
+    func refreshSearchCollection() async {
+        await viewModel.refreshCollectionForSearchChange()
     }
 
     init(
