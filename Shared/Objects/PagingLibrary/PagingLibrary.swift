@@ -51,6 +51,14 @@ protocol PagingLibrary<Element> {
         after update: ItemUpdate,
         environment: Environment
     ) -> Bool
+
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Environment,
+        containsItem: Bool
+    ) -> Bool
+
+    func homeCollectionRefreshMinimumInterval(after update: ItemUpdate) -> TimeInterval
 }
 
 extension PagingLibrary where Element: LibraryElement {
@@ -111,6 +119,19 @@ extension PagingLibrary {
         environment: Environment
     ) -> Bool {
         true
+    }
+
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Environment,
+        containsItem: Bool
+    ) -> Bool {
+        guard update.collectionImpact == .membershipOrOrder else { return false }
+        return shouldRefreshCollection(after: update, environment: environment)
+    }
+
+    func homeCollectionRefreshMinimumInterval(after update: ItemUpdate) -> TimeInterval {
+        0
     }
 }
 

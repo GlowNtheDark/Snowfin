@@ -10,7 +10,7 @@ import Combine
 import JellyfinAPI
 import SwiftUI
 
-struct CinematicSelectionContentGroup: ContentGroup {
+struct CinematicSelectionContentGroup: ContentGroup, HomeCollectionInvalidatableContentGroup {
 
     static let homeGroupID = "cinematic-selection"
 
@@ -19,6 +19,18 @@ struct CinematicSelectionContentGroup: ContentGroup {
 
     var _shouldBeResolved: Bool {
         viewModel.hasResumeItems
+    }
+
+    func shouldRefreshHomeCollection(after update: ItemUpdate) -> Bool {
+        viewModel.resumeViewModel.shouldRefreshCollection(after: update)
+    }
+
+    func shouldRefreshHomeCollection(afterDeletingItemID itemID: String) -> Bool {
+        viewModel.resumeViewModel.shouldRefreshCollection(afterDeletingItemID: itemID)
+    }
+
+    func refreshHomeCollection() async {
+        await viewModel.resumeViewModel.refreshCollectionForHomeChange()
     }
 
     init(resumeLibrary: ResumeItemsLibrary) {
@@ -79,7 +91,11 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
     }
 
     init(resumeLibrary: ResumeItemsLibrary) {
-        self.resumeViewModel = PagingLibraryViewModel(library: resumeLibrary, pageSize: 20)
+        self.resumeViewModel = PagingLibraryViewModel(
+            library: resumeLibrary,
+            pageSize: 20,
+            refreshesForItemStateChanges: true
+        )
 
         super.init()
 

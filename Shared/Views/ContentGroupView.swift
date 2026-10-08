@@ -26,6 +26,9 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
     private var viewModel: ContentGroupViewModel<Provider>
 
     #if os(tvOS)
+    @Injected(\.currentUserSession)
+    private var currentUserSession: UserSession?
+
     @State
     private var pendingFirstGroupFocus = false
     @Environment(\.registerHomeFocus)
@@ -37,8 +40,12 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         viewModel.provider is DefaultContentGroupProvider
     }
 
+    private var isHomeRefreshActive: Bool {
+        viewModel.background.is(.refreshing) || viewModel.isRefreshingHomeCollections
+    }
+
     private func resolveHomeReturn() {
-        guard isHome, router.isRootOfPath, !viewModel.background.is(.refreshing) else { return }
+        guard isHome, router.isRootOfPath, !isHomeRefreshActive else { return }
         focusCoordinator.resolveHomeReturn(rows: homeFocusRows)
     }
     #endif
@@ -151,6 +158,7 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         #if os(tvOS)
             .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
             .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
+            .environment(\.itemStateStore, isHome ? currentUserSession?.itemStateStore : nil)
             .onAppear {
                 if isHome, let navigationCoordinator = router.router.navigationCoordinator {
                     registerHomeFocus?(focusCoordinator, navigationCoordinator)
@@ -159,9 +167,12 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) { _ in
                 if isHome {
                     focusCoordinator.homeStopReported()
+                    if !isHomeRefreshActive {
+                        focusCoordinator.homeRefreshFinished()
+                    }
                 }
             }
-            .onChange(of: viewModel.background.is(.refreshing)) { wasRefreshing, refreshing in
+            .onChange(of: isHomeRefreshActive) { wasRefreshing, refreshing in
                 if isHome, wasRefreshing, !refreshing {
                     if viewModel.groups.isEmpty {
                         focusCoordinator.cancelHomeReturn()

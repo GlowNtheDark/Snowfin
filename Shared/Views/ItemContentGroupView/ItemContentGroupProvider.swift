@@ -776,7 +776,8 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             userSessionID: userSession.id,
             itemID: itemID,
             revision: revision,
-            change: .userData(response.value)
+            change: .userData(response.value),
+            collectionImpact: .presentationOnly
         ))
     }
 }

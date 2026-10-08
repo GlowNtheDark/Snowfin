@@ -104,6 +104,11 @@ enum Notifications {
 /// cannot replace a newer accepted update.
 struct ItemUpdate: Sendable {
 
+    enum CollectionImpact: Sendable, Equatable {
+        case presentationOnly
+        case membershipOrOrder
+    }
+
     enum Change: Sendable {
         case userData(UserItemDataDto)
         case playbackPositionTicks(Int)
@@ -114,6 +119,21 @@ struct ItemUpdate: Sendable {
     let itemID: String
     let revision: UInt64
     let change: Change
+    let collectionImpact: CollectionImpact
+
+    init(
+        userSessionID: UUID,
+        itemID: String,
+        revision: UInt64,
+        change: Change,
+        collectionImpact: CollectionImpact = .membershipOrOrder
+    ) {
+        self.userSessionID = userSessionID
+        self.itemID = itemID
+        self.revision = revision
+        self.change = change
+        self.collectionImpact = collectionImpact
+    }
 
     var userDataPatch: UserItemDataDto? {
         switch change {

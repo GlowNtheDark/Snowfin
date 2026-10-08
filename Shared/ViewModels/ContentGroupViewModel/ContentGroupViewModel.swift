@@ -18,15 +18,22 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
     @CasePathable
     enum Action {
         case refresh
+        case refreshHomeCollections
 
         var transition: Transition {
-            .to(.refreshing, then: .content)
-                .whenBackground(.refreshing)
+            switch self {
+            case .refresh:
+                .to(.refreshing, then: .content)
+                    .whenBackground(.refreshing)
+            case .refreshHomeCollections:
+                .background(.refreshingHomeCollections)
+            }
         }
     }
 
     enum BackgroundState {
         case refreshing
+        case refreshingHomeCollections
     }
 
     enum State {
@@ -42,6 +49,9 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
     private var candidateGroups: [any ContentGroup] = []
     private var lastRefreshDate = Date.distantPast
     private var lastRefreshSignalDate = Date.distantPast
+    private var pendingHomeCollectionIDs = Set<String>()
+    @Published
+    private(set) var isRefreshingHomeCollections = false
 
     #if os(tvOS)
     private var homeRefreshPending = false
@@ -59,44 +69,59 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
         self.provider = provider
         super.init()
 
-        let itemUserDataChanges = Notifications[.itemUserDataDidChange]
+        #if os(tvOS)
+        Notifications[.itemUserDataDidChange]
             .publisher
             .filter { [weak self] update in
                 guard let self,
                       update.userSessionID == userSession?.id
                 else { return false }
-
+                return true
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] update in
+                self?.invalidateHomeCollections(after: update)
+            }
+            .store(in: &cancellables)
+        #else
+        Notifications[.itemUserDataDidChange]
+            .publisher
+            .filter { [weak self] update in
+                guard let self,
+                      update.userSessionID == userSession?.id
+                else { return false }
                 if case .userData = update.change {
                     return true
                 }
                 return false
             }
-            .map { _ in () }
-            .eraseToAnyPublisher()
+            .sink { [weak self] _ in
+                self?.lastRefreshSignalDate = Date.now
+            }
+            .store(in: &cancellables)
+        #endif
 
         let metadataChanges = Notifications[.itemMetadataDidChange]
             .publisher
             .map { _ in () }
             .eraseToAnyPublisher()
 
-        Publishers.Merge(itemUserDataChanges, metadataChanges)
+        metadataChanges
         #if os(tvOS)
-            .receive(on: DispatchQueue.main)
+        .receive(on: DispatchQueue.main)
         #endif
-            .sink { [weak self] _ in
-                self?.lastRefreshSignalDate = Date.now
-                #if os(tvOS)
-                self?.invalidateHome()
-                #endif
-            }
-            .store(in: &cancellables)
+        .sink { [weak self] _ in
+            self?.lastRefreshSignalDate = Date.now
+            #if os(tvOS)
+            self?.invalidateHome()
+            #endif
+        }
+        .store(in: &cancellables)
 
         #if os(tvOS)
         if provider is DefaultContentGroupProvider {
             Publishers.MergeMany([
-                Notifications[.didSendStopReport].publisher.map { _ in () }.eraseToAnyPublisher(),
                 Notifications[.didRequestGlobalRefresh].publisher.map { _ in () }.eraseToAnyPublisher(),
-                Notifications[.didDeleteItem].publisher.map { _ in () }.eraseToAnyPublisher(),
             ])
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -104,6 +129,14 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
                 self?.invalidateHome()
             }
             .store(in: &cancellables)
+
+            Notifications[.didDeleteItem]
+                .publisher
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] itemID in
+                    self?.invalidateHomeCollections(afterDeletingItemID: itemID)
+                }
+                .store(in: &cancellables)
         }
         #endif
     }
@@ -130,10 +163,61 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
         }
     }
 
+    private func invalidateHomeCollections(after update: ItemUpdate) {
+        guard provider is DefaultContentGroupProvider else { return }
+
+        let affectedGroupIDs = candidateGroups.compactMap { group -> String? in
+            guard let group = group as? any HomeCollectionInvalidatableContentGroup,
+                  group.shouldRefreshHomeCollection(after: update)
+            else { return nil }
+            return group.id
+        }
+        guard affectedGroupIDs.isNotEmpty else { return }
+
+        lastRefreshSignalDate = .now
+        pendingHomeCollectionIDs.formUnion(affectedGroupIDs)
+        refreshHomeCollectionsIfPending()
+    }
+
+    private func invalidateHomeCollections(afterDeletingItemID itemID: String) {
+        guard provider is DefaultContentGroupProvider else { return }
+
+        let affectedGroupIDs = candidateGroups.compactMap { group -> String? in
+            guard let group = group as? any HomeCollectionInvalidatableContentGroup,
+                  group.shouldRefreshHomeCollection(afterDeletingItemID: itemID)
+            else { return nil }
+            return group.id
+        }
+        guard affectedGroupIDs.isNotEmpty else { return }
+
+        lastRefreshSignalDate = .now
+        pendingHomeCollectionIDs.formUnion(affectedGroupIDs)
+        refreshHomeCollectionsIfPending()
+    }
+
+    private func refreshHomeCollectionsIfPending() {
+        guard provider is DefaultContentGroupProvider,
+              !defersHomeRefresh,
+              !isRefreshingHomeCollections,
+              !pendingHomeCollectionIDs.isEmpty
+        else { return }
+
+        isRefreshingHomeCollections = true
+        Task { [weak self] in
+            guard let self else { return }
+            while !pendingHomeCollectionIDs.isEmpty {
+                await background.refreshHomeCollections()
+            }
+            lastRefreshDate = .now
+            isRefreshingHomeCollections = false
+        }
+    }
+
     func setDefersHomeRefresh(_ deferred: Bool) {
         defersHomeRefresh = deferred
         if !deferred {
             refreshHomeIfPending()
+            refreshHomeCollectionsIfPending()
         }
     }
     #endif
@@ -167,6 +251,7 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
         #if os(tvOS)
         lastRefreshDate = provider is DefaultContentGroupProvider ? refreshStartedAt : Date.now
         refreshHomeIfPending()
+        refreshHomeCollectionsIfPending()
         #else
         lastRefreshDate = Date.now
         #endif
@@ -219,12 +304,39 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
 
         let newGroups = try await provider.makeGroups(environment: provider.environment)
 
-        try await refreshViewModels(
-            for: newGroups,
-            inBackground: false
-        )
-
         candidateGroups = newGroups
+
+        do {
+            try await refreshViewModels(
+                for: newGroups,
+                inBackground: false
+            )
+        } catch {
+            candidateGroups = []
+            throw error
+        }
+
         resolveGroups()
+    }
+
+    @Function(\Action.Cases.refreshHomeCollections)
+    private func _refreshHomeCollections() async {
+        while !pendingHomeCollectionIDs.isEmpty {
+            let groupIDs = pendingHomeCollectionIDs
+            pendingHomeCollectionIDs.removeAll()
+            let groups = candidateGroups.compactMap { group -> (any HomeCollectionInvalidatableContentGroup)? in
+                guard groupIDs.contains(group.id) else { return nil }
+                return group as? any HomeCollectionInvalidatableContentGroup
+            }
+
+            await withTaskGroup(of: Void.self) { taskGroup in
+                for group in groups {
+                    taskGroup.addTask {
+                        await group.refreshHomeCollection()
+                    }
+                }
+            }
+            resolveGroups()
+        }
     }
 }

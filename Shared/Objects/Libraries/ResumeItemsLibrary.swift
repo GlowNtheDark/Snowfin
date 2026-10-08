@@ -48,22 +48,33 @@ struct ResumeItemsLibrary: BaseItemKindLibrary {
         #endif
     }
 
-    func onItemUserDataChanged(
-        viewModel: PagingLibraryViewModel<ResumeItemsLibrary>,
-        userData: UserItemDataDto
-    ) {
-        guard let itemID = userData.itemID else { return }
-
-        if userData.isPlayed == true {
-            viewModel.elements.removeAll { $0.id == itemID }
-            return
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Empty,
+        containsItem: Bool
+    ) -> Bool {
+        switch update.change {
+        case let .playbackPositionTicks(ticks):
+            return ticks > 0 ? !containsItem : containsItem
+        case .playbackStopped:
+            return true
+        case let .userData(userData):
+            guard update.collectionImpact == .membershipOrOrder else { return false }
+            if userData.isPlayed != nil {
+                return true
+            }
+            if let ticks = userData.playbackPositionTicks {
+                return ticks > 0 ? !containsItem : containsItem
+            }
+            return userData.lastPlayedDate != nil && containsItem
         }
+    }
 
-        let isAlreadyLoaded = viewModel.elements.contains { $0.id == itemID }
-        guard !isAlreadyLoaded else { return }
-        guard (userData.playbackPositionTicks ?? 0) > 0 else { return }
-
-        viewModel.scheduleRefreshForItemUserData(minimumInterval: 30)
+    func homeCollectionRefreshMinimumInterval(after update: ItemUpdate) -> TimeInterval {
+        if case let .playbackPositionTicks(ticks) = update.change, ticks > 0 {
+            return 30
+        }
+        return 0
     }
 }
 

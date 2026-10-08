@@ -13,6 +13,13 @@ struct RecommendedProgramsLibrary: BaseItemKindLibrary {
     let libraryItemTypes: [BaseItemKind] = [.program]
     let parent: TitledLibraryParent = .init(displayTitle: L10n.onNow, id: "programs-recommended")
 
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Empty
+    ) -> Bool {
+        false
+    }
+
     func retrievePage(
         environment: Empty,
         pageState: LibraryPageState

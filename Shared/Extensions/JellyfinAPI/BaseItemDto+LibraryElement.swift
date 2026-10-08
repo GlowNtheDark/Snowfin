@@ -98,7 +98,7 @@ private struct BaseItemDtoLibraryGridElement: View {
     }
 }
 
-private struct ItemStatePoster: View {
+struct ItemStatePoster: View {
 
     @ObservedObject
     var itemState: ItemState

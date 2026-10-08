@@ -202,7 +202,8 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
                     userSessionID: userSession.id,
                     itemID: itemID,
                     revision: revision,
-                    change: .playbackPositionTicks(ticks)
+                    change: .playbackPositionTicks(ticks),
+                    collectionImpact: .presentationOnly
                 ))
                 let previous = lastNotifiedProgressTicks[itemID]
                 // Use acknowledged reports, not the player's high-frequency clock.

@@ -93,6 +93,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     let library: Library
     let pageSize: Int
     let automaticallyRefreshes: Bool
+    let refreshesForItemStateChanges: Bool
 
     // Opted into only by the retained tvOS TV Shows tab. A successful empty
     // response counts as loaded; collection emptiness is not a loading flag.
@@ -104,6 +105,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     private var automaticRefreshTask: AnyCancellable?
     private var queryGeneration = 0
     private var collectionGeneration = 0
+    private var lastHomeCollectionRefresh = Date.distantPast
     private let automaticRefreshInterval: TimeInterval = 300
 
     private var hasNextPage: Bool
@@ -142,9 +144,11 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     init(
         library: Library,
         pageSize: Int = defaultPagingLibraryPageSize,
-        automaticallyRefreshes: Bool = false
+        automaticallyRefreshes: Bool = false,
+        refreshesForItemStateChanges: Bool = false
     ) {
         self.automaticallyRefreshes = automaticallyRefreshes
+        self.refreshesForItemStateChanges = refreshesForItemStateChanges
         self.elements = IdentifiedArray([], uniquingIDsWith: { existing, _ in existing })
         self.environment = library.environment ?? .default
         self.searchElements = IdentifiedArray([], uniquingIDsWith: { existing, _ in existing })
@@ -159,8 +163,13 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         Notifications[.didDeleteItem]
             .publisher
             .sink { [weak self] id in
-                self?.removeDeletedItem(withID: id)
-                self?.invalidateAutomaticCollection()
+                guard let self else { return }
+                if refreshesForItemStateChanges {
+                    collectionGeneration += 1
+                } else {
+                    removeDeletedItem(withID: id)
+                }
+                invalidateAutomaticCollection()
             }
             .store(in: &cancellables)
 
@@ -174,6 +183,12 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
                 updateItemUserData(update)
                 if let userData = update.userDataPatch {
                     library.onItemUserDataChanged(viewModel: self, userData: userData)
+                }
+                if refreshesForItemStateChanges,
+                   shouldRefreshCollection(after: update)
+                {
+                    // Reject any snapshot that began before this membership/order change.
+                    collectionGeneration += 1
                 }
                 invalidateAutomaticCollection(
                     requestRefresh: library.shouldRefreshCollection(
@@ -350,9 +365,31 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         }
     }
 
-    private func containsItem(withID itemID: String) -> Bool {
+    func containsItem(withID itemID: String) -> Bool {
         elements.contains { ($0 as? BaseItemDto)?.id == itemID } ||
             searchElements.contains { ($0 as? BaseItemDto)?.id == itemID }
+    }
+
+    func shouldRefreshCollection(after update: ItemUpdate) -> Bool {
+        let shouldRefresh = library.shouldRefreshCollection(
+            after: update,
+            environment: environment,
+            containsItem: containsItem(withID: update.itemID)
+        )
+        guard shouldRefresh else { return false }
+
+        let minimumInterval = library.homeCollectionRefreshMinimumInterval(after: update)
+        return Date.now.timeIntervalSince(lastHomeCollectionRefresh) >= minimumInterval
+    }
+
+    func shouldRefreshCollection(afterDeletingItemID itemID: String) -> Bool {
+        containsItem(withID: itemID)
+    }
+
+    func refreshCollectionForHomeChange() async {
+        collectionGeneration += 1
+        lastHomeCollectionRefresh = .now
+        await background.refresh()
     }
 
     func scheduleRefreshForItemUserData(

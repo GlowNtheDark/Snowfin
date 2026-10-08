@@ -19,6 +19,14 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
     let displayTitle: String = L10n.home
     let id: String = "default-content-group-provider"
 
+    private var refreshesForItemStateChanges: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     func makeGroups(environment: Empty) async throws -> [any ContentGroup] {
         guard let userSession else { return [] }
         let parameters = Paths.GetUserViewsParameters(userID: userSession.user.id)
@@ -72,7 +80,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                     itemTypes: [.movie],
                     title: "\(L10n.recentlyAdded.localizedCapitalized) \(L10n.movies)",
                     id: "recently-added-movies"
-                )
+                ),
+                refreshesForItemStateChanges: refreshesForItemStateChanges
             )
 
             PosterGroup(
@@ -81,7 +90,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                     itemTypes: [.series],
                     title: "\(L10n.recentlyAdded.localizedCapitalized) \(L10n.tvShowsCapitalized)",
                     id: "recently-added-tv-shows"
-                )
+                ),
+                refreshesForItemStateChanges: refreshesForItemStateChanges
             )
             #else
             PosterGroup(
@@ -92,7 +102,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                         sortBy: [.dateCreated],
                         sortOrder: [.descending]
                     )
-                )
+                ),
+                refreshesForItemStateChanges: refreshesForItemStateChanges
             )
             #endif
         }
@@ -107,7 +118,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                         sortOrder: [.descending],
                         traits: [.isPlayed]
                     )
-                )
+                ),
+                refreshesForItemStateChanges: refreshesForItemStateChanges
             )
         }
 
@@ -115,7 +127,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
             id: "programs-recommended",
             library: RecommendedProgramsLibrary(),
             posterDisplayType: .landscape,
-            posterSize: .small
+            posterSize: .small,
+            refreshesForItemStateChanges: refreshesForItemStateChanges
         )
 
         userViews
@@ -124,7 +137,8 @@ struct DefaultContentGroupProvider: ContentGroupProvider {
                 PosterGroup(
                     library: $0,
                     posterDisplayType: $0.libraryItemTypes.contains(.movie) || $0.libraryItemTypes
-                        .contains(.series) ? .portrait : .landscape
+                        .contains(.series) ? .portrait : .landscape,
+                    refreshesForItemStateChanges: refreshesForItemStateChanges
                 )
             }
     }

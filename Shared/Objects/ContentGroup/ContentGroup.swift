@@ -32,6 +32,16 @@ extension ContentGroup {
     }
 }
 
+@MainActor
+protocol HomeCollectionInvalidatableContentGroup {
+
+    var id: String { get }
+
+    func shouldRefreshHomeCollection(after update: ItemUpdate) -> Bool
+    func shouldRefreshHomeCollection(afterDeletingItemID itemID: String) -> Bool
+    func refreshHomeCollection() async
+}
+
 extension ContentGroup where ViewModel == Empty {
     var viewModel: Empty {
         .init()

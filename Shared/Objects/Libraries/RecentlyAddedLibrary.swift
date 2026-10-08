@@ -22,6 +22,13 @@ struct RecentlyAddedLibrary: BaseItemKindLibrary {
         self.parent = .init(displayTitle: title, id: id)
     }
 
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Empty
+    ) -> Bool {
+        false
+    }
+
     func retrievePage(
         environment: Empty,
         pageState: LibraryPageState

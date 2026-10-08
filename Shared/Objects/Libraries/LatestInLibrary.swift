@@ -22,6 +22,13 @@ struct LatestInLibrary: BaseItemKindLibrary {
         self.libraryItemTypes = library.supportedItemTypes
     }
 
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Empty
+    ) -> Bool {
+        false
+    }
+
     func retrievePage(
         environment: Empty,
         pageState: LibraryPageState

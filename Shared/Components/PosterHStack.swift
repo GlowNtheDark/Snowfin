@@ -7,6 +7,7 @@
 //
 
 import CollectionHStack
+import JellyfinAPI
 import Nuke
 import SwiftUI
 
@@ -208,24 +209,50 @@ struct PosterHStack<
         }
     }
 
+    @ViewBuilder
+    private func posterButton(for item: Data.Element) -> some View {
+        #if os(tvOS)
+        if environment.homeTileCoordinator != nil,
+           let baseItem = item as? BaseItemDto,
+           let itemState = environment.itemStateStore?.state(for: baseItem)
+        {
+            ItemStatePoster(
+                itemState: itemState,
+                item: baseItem,
+                displayType: displayType
+            ) { _, namespace in
+                action(item, namespace)
+            }
+        } else {
+            standardPosterButton(for: item)
+        }
+        #else
+        standardPosterButton(for: item)
+        #endif
+    }
+
+    private func standardPosterButton(for item: Data.Element) -> some View {
+        PosterButton(
+            item: item,
+            displayType: displayType,
+            size: size
+        ) { namespace in
+            action(item, namespace)
+        }
+    }
+
     var body: some View {
         CollectionHStack(
             uniqueElements: elements,
             layout: layout
         ) { item in
-            PosterButton(
-                item: item,
-                displayType: displayType,
-                size: size
-            ) { namespace in
-                action(item, namespace)
-            }
+            posterButton(for: item)
             #if os(tvOS)
-            .environment(\.homeFocusTile, homeTiles.first { tile in
-                FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
-            })
-            .environment(\.posterHStackFocusController, focusController)
-            .environment(\.posterHStackFocusIndex, elements.firstIndex(of: item))
+                .environment(\.homeFocusTile, homeTiles.first { tile in
+                    FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
+                })
+                .environment(\.posterHStackFocusController, focusController)
+                .environment(\.posterHStackFocusIndex, elements.firstIndex(of: item))
             #endif
         }
         .clipsToBounds(false)

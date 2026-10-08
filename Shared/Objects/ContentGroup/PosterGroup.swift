@@ -8,7 +8,9 @@
 
 import SwiftUI
 
-struct PosterGroup<Library: PagingLibrary>: ContentGroup where Library.Element: LibraryElement, Library.Element: Poster {
+struct PosterGroup<Library: PagingLibrary>: ContentGroup, HomeCollectionInvalidatableContentGroup
+    where Library.Element: LibraryElement, Library.Element: Poster
+{
 
     struct Environment: WithDefaultValue, WithViewContext {
 
@@ -32,20 +34,16 @@ struct PosterGroup<Library: PagingLibrary>: ContentGroup where Library.Element: 
         viewModel.elements.isNotEmpty
     }
 
-    init(
-        id: String = UUID().uuidString,
-        library: Library,
-        posterDisplayType: PosterDisplayType = .portrait,
-        posterSize: PosterDisplayType.Size = .small,
-        environment: Environment
-    ) {
-        self.displayTitle = library.parent.displayTitle
-        self.environment = environment
-        self.id = id
-        self.library = library
-        self.posterDisplayType = posterDisplayType
-        self.posterSize = posterSize
-        self.viewModel = .init(library: library, pageSize: 20)
+    func shouldRefreshHomeCollection(after update: ItemUpdate) -> Bool {
+        viewModel.refreshesForItemStateChanges && viewModel.shouldRefreshCollection(after: update)
+    }
+
+    func shouldRefreshHomeCollection(afterDeletingItemID itemID: String) -> Bool {
+        viewModel.refreshesForItemStateChanges && viewModel.shouldRefreshCollection(afterDeletingItemID: itemID)
+    }
+
+    func refreshHomeCollection() async {
+        await viewModel.refreshCollectionForHomeChange()
     }
 
     init(
@@ -53,14 +51,37 @@ struct PosterGroup<Library: PagingLibrary>: ContentGroup where Library.Element: 
         library: Library,
         posterDisplayType: PosterDisplayType = .portrait,
         posterSize: PosterDisplayType.Size = .small,
-        _viewContext: ViewContext? = nil
+        environment: Environment,
+        refreshesForItemStateChanges: Bool = false
+    ) {
+        self.displayTitle = library.parent.displayTitle
+        self.environment = environment
+        self.id = id
+        self.library = library
+        self.posterDisplayType = posterDisplayType
+        self.posterSize = posterSize
+        self.viewModel = .init(
+            library: library,
+            pageSize: 20,
+            refreshesForItemStateChanges: refreshesForItemStateChanges
+        )
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        library: Library,
+        posterDisplayType: PosterDisplayType = .portrait,
+        posterSize: PosterDisplayType.Size = .small,
+        _viewContext: ViewContext? = nil,
+        refreshesForItemStateChanges: Bool = false
     ) {
         self.init(
             id: id,
             library: library,
             posterDisplayType: posterDisplayType,
             posterSize: posterSize,
-            environment: .init(viewContext: _viewContext ?? .init())
+            environment: .init(viewContext: _viewContext ?? .init()),
+            refreshesForItemStateChanges: refreshesForItemStateChanges
         )
     }
 
