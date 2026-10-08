@@ -13,6 +13,34 @@ extension SeriesEpisodeContentGroup {
 
     struct EpisodeCard: View {
 
+        @Environment(\.itemStateStore)
+        private var itemStateStore
+
+        let episode: BaseItemDto
+
+        var body: some View {
+            if let itemState = itemStateStore?.state(for: episode) {
+                EpisodeCardWithItemState(itemState: itemState, episode: episode)
+            } else {
+                EpisodeCardContent(episode: episode)
+            }
+        }
+    }
+
+    private struct EpisodeCardWithItemState: View {
+
+        @ObservedObject
+        var itemState: ItemState
+
+        let episode: BaseItemDto
+
+        var body: some View {
+            EpisodeCardContent(episode: itemState.applying(to: episode))
+        }
+    }
+
+    private struct EpisodeCardContent: View {
+
         @Environment(\.posterConfiguration)
         private var posterConfiguration
 

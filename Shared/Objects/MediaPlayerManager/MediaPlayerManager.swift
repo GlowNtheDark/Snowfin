@@ -307,7 +307,6 @@ final class MediaPlayerManager: ViewModel {
             revision: revision,
             change: .userData(response.value)
         ))
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
         try await replacePlaybackItem(with: provider)
     }
 

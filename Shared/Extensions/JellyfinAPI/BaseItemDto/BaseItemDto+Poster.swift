@@ -362,7 +362,16 @@ private struct BaseItemDtoPosterContextMenu: View {
             revision: revision,
             change: .userData(response.value)
         ))
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        #if os(tvOS)
+        if item.type == .series {
+            Notifications[.seriesDescendantUserDataNeedsReconciliation].post(
+                SeriesDescendantUserDataReconciliation(
+                    userSessionID: userSession.id,
+                    seriesID: itemID
+                )
+            )
+        }
+        #endif
     }
 
     private func setIsFavorite(_ isFavorite: Bool) async throws {
@@ -392,7 +401,6 @@ private struct BaseItemDtoPosterContextMenu: View {
             revision: revision,
             change: .userData(response.value)
         ))
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 }
 

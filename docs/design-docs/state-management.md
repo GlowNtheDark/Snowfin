@@ -156,15 +156,22 @@ ordering changes may remove or move a tile and need the existing focus restorati
   state for Play/Resume presentation. Accepted watched/favorite changes publish typed
   updates, and the Details provider relays shared-state changes without rebuilding the
   route. Playback target metadata/source selection, groups, trailers, backdrop, and
-  route/focus state remain locally owned. Home, Search, and episode-card DTOs still use
-  their existing owners.
-- Show Details episode rows are nested paging models. A series-wide Mark Unwatched
-  returns user data for the series, not each loaded episode. The separate
-  `itemShouldRefreshMetadata` string notification is matched to the series parent by
-  `SeriesEpisodeContentGroup`; it explicitly refetches the selected and already-loaded
-  season episode collections and bumps a row revision. Without that targeted refresh,
-  episode indicators keep their old DTOs. This is a local repair for a missing shared
-  item update path.
+  route/focus state remain locally owned. Home and Search still use their existing
+  owners. Episode-card metadata and routing use the local DTO, with user-data presentation
+  overlaid from the same session's ItemState.
+- Show Details episode rows remain nested paging models. A series-level unplayed response
+  contains one `UserItemDataDto` for the requested series, not descendant episode DTOs;
+  current upstream Jellyfin `MarkUnplayedItem` returns that single item result
+  ([controller source](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/PlaystateController.cs#L1515-L1566)).
+  The simulator server version and raw response body were not captured. A typed
+  reconciliation request therefore queries the IDs already present in selected or
+  previously loaded season rows. Only returned child user data is published as typed
+  item updates; the season collections are not refetched or recreated. The separate
+  itemShouldRefreshMetadata notification and row-revision repair have been removed. The
+  season selector itself displays titles only. The separate Seasons poster group displays
+  the season DTO's server userData through the existing poster indicators; it does not
+  recompute season aggregates from episodes. Loaded season IDs are included in the same
+  authoritative reconciliation query.
 - `ContentGroupViewModel` listens for item user-data/metadata changes. For tvOS Home,
   the Default provider refreshes all candidate groups; focus coordination can defer
   that refresh. Continue also applies its library-specific membership logic: played
@@ -176,8 +183,8 @@ ordering changes may remove or move a tile and need the existing focus restorati
   refresh for metadata, stop, delete, user-data, global-refresh, and connection-change
   signals. They coalesce collection queries and keep matching user-data changes
   immediate. The shared poster path now covers those grids, and Movie/top-level Show
-  Details also observe the same item state. Home, Search, and episode representations
-  still use their existing owners.
+  Details also observe the same item state. Home and Search still use their existing
+  owners; episode cards overlay same-session shared user data.
 - `ServerSocketManager` already exposes a Combine event stream and command/subscription
   publishers. The app consumes playback commands and session information; activity and
   task publisher helpers also exist. No consumed Jellyfin socket event currently
@@ -236,11 +243,13 @@ The `itemUserDataDidChange` payload now supports `.userData`,
 `.playbackPositionTicks`, and `.playbackStopped(positionTicks:)`. Existing server-backed
 poster and Details toggles, series-unwatch flow, and playback-completion path publish
 the returned `UserItemDataDto`. Accepted tvOS playback progress/stop reports publish
-the acknowledged ticks. Existing `didSendStopReport`, metadata-refresh, and library
-membership hooks remain available. Home consumes same-session `.userData` updates
-through its existing group refresh path; Home and Search have not migrated their visible
-DTOs to `ItemState`. Details migration is recorded below. Episode-card DTOs have not
-migrated.
+the acknowledged ticks. The old `itemShouldRefreshMetadata` user-data repair signal was
+removed after episode cards adopted the shared store and series descendants gained an
+authoritative ID query. `didSendStopReport`, metadata, and library membership hooks remain
+for their other consumers. Home consumes same-session `.userData` updates through its
+existing group refresh path; Home and Search have not migrated their visible DTOs to
+`ItemState`. Episode-card user data is now session-shared; metadata remains in each
+episode DTO.
 
 The retained Movies and TV Shows tabs explicitly opt into the shared store. Their grid
 poster wrapper observes the item state and feeds a user-data-updated copy of the same
@@ -267,21 +276,38 @@ Other libraries retain their previous refresh policy by default.
    metadata locally and overlays same-session shared user data for the Details item and
    selected play target. Server-accepted watched/favorite changes publish typed updates;
    the Details view and retained Movies/TV Shows cards observe the same item state. The
-   playback-stop full-item fetch and series `itemShouldRefreshMetadata` loaded-season
-   refresh remain in place for this migration phase. The exact-ID playback-stop fetch is
-   temporarily redundant for shared progress presentation, but remains for authoritative
-   metadata and playback-provider refresh. The series notification and loaded-season
-   refetch remain required for unmigrated episode rows. Details action callbacks no longer
+   playback-stop full-item fetch remains for authoritative metadata and playback-provider
+   refresh. Details action callbacks no longer
    mutate a private user-data copy; successful server responses publish the shared update.
    Full snapshots seed user data only while an item's typed-update revision is still zero;
    later snapshots refresh metadata without overwriting accepted watched/favorite/progress
    state. Superseded fetch generations are discarded. Details routes, groups, and focus
    ownership remain local.
-3. **Phase 3: season and episode rows.** Adopt shared item state in loaded episode cards and
-   route series-wide changes to affected children. Remove the explicit loaded-season
-   refresh/revision repair only after the same series-unwatch flow updates every loaded
-   episode row and membership remains correct.
-4. **Home and Continue.** Migrate the custom Cinematic Selection row and its separate
+3. **Completed: Show Details episode rows (Phase 3).** On tvOS, loaded episode cards
+   observe the session's ItemState while retaining their full server metadata DTO for
+   labels, images, routing, and actions. Episode pages seed state from the server only
+   before a newer typed update exists; later user-data snapshots are overlaid from the
+   canonical state. After a server-accepted series-level unplayed mutation, the Show
+   Details owner queries exact IDs in loaded season rows and publishes only the returned
+   child user data. Loaded season IDs are queried as well, so the season poster group
+   receives server-backed user data without a client-side aggregate. This avoids season
+   collection refetches and episode-row identity changes. Session IDs gate both the
+   reconciliation trigger and response; request-start revisions let a later progress
+   or mutation update win. Runtime checks on the Apple TV 4K (3rd generation) 1080p
+   simulator loaded two Arcane seasons. An individual episode Played action appeared on
+   the loaded card after returning from Episode Details; a later series Mark Unwatched
+   cleared that marker in place while the action stayed focused. Playback stop showed
+   acknowledged progress on the same loaded episode card without reopening Show Details;
+   after starting playback from the episode artwork, Back restored focus to that exact
+   episode's metadata while its progress indicator remained visible.
+   An explicit near-end Play Next transition marked the finished episode watched in
+   place, advanced Continue to the next episode, and a subsequent series Mark Unwatched
+   cleared the completed marker. After that reset, Arcane was absent from the Home
+   Continue row through its rightmost focused card. The exact before/after response DTOs
+   were not captured, and no clear season-level aggregate indicator was visible at
+   runtime; source inspection confirms season indicators use server-provided Season DTO
+   user data and do not locally aggregate episode state. No physical Apple TV was tested.
+4. **Home and Continue (Phase 4).** Migrate the custom Cinematic Selection row and its separate
    resume model. Replace Home's refresh-all-groups response to item changes with
    targeted list invalidation only after each Home library reports whether the event
    affects its membership/order. Keep accepted-stop refresh and focus deferral until
@@ -293,8 +319,9 @@ Other libraries retain their previous refresh policy by default.
 After each owner is migrated, the following local repairs can be retired where the
 store/event path provides equivalent behavior:
 
-- per-surface `itemShouldRefreshMetadata` plus loaded-season refresh for series-wide
-  user-data changes (retain through Phase 3 episode-row migration);
+- series `itemShouldRefreshMetadata` notification and loaded-season collection refresh
+  after a series-level unplayed mutation (removed in Phase 3; replaced by exact-ID child
+  user-data reconciliation);
 - full Details item fetches after an exact-ID playback stop (shared acknowledged ticks
   now update presentation; retain the fetch until authoritative metadata/playback-provider
   refresh coverage is proven);

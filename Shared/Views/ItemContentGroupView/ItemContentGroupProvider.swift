@@ -555,9 +555,16 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
                 Notifications[.didRequestGlobalRefresh].post()
             } else {
                 // A newer item update arrived while the authoritative recovery fetch was in flight.
-                // Keep that shared state and let the normal metadata refresh repair dependent rows.
+                // Keep that shared state; loaded episode rows reconcile from their own server query.
             }
-            Notifications[.itemShouldRefreshMetadata].post(itemID)
+            #if os(tvOS)
+            Notifications[.seriesDescendantUserDataNeedsReconciliation].post(
+                SeriesDescendantUserDataReconciliation(
+                    userSessionID: userSession.id,
+                    seriesID: itemID
+                )
+            )
+            #endif
 
             throw ErrorMessage(
                 "Could not mark the series as unwatched. Jellyfin may have updated only part of the series. Refresh and check the current state. \(error.localizedDescription)"
@@ -573,7 +580,14 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         #if !os(tvOS)
         itemSnapshot.userData = updatedUserData
         #endif
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        #if os(tvOS)
+        Notifications[.seriesDescendantUserDataNeedsReconciliation].post(
+            SeriesDescendantUserDataReconciliation(
+                userSessionID: userSession.id,
+                seriesID: itemID
+            )
+        )
+        #endif
 
         do {
             let refreshedMediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
@@ -728,7 +742,16 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             revision: revision,
             change: .userData(response.value)
         ))
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        #if os(tvOS)
+        if item.type == .series {
+            Notifications[.seriesDescendantUserDataNeedsReconciliation].post(
+                SeriesDescendantUserDataReconciliation(
+                    userSessionID: userSession.id,
+                    seriesID: itemID
+                )
+            )
+        }
+        #endif
     }
 
     private func setIsFavorite(_ isFavorite: Bool) async throws {
@@ -755,6 +778,5 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             revision: revision,
             change: .userData(response.value)
         ))
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 }

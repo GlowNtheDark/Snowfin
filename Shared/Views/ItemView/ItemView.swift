@@ -145,6 +145,7 @@ struct ItemView: View {
         #endif
         .environmentObject(focusCoordinator)
         #if os(tvOS)
+            .environment(\.itemStateStore, provider.userSession?.itemStateStore)
             .toolbarVisibility(.hidden, for: .navigationBar)
         #else
             .navigationBarMenuButton(

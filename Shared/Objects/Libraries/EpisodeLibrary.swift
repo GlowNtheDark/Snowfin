@@ -39,7 +39,22 @@ struct EpisodeLibrary: BaseItemKindLibrary {
             parameters: parameters
         )
         let response = try await pageState.userSession.client.send(request)
+        let episodes = response.value.items ?? []
 
-        return response.value.items ?? []
+        #if os(tvOS)
+        return episodes.map { episode in
+            guard let itemState = pageState.userSession.itemStateStore.state(for: episode) else {
+                return episode
+            }
+
+            if itemState.revision == 0 {
+                itemState.mergeSnapshot(episode.userData)
+            }
+
+            return itemState.applying(to: episode)
+        }
+        #else
+        return episodes
+        #endif
     }
 }

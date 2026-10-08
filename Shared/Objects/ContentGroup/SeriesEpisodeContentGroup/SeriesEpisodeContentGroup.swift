@@ -55,8 +55,6 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
 
         @State
         private var selection: PagingLibraryViewModel<EpisodeLibrary>.ID?
-        @State
-        private var episodeCollectionRevision = 0
 
         private var selectedSeasonViewModel: PagingLibraryViewModel<EpisodeLibrary>? {
             viewModel.elements.first { $0.id == selection }
@@ -91,18 +89,65 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
             selectedSeasonViewModel.refresh()
         }
 
-        private func refreshLoadedSeasons(for itemID: String) async {
-            guard itemID == parentID else { return }
+        private func reconcileLoadedItemUserData(
+            for reconciliation: SeriesDescendantUserDataReconciliation
+        ) async {
+            guard reconciliation.seriesID == parentID,
+                  let userSession = viewModel.userSession,
+                  userSession.id == reconciliation.userSessionID
+            else { return }
 
-            let loadedSeasons = viewModel.elements.filter {
+            let loadedEpisodeSeasons = viewModel.elements.filter {
                 $0.id == selection || $0.state != .initial
             }
+            var seenItemIDs = Set<String>()
+            let seasonIDs = viewModel.elements
+                .compactMap(\.library.parent.id)
+                .filter { seenItemIDs.insert($0).inserted }
+            let episodeIDs = loadedEpisodeSeasons
+                .flatMap(\.elements)
+                .compactMap(\.id)
+                .filter { seenItemIDs.insert($0).inserted }
+            let itemIDs = seasonIDs + episodeIDs
 
-            for seasonViewModel in loadedSeasons {
-                await seasonViewModel.background.refresh()
+            guard itemIDs.isNotEmpty else { return }
+
+            for offset in stride(from: 0, to: itemIDs.count, by: 100) {
+                let batchIDs = Array(itemIDs[offset ..< min(offset + 100, itemIDs.count)])
+                let requestedIDs = Set(batchIDs)
+                let revision = DispatchTime.now().uptimeNanoseconds
+
+                var parameters = Paths.GetItemsParameters()
+                parameters.enableUserData = true
+                parameters.ids = batchIDs
+                parameters.userID = userSession.user.id
+
+                do {
+                    let response = try await userSession.client.send(
+                        Paths.getItems(parameters: parameters)
+                    )
+                    guard viewModel.userSession?.id == userSession.id else { return }
+
+                    for item in response.value.items ?? [] {
+                        guard let itemID = item.id,
+                              requestedIDs.contains(itemID),
+                              let userData = item.userData
+                        else { continue }
+
+                        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+                            userSessionID: userSession.id,
+                            itemID: itemID,
+                            revision: revision,
+                            change: .userData(userData)
+                        ))
+                    }
+                } catch {
+                    viewModel.logger.error(
+                        "Unable to reconcile loaded season and episode user data after a series update: \(error.localizedDescription)"
+                    )
+                    return
+                }
             }
-
-            episodeCollectionRevision &+= 1
         }
 
         @ViewBuilder
@@ -112,15 +157,13 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
                     SeasonEpisodesView(
                         seasonViewModel: selectedSeasonViewModel,
                         focusSeasonSelector: isSeriesDetails,
-                        episodeCollectionRevision: episodeCollectionRevision,
                         playButtonItem: playButtonItem
                     ) {
                         seasonSelectorView
                     }
                 } else {
                     LoadingEpisodesView(
-                        focusSeasonSelector: isSeriesDetails,
-                        episodeCollectionRevision: episodeCollectionRevision
+                        focusSeasonSelector: isSeriesDetails
                     ) {
                         seasonSelectorView
                     }
@@ -137,9 +180,12 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
                 refreshSelectedSeasonIfNeeded()
             }
             #if os(tvOS)
-            .onReceive(Notifications[.itemShouldRefreshMetadata].publisher.receive(on: DispatchQueue.main)) { itemID in
+            .onReceive(
+                Notifications[.seriesDescendantUserDataNeedsReconciliation].publisher
+                    .receive(on: DispatchQueue.main)
+            ) { reconciliation in
                 Task { @MainActor in
-                    await refreshLoadedSeasons(for: itemID)
+                    await reconcileLoadedItemUserData(for: reconciliation)
                 }
             }
             #endif

@@ -129,6 +129,13 @@ struct ItemUpdate: Sendable {
     }
 }
 
+/// Requests an authoritative refresh of already-loaded episode user data after
+/// a series-level play-state mutation.
+struct SeriesDescendantUserDataReconciliation: Sendable {
+    let userSessionID: UUID
+    let seriesID: String
+}
+
 // MARK: - Keys
 
 extension Notifications.Key {
@@ -165,14 +172,13 @@ extension Notifications.Key {
         Key("itemUserDataDidChange")
     }
 
+    static var seriesDescendantUserDataNeedsReconciliation: Key<SeriesDescendantUserDataReconciliation> {
+        Key("seriesDescendantUserDataNeedsReconciliation")
+    }
+
     /// - Payload: The new item with updated metadata.
     static var itemMetadataDidChange: Key<BaseItemDto> {
         Key("itemMetadataDidChange")
-    }
-
-    /// - Payload: The ID of the item that should refresh
-    static var itemShouldRefreshMetadata: Key<String> {
-        Key("itemShouldRefresh")
     }
 
     /// - Payload: The ID of the deleted item.

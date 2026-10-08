@@ -39,16 +39,13 @@ extension SeriesEpisodeContentGroup {
     struct LoadingEpisodesView<Header: View>: View {
 
         let focusSeasonSelector: Bool
-        let episodeCollectionRevision: Int
         let header: Header
 
         init(
             focusSeasonSelector: Bool,
-            episodeCollectionRevision: Int,
             @ViewBuilder header: () -> Header
         ) {
             self.focusSeasonSelector = focusSeasonSelector
-            self.episodeCollectionRevision = episodeCollectionRevision
             self.header = header()
         }
 
@@ -56,8 +53,7 @@ extension SeriesEpisodeContentGroup {
             EpisodeCollectionLayout(
                 elements: EpisodeElement.loadingElements,
                 preferredElementID: EpisodeElement.loadingElements.first?.id,
-                focusSeasonSelector: focusSeasonSelector,
-                episodeCollectionRevision: episodeCollectionRevision
+                focusSeasonSelector: focusSeasonSelector
             ) {
                 header
             } content: { element in
@@ -73,20 +69,17 @@ extension SeriesEpisodeContentGroup {
         var seasonViewModel: PagingLibraryViewModel<EpisodeLibrary>
 
         let focusSeasonSelector: Bool
-        let episodeCollectionRevision: Int
         let playButtonItem: BaseItemDto?
         let header: Header
 
         init(
             seasonViewModel: PagingLibraryViewModel<EpisodeLibrary>,
             focusSeasonSelector: Bool,
-            episodeCollectionRevision: Int,
             playButtonItem: BaseItemDto?,
             @ViewBuilder header: () -> Header
         ) {
             self.seasonViewModel = seasonViewModel
             self.focusSeasonSelector = focusSeasonSelector
-            self.episodeCollectionRevision = episodeCollectionRevision
             self.playButtonItem = playButtonItem
             self.header = header()
         }
@@ -120,8 +113,7 @@ extension SeriesEpisodeContentGroup {
             EpisodeCollectionLayout(
                 elements: elements,
                 preferredElementID: preferredElementID,
-                focusSeasonSelector: focusSeasonSelector,
-                episodeCollectionRevision: episodeCollectionRevision
+                focusSeasonSelector: focusSeasonSelector
             ) {
                 header
             } content: { element in
@@ -148,7 +140,6 @@ extension SeriesEpisodeContentGroup {
         let elements: [EpisodeElement]
         let preferredElementID: EpisodeElement.ID?
         let focusSeasonSelector: Bool
-        let episodeCollectionRevision: Int
         let header: Header
         let content: (EpisodeElement) -> Content
 
@@ -156,14 +147,12 @@ extension SeriesEpisodeContentGroup {
             elements: [EpisodeElement],
             preferredElementID: EpisodeElement.ID?,
             focusSeasonSelector: Bool = false,
-            episodeCollectionRevision: Int = 0,
             @ViewBuilder header: () -> Header,
             @ViewBuilder content: @escaping (EpisodeElement) -> Content
         ) {
             self.elements = elements
             self.preferredElementID = preferredElementID
             self.focusSeasonSelector = focusSeasonSelector
-            self.episodeCollectionRevision = episodeCollectionRevision
             self.header = header()
             self.content = content
         }
@@ -227,7 +216,6 @@ extension SeriesEpisodeContentGroup {
                     preferredElementID,
                     priority: .userInitiated
                 )
-                .id(episodeCollectionRevision)
             } header: {
                 header
                     .focusSection()
