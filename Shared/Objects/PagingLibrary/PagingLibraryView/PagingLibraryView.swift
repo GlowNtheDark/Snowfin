@@ -204,6 +204,16 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         }
     }
 
+    #if os(tvOS)
+    private func shouldRefreshItemLibrary(after update: ItemUpdate) -> Bool {
+        guard let library = viewModel.library as? ItemLibrary,
+              let environment = viewModel.environment as? ItemLibrary.Environment
+        else { return false }
+
+        return library.shouldRefreshCollection(after: update, environment: environment)
+    }
+    #endif
+
     var body: some View {
         viewModel.library.makeLibraryBody(viewModel: viewModel) {
             ZStack {
@@ -245,67 +255,80 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 viewModel.refreshAutomaticallyIfStale()
             }
         }
-        .onChange(of: viewModel.environment) {
-            viewModel.refreshForEnvironmentChange()
-        }
-        .onChange(of: libraryStyle) { oldStyle, newStyle in
-            if Element.layout(for: oldStyle, options: libraryStyleOptions, insets: .zero) ==
-                Element.layout(for: newStyle, options: libraryStyleOptions, insets: .zero)
-            {
-                gridProxy.layout()
-            }
-        }
         #if os(tvOS)
-        .onChange(of: viewModel.letterScrollTarget) { _, letter in
-            savedFocusedElementID = nil
-            isLetterRestorePending = false
-            _ = scrollToLetter(letter)
-        }
-        .onChange(of: focusedElementID) { _, elementID in
-            if let elementID {
-                savedFocusedElementID = elementID
-            }
-        }
-        .onChange(of: viewModel.elements) {
-            restoreLetterPositionIfNeeded()
-        }
-        .onAppear {
-            viewModel.setAutomaticRefreshActive(scenePhase == .active)
-            gridLocatorID = UUID()
-            isLetterRestorePending = viewModel.letterScrollTarget != nil
+        .onReceive(Notifications[.itemUserDataDidChange].publisher.receive(on: DispatchQueue.main)) { update in
+            guard observesItemState,
+                  !viewModel.automaticallyRefreshes,
+                  update.userSessionID == userSessionManager.currentSession?.id,
+                  shouldRefreshItemLibrary(after: update)
+            else { return }
 
-            DispatchQueue.main.async {
-                restoreLetterPositionIfNeeded()
+            Task {
+                await viewModel.refreshCollectionForMembershipChange()
             }
-        }
-        .onDisappear {
-            viewModel.setAutomaticRefreshActive(false)
-            isLetterRestorePending = viewModel.letterScrollTarget != nil
-            focusedElementID = nil
-            gridScrollCoordinator.locatorView = nil
-            gridScrollCoordinator.collectionView = nil
         }
         #endif
-        .onReceive(viewModel.events) { event in
-                guard isTabContentActive else { return }
-                switch event {
-                case let .gotRandomItem(element):
-                    element.libraryDidSelectElement(router: router, in: namespace)
+        .onChange(of: viewModel.environment) {
+                viewModel.refreshForEnvironmentChange()
+            }
+            .onChange(of: libraryStyle) { oldStyle, newStyle in
+                if Element.layout(for: oldStyle, options: libraryStyleOptions, insets: .zero) ==
+                    Element.layout(for: newStyle, options: libraryStyleOptions, insets: .zero)
+                {
+                    gridProxy.layout()
                 }
             }
-            .onFirstAppear {
-                if viewModel.automaticallyRefreshes {
-                    viewModel.setAutomaticRefreshActive(scenePhase == .active)
-                } else {
-                    viewModel.refresh()
+        #if os(tvOS)
+            .onChange(of: viewModel.letterScrollTarget) { _, letter in
+                savedFocusedElementID = nil
+                isLetterRestorePending = false
+                _ = scrollToLetter(letter)
+            }
+            .onChange(of: focusedElementID) { _, elementID in
+                if let elementID {
+                    savedFocusedElementID = elementID
                 }
             }
+            .onChange(of: viewModel.elements) {
+                restoreLetterPositionIfNeeded()
+            }
+            .onAppear {
+                viewModel.setAutomaticRefreshActive(scenePhase == .active)
+                gridLocatorID = UUID()
+                isLetterRestorePending = viewModel.letterScrollTarget != nil
+
+                DispatchQueue.main.async {
+                    restoreLetterPositionIfNeeded()
+                }
+            }
+            .onDisappear {
+                viewModel.setAutomaticRefreshActive(false)
+                isLetterRestorePending = viewModel.letterScrollTarget != nil
+                focusedElementID = nil
+                gridScrollCoordinator.locatorView = nil
+                gridScrollCoordinator.collectionView = nil
+            }
+        #endif
+            .onReceive(viewModel.events) { event in
+                    guard isTabContentActive else { return }
+                    switch event {
+                    case let .gotRandomItem(element):
+                        element.libraryDidSelectElement(router: router, in: namespace)
+                    }
+                }
+                .onFirstAppear {
+                    if viewModel.automaticallyRefreshes {
+                        viewModel.setAutomaticRefreshActive(scenePhase == .active)
+                    } else {
+                        viewModel.refresh()
+                    }
+                }
         #if os(iOS)
-            .navigationBarMenuButton(
-                isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
-            ) {
-                menuContent
-            }
+                .navigationBarMenuButton(
+                    isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
+                ) {
+                    menuContent
+                }
         #endif
     }
 

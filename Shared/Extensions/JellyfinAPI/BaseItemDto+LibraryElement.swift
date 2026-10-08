@@ -105,11 +105,12 @@ struct ItemStatePoster: View {
 
     let item: BaseItemDto
     let displayType: PosterDisplayType
+    var size: PosterDisplayType.Size = .small
     let action: (BaseItemDto, Namespace.ID) -> Void
 
     var body: some View {
         let updatedItem = itemState.applying(to: item)
-        PosterButton(item: updatedItem, displayType: displayType) { namespace in
+        PosterButton(item: updatedItem, displayType: displayType, size: size) { namespace in
             action(updatedItem, namespace)
         }
     }

@@ -60,7 +60,14 @@ enum ScreenTopShelfSnapshotWriter {
             return
         }
 
-        let candidates = items.prefix(12).compactMap { item -> Candidate? in
+        // A presentation-only update does not invalidate a Continue query, so
+        // that query may finish with a DTO carrying older progress. Resolve the
+        // mutable projection value from the session state before writing it.
+        let currentItems = items.prefix(12).map { item in
+            session.itemStateStore.state(for: item)?.applying(to: item) ?? item
+        }
+
+        let candidates = currentItems.compactMap { item -> Candidate? in
             guard let id = item.id,
                   let imageURL = landscapeImageURL(for: item),
                   let deepLink = URL(string: "swiftfin://\(session.server.id)/\(session.user.id)/item/\(id)")

@@ -218,9 +218,10 @@ struct PosterHStack<
             ItemStatePoster(
                 itemState: itemState,
                 item: baseItem,
-                displayType: displayType
-            ) { _, namespace in
-                action(item, namespace)
+                displayType: displayType,
+                size: size
+            ) { updatedItem, namespace in
+                action((updatedItem as? Data.Element) ?? item, namespace)
             }
         } else {
             standardPosterButton(for: item)

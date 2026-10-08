@@ -139,28 +139,30 @@ ordering changes may remove or move a tile and need the existing focus restorati
   `itemUserDataDidChange` now carries an `ItemUpdate` with user-session ID, item ID,
   request-start revision, and user-data or playback-position change. A matching
   `PagingLibraryViewModel` patches both published arrays, field-merges user data, then
-  calls the library's `onItemUserDataChanged` hook. This does not update arbitrary DTO
-  copies held by surfaces that have not migrated.
+  calls the library's `onItemUserDataChanged` hook. tvOS poster/card presentation reads
+  the session's shared `ItemState`; the DTO patch remains for iOS and paging-library
+  consumers that still own their snapshots.
 - `itemMetadataDidChange` carries a `BaseItemDto`. Home records the signal and refreshes
   its provider groups. Automatically refreshing Movies/TV Shows libraries invalidate
   and re-query. Ordinary paging models do not merge the metadata payload into their
   matching elements, so a metadata notification alone is not an app-wide item update.
 - `didSendStopReport` still carries an item ID after Jellyfin accepts a stop report.
-  Home refreshes its dynamic groups, and `ItemView` fetches its item only when the
-  stopped ID is exactly the Details provider ID. In addition, accepted tvOS progress
+  Home uses it for return/focus coordination, and `ItemView` fetches its item only when
+  the stopped ID is exactly the Details provider ID. In addition, accepted tvOS progress
   and stop reports publish typed item updates; retained Movies/TV Shows libraries use
-  those to update cards and consult the active filter/sort before querying. The older
-  `didSendResumeProgressReport` signal remains for its existing subscribers.
+  those to update cards and consult active filters/sorts before querying. The unused
+  `didSendResumeProgressReport` signal has been removed; acknowledged ticks travel
+  through `itemUserDataDidChange`.
 - `ItemContentGroupProvider` retains a full-item metadata snapshot and resolves a playback
-  provider locally. Movie and top-level series Details observe the session's `ItemState`
-  for their own item; Show Details also observes the currently selected play target's
-  state for Play/Resume presentation. Accepted watched/favorite changes publish typed
-  updates, and the Details provider relays shared-state changes without rebuilding the
-  route. Playback target metadata/source selection, groups, trailers, backdrop, and
-  route/focus state remain locally owned. Home and tvOS Search result posters observe
-  the same session's ItemState. Search query/results and its title-only suggestion array
-  remain local. Episode-card metadata and routing use the local DTO, with user-data
-  presentation overlaid from that session's ItemState.
+  provider locally. All tvOS `ItemView` Details routes observe the session's `ItemState`
+  for the current item; Show Details also observes the selected play target for
+  Play/Resume presentation. Accepted watched/favorite changes publish typed updates,
+  and the Details provider relays shared-state changes without rebuilding the route.
+  Playback target metadata/source selection, groups, trailers, backdrop, and route/focus
+  state remain locally owned. Home, Live TV, and Search result posters use the same
+  session store. Search query/results and its title-only suggestion array remain local.
+  Episode-card metadata and routing use the local DTO, with user-data presentation
+  overlaid from that session's `ItemState`.
 - Show Details episode rows remain nested paging models. A series-level unplayed response
   contains one `UserItemDataDto` for the requested series, not descendant episode DTOs;
   current upstream Jellyfin `MarkUnplayedItem` returns that single item result
@@ -179,23 +181,25 @@ ordering changes may remove or move a tile and need the existing focus restorati
   state, Continue membership, and Search filter/sort results; Home deletion remains
   targeted too. Focus coordination defers Home's targeted queries while Details owns
   the Home return. Home global refresh remains broad. The Continue row and Play Next
-  overlay keep separate list models and re-run their own derivation/query paths.
+  overlay keep separate list models and re-run their own derivation/query paths. The
+  player overlay now applies the same targeted membership decision to its independent
+  Continue list when an update arrives while that overlay is visible.
 - Retained tvOS Movies and TV Shows libraries use `PagingLibraryViewModel` automatic
-  refresh for metadata, stop, delete, user-data, global-refresh, and connection-change
-  signals. They coalesce collection queries and keep matching user-data changes
-  immediate. The shared poster path now covers those grids, and Movie/top-level Show
-  Details also observe the same item state. Home and Search posters and episode cards
-  overlay same-session shared user data.
+  refresh for metadata, global-refresh, and connection-change signals. Typed deletion
+  and user-data updates invalidate old results; they query again only when deletion or
+  an active user-data filter/sort requires it. Matching item presentation updates remain
+  immediate. Generic nested `ItemLibrary` routes receive the store and refresh only when
+  an active user-data filter or sort can change their collection. Query/order ownership
+  remains local.
 - `ServerSocketManager` already exposes a Combine event stream and command/subscription
   publishers. The app consumes playback commands and session information; activity and
   task publisher helpers also exist. No consumed Jellyfin socket event currently
   updates item metadata, user data, or collection membership. There is no shared media
   DTO cache/invalidation layer; image caches are separate.
 
-The result is not a lack of MVVM. It is a split between reactive owners that each hold
-their own snapshot, plus events whose payloads and subscribers differ by surface. The
-specific regressions above are expected when a change reaches one owner or triggers a
-collection query, but another visible owner has no matching update subscription.
+The migration keeps the existing MVVM split between item facts and collection snapshots:
+tvOS views observe shared user data while each library still owns its query, metadata,
+membership, order, and paging.
 
 ### Architecture options
 
@@ -205,7 +209,7 @@ collection query, but another visible owner has no matching update subscription.
 | **B. Shared store for all item and collection state** | Highest churn; collections and views would need to stop owning DTO snapshots and instead use canonical records. | One obvious source for item state and simple cross-surface propagation after migration. | Collection query/order and item facts become coupled; broad call-site changes, migration risk, and a strong store can retain every visited item. Refetch/diff changes could also disturb focus. |
 | **C. Shared item state plus local collection models** | Moderate, incremental churn; keep paging, search, and Home list models, while migrating visible item views to shared observable state. | Centralizes live metadata/user-data while preserving current collection and SwiftUI/MVVM boundaries. Stable collection IDs keep focus independent. | Requires a defined merge/update event and collection-specific invalidation; during migration, unmigrated DTO owners still need the event adapter. |
 
-**Choose C.** Add a session-scoped observable item-state service, not a new app-wide
+**Implemented: C.** Add a session-scoped observable item-state service, not a new app-wide
 architecture. Keep each library responsible for its query, membership, order, paging,
 and filter environment. Keep `PagingLibraryViewModel` and existing
 `ContentGroupViewModel` refresh/coalescing behavior as the collection layer while individual
@@ -261,12 +265,12 @@ continue to own membership, order, paging, filters, search, and queries.
 `PagingLibraryViewModel` retains its matching-ID DTO patch for loaded main/search arrays
 and calls each library's existing membership hook. `ItemLibrary` refreshes only when
 an active played/unplayed/favorite/liked trait or status/date/count sort can be affected;
-playback-position presentation updates do not query Movie/TV collections. Every accepted
-update still advances the collection generation to reject an older in-flight snapshot.
-An initial automatic load is rescheduled if an update invalidates it before completion.
-Other libraries retain their previous refresh policy by default.
+playback-position presentation updates do not query Movie/TV collections. A targeted
+membership/order refresh advances the collection generation before starting its query,
+so an older in-flight snapshot cannot replace it. Automatic initial loads are rescheduled
+when invalidated before completion. Other library types keep their existing refresh policy.
 
-### Incremental migration and remaining scope
+### Migration coverage and remaining scope
 
 1. **Completed: shared poster/tile path in Movies and TV Shows.** The library snapshots
    seed the session-scoped state, and the retained Movies and TV Shows grids observe it.
@@ -321,22 +325,43 @@ Other libraries retain their previous refresh policy by default.
    before/after card result yet, and request-error behavior remains source-reviewed but
    runtime-unverified. Suggestions remain a title-only local DTO array.
 
-The planned shared presentation migration is complete for tvOS Home, Movies, TV Shows,
-Search result cards, Details, and loaded episode cards. This is not a process-wide DTO
-cache. Generic tvOS Media library and nested `ItemLibrary` routes whose
-`PagingLibraryView` has not opted into `ItemState` still render user-data indicators from
-page DTOs. The file-backed Top Shelf snapshot remains a separate Home-derived
-projection. Search suggestions remain local but show titles only. iOS presentation
-paths remain unchanged and outside this migration.
+The final tvOS audit found three stale-prone paths and migrated them in this pass:
+generic nested `ItemLibrary` routes, BaseItem DTO shelves owned by `ContentGroupView`
+(including Live TV recordings), and the player Up Next Continue shelf. Poster actions
+now receive the updated item snapshot as well as displaying it, so direct Play/Resume
+uses the current shared user data. Search invalidation, library ordering, and route/card
+identity remain owned by their existing models. No process-wide DTO cache was added.
 
-### Home and Search presentation adoption and collection invalidation
+| Surface | Classification | Current ownership / reason |
+| --- | --- | --- |
+| Movies and TV Shows tab grids | A | Grid posters observe session `ItemState`; page DTOs still own metadata and collection state. |
+| Home, Continue, Recently Added/Played, Latest, and recommendations | A | `ContentGroupView` supplies the session store to poster shelves; only affected membership/order groups query again. |
+| Live TV recording and other BaseItem poster shelves | A | `ContentGroupView` now supplies the store to all tvOS content-group providers. Program airing/time indicators remain server schedule data. |
+| Search result groups | A | Result posters observe `ItemState`; active user-data filters/sorts refresh affected groups only. |
+| Movie, Show, Episode, and other `ItemView` Details routes and related shelves | A | Provider actions and related poster groups observe the same item/play-target state; route and metadata DTOs stay local. |
+| Loaded Show Details episode cards and season posters | A | Cards observe the store; episode and season metadata remain in their paging DTOs. |
+| Playback episode selector / queue | A | `EpisodeLibrary` seeds from `ItemState`; the active paging model applies typed updates and rejects older item revisions. |
+| Direct playback chapter and people poster buttons | C | Chapter controls show seek positions, and people posters show cast metadata; neither renders mutable item user data. |
+| Generic nested `ItemLibrary` routes, including Media favorites | A | The route supplies `ItemState`; its existing library refreshes only when an active user-data filter or sort can change membership/order. |
+| Player Up Next Continue shelf | A | Poster presentation and actions use current shared state; its separate Resume query refreshes only for membership/order changes. |
+| Media tab's `UserViewLibrary` root | C | The root shows library names and artwork, not mutable user-data presentation. Its nested item routes are classified above. |
+| Search suggestions | C | The separate suggestion list shows titles only. |
+| Cast/crew and other metadata-only library rows; list-style library rows | C | They show person or server metadata and do not read mutable user data for presentation. |
+| Settings poster preview | C | It uses synthetic preview state, not a live user item. |
+| Top Shelf | D | Remains an app-group file projection. The writer now resolves each item's progress from shared state before serializing, preventing an older Continue query DTO from overwriting a newer acknowledged progress value. |
+| iOS item presentation | E | Existing DTO-backed behavior remains unchanged. A future iOS migration is separate optional work. |
 
-`ContentGroupView` supplies the current session's store to the tvOS Home tree, and
-`SearchView` supplies it to Search result groups. `PosterHStack` uses the item-state
-poster wrapper whenever that store is present, including Search cards. The wrapper
-applies canonical user data to the same `BaseItemDto` metadata snapshot; card IDs,
-actions, row order, and focus registrations stay owned by their existing views and
-models.
+No meaningful category-B tvOS presentation surface remains after this pass.
+
+### tvOS presentation adoption and collection invalidation
+
+`ContentGroupView` supplies the current session's store to all tvOS content-group trees;
+`SearchView`, generic nested library routes, Details, and the player Up Next shelf supply
+the same session store at their own boundaries. `PosterHStack` and grid posters use the
+shared poster wrapper whenever a store is present. It applies canonical user data to the
+same `BaseItemDto` metadata snapshot and passes that updated snapshot to the existing
+action. Card IDs, row order, route ownership, and focus registrations stay with their
+existing views and models.
 
 | Surface | Disposition | Collection responsibility |
 | --- | --- | --- |
@@ -347,6 +372,9 @@ models.
 | Latest in each library | Migrated | Premiere/date-created server ordering remains local; user-data updates do not requery the row. |
 | Search result groups | Migrated | Search owns query membership, order, paging, and group identity. Active user-data traits/sorts trigger targeted group refreshes; presentation-only updates use `ItemState` without a query. |
 | Search suggestions | Local title DTOs | Suggestions are separate from result cards and display only titles; no user-data-derived presentation is shown. |
+| Generic nested `ItemLibrary` grids | Migrated | Route supplies `ItemState`; a targeted query runs only when an active played/favorite trait or user-data sort changes membership/order. |
+| Live TV recording shelf | Migrated | Uses the same `ContentGroupView` store; recording membership and metadata stay library-owned. |
+| Player Up Next Continue shelf | Migrated | Its separate Resume model refreshes only when Continue membership/order may change. |
 
 `ItemUpdate.CollectionImpact` marks watched/membership mutations separately from
 presentation-only favorite and progress patches. Progress updates still pass through
@@ -380,44 +408,74 @@ global refresh signals remain broad because they can affect metadata or collecti
 results across multiple rows. A targeted result resolves row visibility through the
 existing candidate-group order; no provider rebuild or row reorder is added.
 
-The Home `PagingLibraryViewModel` advances its collection generation on a relevant
-membership/order update and again before a targeted query, rejecting snapshots started
-before that change. Each poster observes the session's weakly retained `ItemState`,
-whose per-item revisions, partial-field merge, session ID, and 512-entry replay bound
-are unchanged. Thus an older query can update metadata and membership only when its
-generation is current; the poster overlays newer canonical user data either way.
+The Home, Search, automatic library, nested-library, and player Continue paths advance
+their owning collection generation before a targeted replacement, rejecting older
+membership/order snapshots. Presentation-only updates do not start Home, Search, or
+library-wide queries. Top Shelf is a separate file projection; its writer overlays the
+shared user data before reading progress into the snapshot so a stale page DTO cannot
+restore older progress.
 
-The signed tvOS simulator build/install passed and retained the app-group container. A
-post-launch screenshot showed the Continue row with its first card focused, followed by
-Recently Added Movies. This confirms visible Home startup and initial focus only. Remote
-interaction was unavailable in the current simulator host, so progress entry/change,
-completion/Next Up, series-wide Mark Unwatched, presentation-only update, shelf movement,
-Details/player return, active membership refresh focus, one-layer Back, and absence of a
-corrective focus jump remain runtime `UNVERIFIED`. No physical Apple TV was used.
+The final signed tvOS simulator build/install passed on Apple TV 4K (3rd generation,
+1080p), retained the app-group container, and launched the app in place. Device Hub
+controls were available for input. Movies poster → Details → Back returned focus to the
+originating poster; the same exact-card return passed for TV Shows and a Search result.
+Each Details return used one Back press. A presentation-only favorite toggle changed the
+focused Details control in place; reversing it and returning to the library restored the
+original favorite value and exact originating card focus. A loaded Episode 1 card showed
+a progress label and bar after a brief play/pause interaction and return to Show Details.
+Home showed the Continue row with its first card focused and progress indicators. Episode
+progress semantics beyond that visible update, membership-refresh focus, completion/Next
+Up, series-wide Mark Unwatched, and every directional boundary remain runtime
+`UNVERIFIED`. No physical Apple TV was used.
 
-After each owner is migrated, the following local repairs can be retired where the
-store/event path provides equivalent behavior:
+### Final legacy mechanism dispositions
 
-- series `itemShouldRefreshMetadata` notification and loaded-season collection refresh
-  after a series-level unplayed mutation (removed in Phase 3; replaced by exact-ID child
-  user-data reconciliation);
-- full Details item fetches after an exact-ID playback stop (shared acknowledged ticks
-  now update presentation; retain the fetch until authoritative metadata/playback-provider
-  refresh coverage is proven);
-- Home's refresh of every candidate group for a presentation-only item change;
-- full Movies/TV Shows collection refreshes caused only by an item presentation update;
-- library-specific debounce/refetch used only to make already loaded item fields fresh.
+| Mechanism | Disposition | Remaining responsibility |
+| --- | --- | --- |
+| `itemUserDataDidChange` | Retained | Shared-state publication; iOS and paging DTO patches; targeted collection invalidation for Home, Search, nested `ItemLibrary`, and the player Continue list. |
+| `itemMetadataDidChange` | Retained | Server-authoritative metadata refresh for Home and automatically refreshing libraries. Metadata payloads are not merged into arbitrary DTOs. |
+| `didSendStopReport` | Retained | Home return/focus coordination and exact-ID Details full-item refresh for metadata and playback-provider state. Typed updates own progress/watched presentation. |
+| `didSendResumeProgressReport` | Removed | No subscribers remained; acknowledged progress ticks now use the typed item update. |
+| `didDeleteItem` | Retained | Remove deleted items or invalidate affected collection snapshots. |
+| `seriesDescendantUserDataNeedsReconciliation` | Retained | Query exact loaded season/episode IDs after a server-accepted series-level unwatch. |
+| `didRequestGlobalRefresh` | Retained | Explicit and recovery refreshes when targeted authoritative state is unavailable; not used for ordinary presentation-only updates. |
+| `itemShouldRefreshMetadata` and episode-row revision repair | Removed in Phase 3 | Replaced by exact-ID descendant user-data reconciliation. |
+| Paging model's matching-ID DTO patch | Retained temporarily | iOS presentation and paging consumers that still own DTO snapshots; tvOS poster/card presentation observes `ItemState`. |
+| Movie/Show Details stop fetch | Retained | Authoritative metadata and playback-provider refresh, beyond the shared progress value. |
 
-Keep collection invalidation where a query-derived membership or order can change;
-these refreshes are not obsolete merely because visible item fields are shared.
+### Architecture health review
 
-Guard against stale partial DTOs overwriting richer metadata, duplicate events from a
-mutation and subsequent socket message, updates crossing session/user boundaries,
-memory growth from retained state objects, unnecessary full-collection queries, and
-SwiftUI identity changes that drop tvOS focus. The shared code can serve iOS too, but
-migration should be surface-by-surface and must preserve iOS query and presentation
-behavior. Focus, route, playback-session, and progress ownership stay outside the item
-store. Phase 1 changed source and passed the signed Apple TV 4K (3rd generation) 1080p
+- **Session isolation:** each `UserSession` lazily owns a store keyed to its UUID;
+  updates with another session ID are ignored. Stopping the session clears the store
+  and cancels its subscription.
+- **Lifetime and memory:** the store holds weak `ItemState` references and prunes dead
+  entries every 64 lookups. Its replay history is capped at 512 item updates and each
+  entry keeps only one compact user-data update. Live views are the strong owners.
+- **Revision and merge rules:** request-start monotonic revisions reject older accepted
+  replies. Non-nil fields merge independently, so `false` and `0` are preserved while
+  absent fields keep the current value. No item metadata is copied from user-data updates.
+- **Stale fetches:** collection generations protect Home, Search, and opted-in library
+  replacement queries. Details snapshot generations and item revisions prevent an older
+  fetch from replacing newer user data. The player Continue list now refreshes only for
+  its own membership/order changes.
+- **Publication and query scope:** no duplicate `ItemUpdate` publication path was found.
+  The separate stop signal serves focus/metadata owners. Presentation-only progress
+  updates do not cause Home-wide or library-wide queries; Home/Search/nested libraries
+  and the player Continue list use their active membership/order rules.
+- **Top Shelf projection:** the file-backed projection remains separate by design. A
+  concrete stale-progress race existed when a pre-update Continue query completed after
+  an acknowledged progress update; the writer now reads progress from shared state before
+  serialization.
+- **iOS:** no iOS surface was migrated. Its DTO-backed update path remains intact; any
+  iOS adoption is separate optional work.
+
+Focus, route, playback-session, and progress ownership stay outside the item store.
+
+### Earlier phase verification history
+
+#### Phase 1
+
+Phase 1 changed source and passed the signed Apple TV 4K (3rd generation) 1080p
 simulator build/install. Runtime checks confirmed Movies watched-state presentation
 updated on the retained grid and focus returned to the originating card after Details;
 TV Shows also returned to its originating card, but its action did not expose a clear
@@ -427,6 +485,8 @@ sort order was changed to descending and restored to ascending successfully. A
 tvOS filter mutation was not exercised; the filter drawer is only attached to the iOS
 library body. Other focus boundaries and hidden-control behavior remain unverified, and
 no physical Apple TV was tested.
+
+#### Phase 2
 
 Phase 2 changed source and passed the signed Apple TV 4K (3rd generation) 1080p
 simulator build/install. Runtime checks on the retained app session confirmed Movie and

@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import FactoryKit
 import JellyfinAPI
 import SwiftUI
 
@@ -33,6 +34,9 @@ struct SnowfinPlaybackSegmentOverlay: View {
 
     @State
     private var allowsContinueWatchingFocus = false
+
+    @Injected(\.currentUserSession)
+    private var currentUserSession: UserSession?
 
     @StateObject
     private var continueWatchingViewModel = CinematicSelectionContentGroupViewModel(
@@ -158,6 +162,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                             ) { item, _ in
                                 coordinator.playContinueWatching(item)
                             }
+                            .environment(\.itemStateStore, currentUserSession?.itemStateStore)
                             // Compensate for the reusable shelf's 60pt content
                             // insets so its tiles align with both card edges.
                             .frame(width: contentWidth + 120, height: 252)
@@ -193,6 +198,16 @@ struct SnowfinPlaybackSegmentOverlay: View {
             if wasCountingDown && !isCountingDown {
                 allowsContinueWatchingFocus = false
                 focusedAction = .playNext
+            }
+        }
+        .onReceive(Notifications[.itemUserDataDidChange].publisher.receive(on: DispatchQueue.main)) { update in
+            guard coordinator.isOverlayPresented,
+                  update.userSessionID == currentUserSession?.id,
+                  continueWatchingViewModel.resumeViewModel.shouldRefreshCollection(after: update)
+            else { return }
+
+            Task {
+                await continueWatchingViewModel.resumeViewModel.refreshCollectionForMembershipChange()
             }
         }
         .transition(.opacity)

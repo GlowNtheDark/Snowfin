@@ -29,10 +29,6 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     private var hasSentStart = false
     private var item: MediaPlayerItem?
     private var lastPlaybackRequestStatus: MediaPlayerManager.PlaybackRequestStatus = .playing
-    #if os(tvOS)
-    private var lastNotifiedProgressTicks: [String: Int] = [:]
-    #endif
-
     init(item: MediaPlayerItem) {
         self.item = item
         super.init()
@@ -205,12 +201,6 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
                     change: .playbackPositionTicks(ticks),
                     collectionImpact: .presentationOnly
                 ))
-                let previous = lastNotifiedProgressTicks[itemID]
-                // Use acknowledged reports, not the player's high-frequency clock.
-                if previous == nil || abs(Double(ticks) - Double(previous ?? 0)) >= 100_000_000 || isPaused {
-                    lastNotifiedProgressTicks[itemID] = ticks
-                    Notifications[.didSendResumeProgressReport].post()
-                }
             }
             #endif
         }

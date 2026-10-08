@@ -158,7 +158,7 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         #if os(tvOS)
             .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
             .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
-            .environment(\.itemStateStore, isHome ? currentUserSession?.itemStateStore : nil)
+            .environment(\.itemStateStore, currentUserSession?.itemStateStore)
             .onAppear {
                 if isHome, let navigationCoordinator = router.router.navigationCoordinator {
                     registerHomeFocus?(focusCoordinator, navigationCoordinator)

@@ -43,7 +43,10 @@ extension NavigationRoute {
             id: "library-\(library.parent.pagingLibraryID)",
             withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) }
         ) {
-            PagingLibraryView(library: library)
+            PagingLibraryView(
+                library: library,
+                observesItemState: UIDevice.isTV
+            )
         }
     }
 }

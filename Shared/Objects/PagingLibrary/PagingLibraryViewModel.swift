@@ -397,6 +397,10 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     }
 
     func refreshCollectionForHomeChange() async {
+        await refreshCollectionForMembershipChange()
+    }
+
+    func refreshCollectionForMembershipChange() async {
         collectionGeneration += 1
         lastHomeCollectionRefresh = .now
         await background.refresh()
