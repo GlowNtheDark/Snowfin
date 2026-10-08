@@ -98,6 +98,39 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
         .eraseToAnyView()
     }
 
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Environment
+    ) -> Bool {
+        let filters = environment.filters
+        let watchedTraitIsActive = filters.traits.contains(.isPlayed) ||
+            filters.traits.contains(.isUnplayed)
+        let favoriteTraitIsActive = filters.traits.contains(.isFavorite) ||
+            filters.traits.contains(.likes)
+        let playedSortIsActive = filters.sortBy.contains(.isPlayed) ||
+            filters.sortBy.contains(.isUnplayed)
+        let favoriteSortIsActive = filters.sortBy.contains(.isFavoriteOrLiked)
+        let playCountSortIsActive = filters.sortBy.contains(.playCount)
+        let playedDateSortIsActive = filters.sortBy.contains(.datePlayed) ||
+            filters.sortBy.contains(.seriesDatePlayed)
+
+        switch update.change {
+        case let .userData(userData):
+            return (userData.isPlayed != nil && (watchedTraitIsActive || playedSortIsActive)) ||
+                ((userData.isFavorite != nil || userData.isLikes != nil) &&
+                    (favoriteTraitIsActive || favoriteSortIsActive)) ||
+                (userData.playCount != nil && playCountSortIsActive) ||
+                (userData.lastPlayedDate != nil && playedDateSortIsActive)
+        case .playbackPositionTicks:
+            return false
+        case .playbackStopped:
+            return watchedTraitIsActive ||
+                playedSortIsActive ||
+                playCountSortIsActive ||
+                playedDateSortIsActive
+        }
+    }
+
     func libraryStyleOptions(environment: Environment) -> LibraryStyleOptions {
         let itemTypes = environment.filters.itemTypes.isEmpty ?
             parent.supportedItemTypes(for: environment.grouping) :

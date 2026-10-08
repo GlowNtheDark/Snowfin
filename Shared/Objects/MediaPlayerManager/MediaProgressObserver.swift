@@ -144,6 +144,10 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         guard Defaults[.sendProgressReports] else { return }
         #endif
 
+        guard let userSession else { return }
+        let itemID = item.baseItem.id
+        let revision = DispatchTime.now().uptimeNanoseconds
+
         Task {
             var info = PlaybackStopInfo()
             info.itemID = item.baseItem.id
@@ -154,9 +158,15 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             info.sessionID = item.playSessionID
 
             let request = Paths.reportPlaybackStopped(info)
-            try await send(request)
+            try await userSession.client.send(request)
             #if os(tvOS)
-            if let itemID = item.baseItem.id {
+            if let itemID {
+                Notifications[.itemUserDataDidChange].post(ItemUpdate(
+                    userSessionID: userSession.id,
+                    itemID: itemID,
+                    revision: revision,
+                    change: .playbackStopped(positionTicks: info.positionTicks)
+                ))
                 Notifications[.didSendStopReport].post(itemID)
             }
             #endif
@@ -168,6 +178,9 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
         #endif
+
+        guard let userSession else { return }
+        let revision = DispatchTime.now().uptimeNanoseconds
 
         Task {
             var info = PlaybackStateInfo()
@@ -182,9 +195,15 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             info.subtitleStreamIndex = item.selectedSubtitleStreamIndex
 
             let request = Paths.reportPlaybackProgress(info)
-            try await send(request)
+            try await userSession.client.send(request)
             #if os(tvOS)
             if let itemID = item.baseItem.id, let ticks = info.positionTicks {
+                Notifications[.itemUserDataDidChange].post(ItemUpdate(
+                    userSessionID: userSession.id,
+                    itemID: itemID,
+                    revision: revision,
+                    change: .playbackPositionTicks(ticks)
+                ))
                 let previous = lastNotifiedProgressTicks[itemID]
                 // Use acknowledged reports, not the player's high-frequency clock.
                 if previous == nil || abs(Double(ticks) - Double(previous ?? 0)) >= 100_000_000 || isPaused {

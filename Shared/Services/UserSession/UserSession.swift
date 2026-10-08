@@ -12,6 +12,8 @@ import Pulse
 
 final class UserSession {
 
+    let id = UUID()
+
     let server: ServerState
     let user: UserState
     let accessToken: String
@@ -27,6 +29,20 @@ final class UserSession {
 
     @MainActor
     lazy var serverConnectionManager = ServerConnectionManager()
+
+    @MainActor
+    private var storedItemStateStore: ItemStateStore?
+
+    @MainActor
+    var itemStateStore: ItemStateStore {
+        if let storedItemStateStore {
+            return storedItemStateStore
+        }
+
+        let store = ItemStateStore(userSessionID: id)
+        storedItemStateStore = store
+        return store
+    }
 
     lazy var serverSocketManager = ServerSocketManager()
 
@@ -62,6 +78,8 @@ final class UserSession {
 
     @MainActor
     func willStop() {
+        storedItemStateStore?.reset()
+
         for service in services.reversed() {
             service.willStop(userSession: self)
         }

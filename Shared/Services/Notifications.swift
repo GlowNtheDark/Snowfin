@@ -99,6 +99,36 @@ enum Notifications {
     }
 }
 
+/// An accepted item update tied to the session that issued the request.
+/// `revision` is captured before the request starts so a slower older reply
+/// cannot replace a newer accepted update.
+struct ItemUpdate: Sendable {
+
+    enum Change: Sendable {
+        case userData(UserItemDataDto)
+        case playbackPositionTicks(Int)
+        case playbackStopped(positionTicks: Int?)
+    }
+
+    let userSessionID: UUID
+    let itemID: String
+    let revision: UInt64
+    let change: Change
+
+    var userDataPatch: UserItemDataDto? {
+        switch change {
+        case let .userData(userData):
+            userData
+        case let .playbackPositionTicks(ticks):
+            UserItemDataDto(itemID: itemID, key: itemID, playbackPositionTicks: ticks)
+        case let .playbackStopped(positionTicks):
+            positionTicks.map {
+                UserItemDataDto(itemID: itemID, key: itemID, playbackPositionTicks: $0)
+            }
+        }
+    }
+}
+
 // MARK: - Keys
 
 extension Notifications.Key {
@@ -131,7 +161,7 @@ extension Notifications.Key {
 
     // TODO: come up with a cleaner, more defined way for item update notifications
 
-    static var itemUserDataDidChange: Key<UserItemDataDto> {
+    static var itemUserDataDidChange: Key<ItemUpdate> {
         Key("itemUserDataDidChange")
     }
 

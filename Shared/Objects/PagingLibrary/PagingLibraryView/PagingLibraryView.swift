@@ -8,6 +8,7 @@
 
 import CollectionVGrid
 import Defaults
+import FactoryKit
 import SwiftUI
 
 struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: LibraryElement {
@@ -28,6 +29,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     @Environment(\.scenePhase)
     private var scenePhase
+
+    @InjectedObject(\.userSessionManager)
+    private var userSessionManager
 
     @Namespace
     private var namespace
@@ -58,6 +62,8 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     #endif
     @StateObject
     private var viewModel: PagingLibraryViewModel<Library>
+
+    private let observesItemState: Bool
 
     @StoredValue
     private var parentLibraryStyle: LibraryStyle
@@ -90,7 +96,12 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         rememberIndividualLibraryStyle ? $parentLibraryStyle : $defaultLibraryStyle
     }
 
-    init(library: Library, automaticallyRefreshes: Bool = false) {
+    init(
+        library: Library,
+        automaticallyRefreshes: Bool = false,
+        observesItemState: Bool = false
+    ) {
+        self.observesItemState = observesItemState
         self._parentLibraryStyle = StoredValue(.User.libraryStyle(id: library.parent.pagingLibraryID))
         self._viewModel = StateObject(wrappedValue: PagingLibraryViewModel(
             library: library,
@@ -210,6 +221,10 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .environment(
+                \.itemStateStore,
+                observesItemState ? userSessionManager.currentSession?.itemStateStore : nil
+            )
         }
         .animation(.linear(duration: 0.2), value: viewModel.background.is(.gettingNextPage))
         .animation(.linear(duration: 0.2), value: viewModel.background.is(.searching))

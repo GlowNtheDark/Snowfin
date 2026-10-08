@@ -110,6 +110,10 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
     private var hasNextSearchPage: Bool
     private var itemUserDataRefreshTask: AnyCancellable?
     private var lastItemUserDataRefresh = Date.distantPast
+    private var userSessionID: UUID?
+    private var lastItemUpdateRevisions: [String: UInt64] = [:]
+    private var itemUpdateRevisionOrder: [String] = []
+    private let maximumRememberedItemUpdateRevisions = 512
 
     var id: String {
         library.parent.pagingLibraryID
@@ -150,6 +154,7 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         self.pageSize = pageSize
 
         super.init()
+        userSessionID = userSession?.id
 
         Notifications[.didDeleteItem]
             .publisher
@@ -161,19 +166,27 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
 
         Notifications[.itemUserDataDidChange]
             .publisher
-            .sink { [weak self] userData in
+            .sink { [weak self] update in
                 guard let self else { return }
+                guard update.userSessionID == userSessionID else { return }
+                guard acceptItemUpdate(update) else { return }
 
-                updateItemUserData(userData)
-                library.onItemUserDataChanged(viewModel: self, userData: userData)
-                invalidateAutomaticCollection()
+                updateItemUserData(update)
+                if let userData = update.userDataPatch {
+                    library.onItemUserDataChanged(viewModel: self, userData: userData)
+                }
+                invalidateAutomaticCollection(
+                    requestRefresh: library.shouldRefreshCollection(
+                        after: update,
+                        environment: environment
+                    )
+                )
             }
             .store(in: &cancellables)
 
         if automaticallyRefreshes {
             Publishers.MergeMany([
                 Notifications[.itemMetadataDidChange].publisher.map { _ in () }.eraseToAnyPublisher(),
-                Notifications[.didSendStopReport].publisher.map { _ in () }.eraseToAnyPublisher(),
                 Notifications[.didRequestGlobalRefresh].publisher.map { _ in () }.eraseToAnyPublisher(),
                 Notifications[.didChangeServerConnection].publisher.map { _ in () }.eraseToAnyPublisher(),
             ])
@@ -218,11 +231,13 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         }
     }
 
-    private func invalidateAutomaticCollection() {
+    private func invalidateAutomaticCollection(requestRefresh: Bool = true) {
         guard automaticallyRefreshes else { return }
         // Reject snapshots started before an accepted user-data change/deletion.
         collectionGeneration += 1
-        requestAutomaticRefresh()
+        if requestRefresh || !hasLoadedAutomatically {
+            requestAutomaticRefresh()
+        }
     }
 
     private func requestAutomaticRefresh() {
@@ -297,26 +312,47 @@ class PagingLibraryViewModel<Library: PagingLibrary>: ViewModel, @MainActor Iden
         }
     }
 
-    private func updateItemUserData(_ userData: UserItemDataDto) {
-        updateItemUserData(userData, in: &elements)
-        updateItemUserData(userData, in: &searchElements)
+    private func updateItemUserData(_ update: ItemUpdate) {
+        guard let userData = update.userDataPatch,
+              containsItem(withID: update.itemID)
+        else { return }
+
+        updateItemUserData(userData, itemID: update.itemID, in: &elements)
+        updateItemUserData(userData, itemID: update.itemID, in: &searchElements)
+    }
+
+    private func acceptItemUpdate(_ update: ItemUpdate) -> Bool {
+        guard update.revision > (lastItemUpdateRevisions[update.itemID] ?? 0) else { return false }
+        lastItemUpdateRevisions[update.itemID] = update.revision
+        itemUpdateRevisionOrder.removeAll { $0 == update.itemID }
+        itemUpdateRevisionOrder.append(update.itemID)
+
+        while itemUpdateRevisionOrder.count > maximumRememberedItemUpdateRevisions {
+            let evictedItemID = itemUpdateRevisionOrder.removeFirst()
+            lastItemUpdateRevisions[evictedItemID] = nil
+        }
+
+        return true
     }
 
     private func updateItemUserData(
         _ userData: UserItemDataDto,
+        itemID: String,
         in elements: inout IdentifiedArrayOf<Element>
     ) {
-        guard let itemID = userData.itemID else { return }
-
         for index in elements.indices {
             guard var item = elements[index] as? BaseItemDto,
                   item.id == itemID
             else { continue }
 
-            item.userData = userData
+            item.userData = item.userData?.mergingNonNilFields(from: userData, itemID: itemID) ?? userData
             elements[index] = item as! Element
-            return
         }
+    }
+
+    private func containsItem(withID itemID: String) -> Bool {
+        elements.contains { ($0 as? BaseItemDto)?.id == itemID } ||
+            searchElements.contains { ($0 as? BaseItemDto)?.id == itemID }
     }
 
     func scheduleRefreshForItemUserData(

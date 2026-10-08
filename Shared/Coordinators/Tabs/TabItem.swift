@@ -87,7 +87,8 @@ extension TabItem {
         title: String,
         systemName: String,
         filters: ItemFilterCollection,
-        keepsContentAlive: Bool = false
+        keepsContentAlive: Bool = false,
+        observesItemState: Bool = false
     ) -> TabItem {
         TabItem(
             id: "library-\(UUID().uuidString)",
@@ -100,7 +101,8 @@ extension TabItem {
                     parent: BaseItemDto(name: title),
                     filters: filters
                 ),
-                automaticallyRefreshes: keepsContentAlive
+                automaticallyRefreshes: keepsContentAlive,
+                observesItemState: observesItemState
             )
             .if(UIDevice.isTV) { view in
                 view.toolbar(.hidden, for: .navigationBar)

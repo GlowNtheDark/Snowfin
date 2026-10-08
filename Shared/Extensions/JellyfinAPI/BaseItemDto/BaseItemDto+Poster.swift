@@ -340,6 +340,8 @@ private struct BaseItemDtoPosterContextMenu: View {
               let userSession = Container.shared.currentUserSession()
         else { return }
 
+        let revision = DispatchTime.now().uptimeNanoseconds
+
         let request: Request<UserItemDataDto> = if isPlayed {
             Paths.markPlayedItem(
                 itemID: itemID,
@@ -354,7 +356,12 @@ private struct BaseItemDtoPosterContextMenu: View {
 
         let response = try await userSession.client.send(request)
         item.userData = response.value
-        Notifications[.itemUserDataDidChange].post(response.value)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(response.value)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 
@@ -362,6 +369,8 @@ private struct BaseItemDtoPosterContextMenu: View {
         guard let itemID = item.id,
               let userSession = Container.shared.currentUserSession()
         else { return }
+
+        let revision = DispatchTime.now().uptimeNanoseconds
 
         let request: Request<UserItemDataDto> = if isFavorite {
             Paths.markFavoriteItem(
@@ -377,7 +386,12 @@ private struct BaseItemDtoPosterContextMenu: View {
 
         let response = try await userSession.client.send(request)
         item.userData = response.value
-        Notifications[.itemUserDataDidChange].post(response.value)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(response.value)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 }

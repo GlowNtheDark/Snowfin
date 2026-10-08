@@ -32,6 +32,9 @@ extension EnvironmentValues {
     var isSelected: Bool = false
 
     @Entry
+    var itemStateStore: ItemStateStore? = nil
+
+    @Entry
     var playbackSpeed: Binding<Double> = .constant(1)
 
     @Entry

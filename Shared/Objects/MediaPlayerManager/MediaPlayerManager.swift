@@ -297,9 +297,16 @@ final class MediaPlayerManager: ViewModel {
     @Function(\Action.Cases.playNewItemCompletingCurrent)
     private func _playNewItemCompletingCurrent(_ provider: MediaPlayerItemProvider) async throws {
         guard let itemID = playbackItem?.baseItem.id else { return }
-        let request = try Paths.markPlayedItem(itemID: itemID, userID: authenticatedUser.id)
-        let response = try await send(request)
-        Notifications[.itemUserDataDidChange].post(response.value)
+        let userSession = try requireUserSession()
+        let revision = DispatchTime.now().uptimeNanoseconds
+        let request = try Paths.markPlayedItem(itemID: itemID, userID: userSession.user.id)
+        let response = try await userSession.client.send(request)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(response.value)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
         try await replacePlaybackItem(with: provider)
     }

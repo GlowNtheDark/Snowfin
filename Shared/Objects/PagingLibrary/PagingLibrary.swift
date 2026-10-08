@@ -46,6 +46,11 @@ protocol PagingLibrary<Element> {
         viewModel: PagingLibraryViewModel<Self>,
         userData: UserItemDataDto
     )
+
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Environment
+    ) -> Bool
 }
 
 extension PagingLibrary where Element: LibraryElement {
@@ -100,6 +105,13 @@ extension PagingLibrary {
         viewModel: PagingLibraryViewModel<Self>,
         userData: UserItemDataDto
     ) {}
+
+    func shouldRefreshCollection(
+        after update: ItemUpdate,
+        environment: Environment
+    ) -> Bool {
+        true
+    }
 }
 
 protocol WithRandomElementLibrary<Element, Environment>: PagingLibrary {

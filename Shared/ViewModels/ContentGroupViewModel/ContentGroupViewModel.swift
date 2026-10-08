@@ -7,6 +7,7 @@
 //
 
 import Combine
+import FactoryKit
 import Foundation
 import JellyfinAPI
 
@@ -58,20 +59,37 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
         self.provider = provider
         super.init()
 
-        Publishers.Merge(
-            Notifications[.itemUserDataDidChange].publisher.map { _ in () },
-            Notifications[.itemMetadataDidChange].publisher.map { _ in () }
-        )
+        let itemUserDataChanges = Notifications[.itemUserDataDidChange]
+            .publisher
+            .filter { [weak self] update in
+                guard let self,
+                      update.userSessionID == userSession?.id
+                else { return false }
+
+                if case .userData = update.change {
+                    return true
+                }
+                return false
+            }
+            .map { _ in () }
+            .eraseToAnyPublisher()
+
+        let metadataChanges = Notifications[.itemMetadataDidChange]
+            .publisher
+            .map { _ in () }
+            .eraseToAnyPublisher()
+
+        Publishers.Merge(itemUserDataChanges, metadataChanges)
         #if os(tvOS)
-        .receive(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.main)
         #endif
-        .sink { [weak self] _ in
-            self?.lastRefreshSignalDate = Date.now
-            #if os(tvOS)
-            self?.invalidateHome()
-            #endif
-        }
-        .store(in: &cancellables)
+            .sink { [weak self] _ in
+                self?.lastRefreshSignalDate = Date.now
+                #if os(tvOS)
+                self?.invalidateHome()
+                #endif
+            }
+            .store(in: &cancellables)
 
         #if os(tvOS)
         if provider is DefaultContentGroupProvider {

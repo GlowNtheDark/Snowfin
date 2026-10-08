@@ -58,6 +58,9 @@ extension BaseItemDto: LibraryElement {
 
 private struct BaseItemDtoLibraryGridElement: View {
 
+    @Environment(\.itemStateStore)
+    private var itemStateStore
+
     @Namespace
     private var namespace
 
@@ -72,11 +75,42 @@ private struct BaseItemDtoLibraryGridElement: View {
     }
 
     var body: some View {
+        if let itemState = itemStateStore?.state(for: item) {
+            ItemStatePoster(
+                itemState: itemState,
+                item: item,
+                displayType: resolvedLibraryStyle.posterDisplayType
+            ) { updatedItem, namespace in
+                updatedItem.libraryDidSelectElement(router: router, in: namespace)
+            }
+        } else {
+            poster(for: item)
+        }
+    }
+
+    private func poster(for item: BaseItemDto) -> some View {
         PosterButton(
             item: item,
             displayType: resolvedLibraryStyle.posterDisplayType
         ) { namespace in
             item.libraryDidSelectElement(router: router, in: namespace)
+        }
+    }
+}
+
+private struct ItemStatePoster: View {
+
+    @ObservedObject
+    var itemState: ItemState
+
+    let item: BaseItemDto
+    let displayType: PosterDisplayType
+    let action: (BaseItemDto, Namespace.ID) -> Void
+
+    var body: some View {
+        let updatedItem = itemState.applying(to: item)
+        PosterButton(item: updatedItem, displayType: displayType) { namespace in
+            action(updatedItem, namespace)
         }
     }
 }

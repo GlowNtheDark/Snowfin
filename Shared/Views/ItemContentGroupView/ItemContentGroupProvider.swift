@@ -340,6 +340,9 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
             throw ErrorMessage(L10n.unknownError)
         }
 
+        let userSession = try requireUserSession()
+        let revision = DispatchTime.now().uptimeNanoseconds
+
         isMarkingSeriesUnwatched = true
         defer { isMarkingSeriesUnwatched = false }
 
@@ -347,21 +350,26 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         do {
             let request = try Paths.markUnplayedItem(
                 itemID: itemID,
-                userID: authenticatedUser.id
+                userID: userSession.user.id
             )
-            let response = try await send(request)
+            let response = try await userSession.client.send(request)
             updatedUserData = response.value
         } catch {
             logger.error("Unable to mark series unwatched: \(error.localizedDescription)")
 
             do {
-                try await refreshItem()
+                item = try await item.getFullItem(userSession: userSession)
             } catch {
                 logger.error("Unable to refresh series after failed unwatch request: \(error.localizedDescription)")
             }
 
             if let userData = item.userData {
-                Notifications[.itemUserDataDidChange].post(userData)
+                Notifications[.itemUserDataDidChange].post(ItemUpdate(
+                    userSessionID: userSession.id,
+                    itemID: itemID,
+                    revision: revision,
+                    change: .userData(userData)
+                ))
             } else {
                 Notifications[.didRequestGlobalRefresh].post()
             }
@@ -373,13 +381,18 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         }
 
         item.userData = updatedUserData
-        Notifications[.itemUserDataDidChange].post(updatedUserData)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(updatedUserData)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
 
         do {
             mediaPlayerItemProvider = try await resolveMediaPlayerItemProvider(
                 for: item,
-                userSession: requireUserSession()
+                userSession: userSession
             )
         } catch {
             logger.error("Unable to refresh series playback target after unwatch: \(error.localizedDescription)")
@@ -502,41 +515,55 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
     private func setIsPlayed(_ isPlayed: Bool) async throws {
         guard let itemID = item.id else { return }
+        let userSession = try requireUserSession()
+        let revision = DispatchTime.now().uptimeNanoseconds
 
         let request: Request<UserItemDataDto> = if isPlayed {
             try Paths.markPlayedItem(
                 itemID: itemID,
-                userID: authenticatedUser.id
+                userID: userSession.user.id
             )
         } else {
             try Paths.markUnplayedItem(
                 itemID: itemID,
-                userID: authenticatedUser.id
+                userID: userSession.user.id
             )
         }
 
-        let response = try await send(request)
-        Notifications[.itemUserDataDidChange].post(response.value)
+        let response = try await userSession.client.send(request)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(response.value)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 
     private func setIsFavorite(_ isFavorite: Bool) async throws {
         guard let itemID = item.id else { return }
+        let userSession = try requireUserSession()
+        let revision = DispatchTime.now().uptimeNanoseconds
 
         let request: Request<UserItemDataDto> = if isFavorite {
             try Paths.markFavoriteItem(
                 itemID: itemID,
-                userID: authenticatedUser.id
+                userID: userSession.user.id
             )
         } else {
             try Paths.unmarkFavoriteItem(
                 itemID: itemID,
-                userID: authenticatedUser.id
+                userID: userSession.user.id
             )
         }
 
-        let response = try await send(request)
-        Notifications[.itemUserDataDidChange].post(response.value)
+        let response = try await userSession.client.send(request)
+        Notifications[.itemUserDataDidChange].post(ItemUpdate(
+            userSessionID: userSession.id,
+            itemID: itemID,
+            revision: revision,
+            change: .userData(response.value)
+        ))
         Notifications[.itemShouldRefreshMetadata].post(itemID)
     }
 }

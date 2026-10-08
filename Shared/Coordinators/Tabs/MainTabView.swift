@@ -75,12 +75,15 @@ struct MainTabView: View {
                 title: L10n.tvShowsCapitalized,
                 systemName: "tv",
                 filters: .init(itemTypes: [.series]),
-                keepsContentAlive: true
+                keepsContentAlive: true,
+                observesItemState: true
             )
             TabItem.library(
                 title: L10n.movies,
                 systemName: "film",
-                filters: .init(itemTypes: [.movie])
+                filters: .init(itemTypes: [.movie]),
+                keepsContentAlive: true,
+                observesItemState: true
             )
             TabItem.search
             TabItem.media
