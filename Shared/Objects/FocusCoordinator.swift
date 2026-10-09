@@ -52,6 +52,188 @@ final class FocusCoordinator: ObservableObject {
     private var rowScrollers: [String: (Int) -> Bool] = [:]
     private var revealedTarget: String?
     private var readyHomeTarget: String?
+    private var homeFocusRows: [HomeFocusRow] = []
+    private var homeTileProbes: [String: WeakHomeFocusProbe] = [:]
+    private var focusedHomeTile: HomeTile?
+    private var pendingHomeVerticalTarget: String?
+    private var lastHomeVerticalTransition: HomeVerticalTransition?
+    private var homeVerticalScrollSuppressions: Set<String> = []
+    private var homeVerticalRecognizer: HomeVerticalTransitionRecognizer?
+
+    func updateHomeFocusRows(_ rows: [HomeFocusRow]) {
+        if homeFocusRows.map(\.membershipSignature) != rows.map(\.membershipSignature) {
+            lastHomeVerticalTransition = nil
+        }
+        homeFocusRows = rows
+    }
+
+    func registerHomeFocusTile(_ tile: HomeTile, from view: UIView) {
+        guard let probe = view as? LaunchFocusCandidateProbe.ProbeView else { return }
+        homeTileProbes[tile.target] = WeakHomeFocusProbe(tile: tile, view: probe)
+
+        guard let scrollView = homeVerticalScrollView(ancestorOf: probe) else { return }
+        if homeVerticalRecognizer?.view !== scrollView {
+            if let homeVerticalRecognizer, let oldView = homeVerticalRecognizer.view {
+                oldView.removeGestureRecognizer(homeVerticalRecognizer)
+            }
+            let recognizer = HomeVerticalTransitionRecognizer(coordinator: self)
+            scrollView.addGestureRecognizer(recognizer)
+            homeVerticalRecognizer = recognizer
+        }
+    }
+
+    func recordHomeTileFocus(_ tile: HomeTile, isFocused: Bool) {
+        if isFocused {
+            if pendingHomeVerticalTarget == tile.target {
+                pendingHomeVerticalTarget = nil
+            } else if focusedHomeTile?.target != tile.target {
+                lastHomeVerticalTransition = nil
+            }
+            focusedHomeTile = tile
+        } else if focusedHomeTile?.target == tile.target {
+            focusedHomeTile = nil
+        }
+    }
+
+    func consumeHomeVerticalScrollSuppression(for tile: HomeTile) -> Bool {
+        homeVerticalScrollSuppressions.remove(tile.target) != nil
+    }
+
+    fileprivate func homeVerticalPressDecision(
+        _ presses: Set<UIPress>,
+        in view: UIView?
+    ) -> HomeVerticalPressDecision {
+        guard let direction = HomeVerticalDirection(presses: presses),
+              let source = focusedHomeTile,
+              let window = (view as? UIWindow) ?? view?.window
+        else { return .passThrough }
+
+        let rows = homeFocusRows.filter { !$0.tiles.isEmpty }.sorted { $0.order < $1.order }
+        guard let sourceRowIndex = rows.firstIndex(where: { $0.groupID == source.groupID }) else {
+            lastHomeVerticalTransition = nil
+            return .consume
+        }
+
+        let destinationIndex = sourceRowIndex + direction.rowDelta
+        guard rows.indices.contains(destinationIndex) else { return .passThrough }
+
+        guard let sourceRegistration = homeFocusCandidate(source, in: window) else {
+            lastHomeVerticalTransition = nil
+            return .consume
+        }
+
+        let sourceRow = rows[sourceRowIndex]
+        let destinationRow = rows[destinationIndex]
+        let destination: HomeTile?
+
+        if let previous = lastHomeVerticalTransition,
+           previous.destination.target == source.target,
+           previous.direction == direction.opposite,
+           previous.destinationGroupID == sourceRow.groupID,
+           previous.sourceGroupID == destinationRow.groupID,
+           previous.destinationMembership == sourceRow.membershipSignature,
+           previous.sourceMembership == destinationRow.membershipSignature
+        {
+            // Exact immediate reversal takes precedence over the new geometry.
+            guard let exactOrigin = destinationRow.tiles.first(where: { $0.target == previous.source.target }),
+                  homeFocusCandidate(exactOrigin, in: window) != nil
+            else {
+                lastHomeVerticalTransition = nil
+                return .consume
+            }
+            destination = exactOrigin
+        } else {
+            destination = destinationRow.tiles
+                .compactMap { tile -> (HomeTile, CGRect)? in
+                    guard let registration = homeFocusCandidate(tile, in: window) else { return nil }
+                    return (tile, registration.frame)
+                }
+                .min { lhs, rhs in
+                    let leftDistance = abs(lhs.1.midX - sourceRegistration.frame.midX)
+                    let rightDistance = abs(rhs.1.midX - sourceRegistration.frame.midX)
+                    return leftDistance == rightDistance ? lhs.0.index < rhs.0.index : leftDistance < rightDistance
+                }?
+                .0
+        }
+
+        guard let destination else {
+            // Never hand a missing adjacent target back to spatial search; it could skip this shelf.
+            lastHomeVerticalTransition = nil
+            return .consume
+        }
+
+        let transition = HomeVerticalTransition(
+            source: source,
+            destination: destination,
+            direction: direction,
+            sourceGroupID: sourceRow.groupID,
+            destinationGroupID: destinationRow.groupID,
+            sourceMembership: sourceRow.membershipSignature,
+            destinationMembership: destinationRow.membershipSignature
+        )
+        return .move(transition)
+    }
+
+    fileprivate func performHomeVerticalTransition(_ transition: HomeVerticalTransition) {
+        guard focusedHomeTile?.target == transition.source.target,
+              let window = homeTileProbes[transition.destination.target]?.view?.window,
+              let registration = homeTileProbes[transition.destination.target],
+              registration.view?.homeTile == transition.destination,
+              homeFocusCandidate(transition.destination, in: window) != nil,
+              let requestFocus = registration.view?.onRequestFocus
+        else { return }
+
+        lastHomeVerticalTransition = transition
+        pendingHomeVerticalTarget = transition.destination.target
+        homeVerticalScrollSuppressions.insert(transition.destination.target)
+        requestFocus()
+    }
+
+    private func homeFocusCandidate(_ tile: HomeTile, in window: UIWindow) -> (view: LaunchFocusCandidateProbe.ProbeView, frame: CGRect)? {
+        guard let probe = homeTileProbes[tile.target]?.view,
+              probe.homeTile == tile,
+              probe.window === window,
+              !probe.bounds.isEmpty,
+              let collection = homeCollectionView(ancestorOf: probe),
+              collection.visibleCells.contains(where: { probe.isDescendant(of: $0) })
+        else { return nil }
+
+        var effectiveAlpha: CGFloat = 1
+        var ancestor: UIView? = probe
+        while let current = ancestor {
+            guard !current.isHidden else { return nil }
+            effectiveAlpha *= current.alpha
+            ancestor = current.superview
+        }
+        guard effectiveAlpha > 0.99 else { return nil }
+
+        let frame = probe.convert(probe.bounds, to: window)
+        let visibleViewport = collection.convert(collection.bounds, to: window)
+        guard frame.intersects(visibleViewport) else { return nil }
+        return (probe, frame)
+    }
+
+    private func homeCollectionView(ancestorOf view: UIView) -> UICollectionView? {
+        var ancestor = view.superview
+        while let current = ancestor {
+            if let collection = current as? UICollectionView {
+                return collection
+            }
+            ancestor = current.superview
+        }
+        return nil
+    }
+
+    private func homeVerticalScrollView(ancestorOf view: UIView) -> UIScrollView? {
+        var ancestor = view.superview
+        while let current = ancestor {
+            if let scrollView = current as? UIScrollView, !(scrollView is UICollectionView) {
+                return scrollView
+            }
+            ancestor = current.superview
+        }
+        return nil
+    }
 
     func selectHomeTile(_ tile: HomeTile) {
         selectedHomeTile = tile
@@ -259,11 +441,102 @@ final class FocusCoordinator: ObservableObject {
 }
 
 #if os(tvOS)
+private final class WeakHomeFocusProbe {
+    let tile: FocusCoordinator.HomeTile
+    weak var view: LaunchFocusCandidateProbe.ProbeView?
+
+    init(tile: FocusCoordinator.HomeTile, view: LaunchFocusCandidateProbe.ProbeView) {
+        self.tile = tile
+        self.view = view
+    }
+}
+
+fileprivate enum HomeVerticalDirection: Equatable {
+    case up
+    case down
+
+    var rowDelta: Int {
+        self == .down ? 1 : -1
+    }
+
+    var opposite: Self {
+        self == .down ? .up : .down
+    }
+
+    init?(presses: Set<UIPress>) {
+        let directions = presses.compactMap { press -> Self? in
+            switch press.type {
+            case .upArrow: .up
+            case .downArrow: .down
+            default: nil
+            }
+        }
+        guard directions.count == 1, let direction = directions.first else { return nil }
+        self = direction
+    }
+}
+
+fileprivate struct HomeVerticalTransition {
+    let source: FocusCoordinator.HomeTile
+    let destination: FocusCoordinator.HomeTile
+    let direction: HomeVerticalDirection
+    let sourceGroupID: String
+    let destinationGroupID: String
+    let sourceMembership: [String]
+    let destinationMembership: [String]
+}
+
+fileprivate enum HomeVerticalPressDecision {
+    case passThrough
+    case consume
+    case move(HomeVerticalTransition)
+}
+
+private final class HomeVerticalTransitionRecognizer: UIGestureRecognizer {
+    weak var coordinator: FocusCoordinator?
+
+    init(coordinator: FocusCoordinator) {
+        self.coordinator = coordinator
+        super.init(target: nil, action: nil)
+        allowedPressTypes = [
+            NSNumber(value: UIPress.PressType.upArrow.rawValue),
+            NSNumber(value: UIPress.PressType.downArrow.rawValue),
+        ]
+        cancelsTouchesInView = true
+        delaysTouchesBegan = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is unavailable")
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        switch coordinator?.homeVerticalPressDecision(presses, in: view) ?? .passThrough {
+        case .passThrough:
+            if let event {
+                super.pressesBegan(presses, with: event)
+            }
+            state = .failed
+        case .consume:
+            state = .recognized
+        case let .move(transition):
+            // Claim this press before asking the registered SwiftUI tile to take focus.
+            state = .recognized
+            coordinator?.performHomeVerticalTransition(transition)
+        }
+    }
+}
+
 struct HomeFocusRow: Equatable {
     let groupID: String
     let order: Int
     let revision: Int
     let tiles: [FocusCoordinator.HomeTile]
+
+    var membershipSignature: [String] {
+        tiles.map(\.target)
+    }
 }
 
 struct HomeFocusRowsKey: PreferenceKey {

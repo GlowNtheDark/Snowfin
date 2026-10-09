@@ -20,6 +20,16 @@ layout readiness, and acquired focus. The coordinator resolves the current fallb
 order against refreshed rows, scrolls the underlying virtualized collection to the
 target, and requests focus only once that tile is ready. Acquisition clears protection.
 
+The Home coordinator also owns Up/Down between shelves. A recognizer on the vertical
+Home scroll view claims these presses, resolves the immediately adjacent nonempty row,
+and chooses among its attached visible tiles by live on-screen horizontal center, with
+ties going to the earlier tile. It remembers the last source/destination pair while
+both row memberships remain unchanged, so an immediate opposite press restores the
+exact source. At the top and bottom rows, the press passes through to the existing
+region boundary behavior; if the adjacent row has no eligible target, the press is
+consumed rather than allowing spatial focus to skip that row. `PosterButton` suppresses
+its queued horizontal row reveal for the vertical target, preserving shelf offsets.
+
 [`MainTabView`](../../Shared/Coordinators/Tabs/MainTabView.swift) observes presentation
 changes and protects the Home return from sidebar focus. Navigation ownership remains
 with the navigation coordinators; focus events must not dismiss intermediate screens.

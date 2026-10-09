@@ -172,14 +172,16 @@ label on tvOS; tile controls are the focus targets.
 
 | Current focus/region | Up | Down | Left | Right | Select | Back |
 | --- | --- | --- | --- | --- | --- | --- |
-| Home tile | Nearest tile in row above, if one exists; otherwise region boundary | Nearest tile in row below, if one exists; otherwise region boundary | Previous tile in current shelf; first tile uses native boundary behavior | Next tile in current shelf; last tile uses native boundary behavior | Open selected item's details in current route | Route/presentation owner dismisses first; from Home root Back behavior is platform/app-owned |
+| Home tile | Tile in the adjacent nonempty shelf above whose visible horizontal center is nearest to this tile's current on-screen center; otherwise the existing region boundary | Tile in the adjacent nonempty shelf below whose visible horizontal center is nearest to this tile's current on-screen center; otherwise the existing region boundary | Previous tile in current shelf; first tile uses native boundary behavior | Next tile in current shelf; last tile uses native boundary behavior | Open selected item's details in current route | Route/presentation owner dismisses first; from Home root Back behavior is platform/app-owned |
 
-**Observed.** `ContentGroupVStack` composes ordered vertical rows. `PosterHStack` /
-`CollectionHStack` form horizontal focus sections with focusable posters; vertical and
-cross-axis movement is left to tvOS spatial focus. Home's `FocusCoordinator` records
-stable `(groupID, itemID, seriesID, index)` identity and waits for a virtualized tile
-to be ready before focus. Directional row alignment and region-edge behavior are not
-fully app-routed; verify changed layouts at runtime.
+**Vertical shelf movement.** The target is chosen from the destination shelf's
+currently visible tiles by the nearest on-screen horizontal center, so shelves with
+different horizontal scroll positions keep the same visual-column intent. If the
+destination is shorter or the source lies beyond its visible range, this naturally
+selects the nearest endpoint; equal-distance ties choose the earlier tile. Reversing
+Up/Down between unchanged adjacent shelves restores the tile from the prior move.
+This behavior applies only to vertical movement. Horizontal movement and the existing
+first/last-tile behavior remain unchanged.
 
 **Home return contract.** Home focus is restored only after navigation really returns
 to Home. Details remains under the player, so player dismissal leaves the Home target

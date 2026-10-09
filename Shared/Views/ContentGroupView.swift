@@ -102,6 +102,7 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             }
             .onPreferenceChange(HomeFocusRowsKey.self) { rows in
                 homeFocusRows = rows
+                focusCoordinator.updateHomeFocusRows(rows)
                 resolveHomeReturn()
             }
             .onChange(of: focusCoordinator.homeReturnTarget) { _, tile in

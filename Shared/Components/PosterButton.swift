@@ -187,8 +187,12 @@ struct PosterButton<Item: Poster>: View {
             }
             .onChange(of: isFocused) { _, focused in
                 guard focused else { return }
+                let preservesHomeVerticalOffset = homeFocusTile.map {
+                    homeTileCoordinator?.consumeHomeVerticalScrollSuppression(for: $0) ?? false
+                } ?? false
                 DispatchQueue.main.async {
                     guard isFocused, let index = posterHStackFocusIndex else { return }
+                    guard !preservesHomeVerticalOffset else { return }
                     posterHStackFocusController?.scrollFocusedPoster(
                         at: index,
                         forceLayout: homeTileCoordinator == nil
@@ -272,6 +276,7 @@ private struct RegisteredHomeTile: ViewModifier {
                 }
             }
             .onChange(of: focused.wrappedValue) { _, isFocused in
+                coordinator.recordHomeTileFocus(tile, isFocused: isFocused)
                 if isFocused {
                     // Let SwiftUI commit the real focus change and its normal
                     // poster styling before clearing the restoration request.
@@ -285,7 +290,12 @@ private struct RegisteredHomeTile: ViewModifier {
                 LaunchFocusCandidateProbe(
                     onReady: { coordinator.homeTileReady(tile) },
                     readinessID: coordinator.homeReturnTarget?.target,
-                    onLayout: { coordinator.registerHomeRowScroller(groupID: tile.groupID, from: $0) }
+                    homeTile: tile,
+                    onRequestFocus: { focused.wrappedValue = true },
+                    onLayout: {
+                        coordinator.registerHomeFocusTile(tile, from: $0)
+                        coordinator.registerHomeRowScroller(groupID: tile.groupID, from: $0)
+                    }
                 )
                 .allowsHitTesting(false)
             }
@@ -313,6 +323,8 @@ extension EnvironmentValues {
 struct LaunchFocusCandidateProbe: UIViewRepresentable {
     let onReady: (() -> Void)?
     var readinessID: String? = nil
+    var homeTile: FocusCoordinator.HomeTile? = nil
+    var onRequestFocus: (() -> Void)? = nil
     var onLayout: ((UIView) -> Void)? = nil
 
     func makeUIView(context: Context) -> ProbeView {
@@ -324,6 +336,8 @@ struct LaunchFocusCandidateProbe: UIViewRepresentable {
     func updateUIView(_ view: ProbeView, context: Context) {
         view.onReady = onReady
         view.onLayout = onLayout
+        view.homeTile = homeTile
+        view.onRequestFocus = onRequestFocus
         if view.readinessID != readinessID {
             view.readinessID = readinessID
             view.resetReadiness()
@@ -334,6 +348,8 @@ struct LaunchFocusCandidateProbe: UIViewRepresentable {
     final class ProbeView: UIView {
         var onReady: (() -> Void)?
         var readinessID: String?
+        var homeTile: FocusCoordinator.HomeTile?
+        var onRequestFocus: (() -> Void)?
         var onLayout: ((UIView) -> Void)?
         private var didSignalReadiness = false
         private var visibilityObservations: [NSKeyValueObservation] = []
