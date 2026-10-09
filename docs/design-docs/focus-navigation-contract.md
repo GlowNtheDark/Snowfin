@@ -266,7 +266,8 @@ Focusable controls depend on the current form and user options.
 
 | Current focus/region | Up | Down | Left | Right | Select | Back |
 | --- | --- | --- | --- | --- | --- | --- |
-| Settings form row/control | Native previous row/control | Native next row/control | Native within segmented/menu controls; otherwise focus-engine boundary | Native within segmented/menu controls; otherwise focus-engine boundary | Activate the control or open its native picker/menu | Dismiss nested picker/menu or current settings route; restore prior control when valid (exact tvOS restoration needs runtime confirmation) |
+| Settings form row/control | Native previous row/control | Native next row/control | Native within segmented/menu controls; otherwise focus-engine boundary | Native within segmented/menu controls; otherwise focus-engine boundary | Activate the control or open its native picker/menu | Dismiss nested picker/menu or current settings route; restore prior control when valid |
+| App Font row/menu (Customize, after Accent Color) | Menu: previous choice; row: Accent Color | Menu: next choice; row: Advanced | Native menu behavior | Native menu behavior | Open the menu; selecting a choice closes it and returns focus to App Font | Dismiss only the menu and return focus to App Font; the next Select opens the menu immediately |
 | Nested settings route/form | Native within form | Native within form | Native within form/control | Native within form/control | Activate route/control | Dismiss one route to its parent Settings route |
 | Edit Device Profile with unsaved changes | Native confirmation dialog focus | Native confirmation dialog focus | Native dialog focus | Native dialog focus | Resolve Save/Discard/Cancel according to dialog | Exit is intercepted by the unsaved-changes confirmation; do not bypass it |
 
@@ -274,10 +275,6 @@ Focusable controls depend on the current form and user options.
 per-direction navigation router was found. Native Form/menu/picker owns focus and
 restoration. The tvOS navigation-bar close button is a no-op in this route; Back owns
 dismissal. `EditDeviceProfileView` has the notable unsaved-changes exit interception.
-
-**Runtime check.** Initial Settings row and exact parent-control restoration after
-native picker/menu dismissal have not been established from source. Validate on tvOS
-before claiming exact focus restoration.
 
 ## Details screens and nested shelves
 

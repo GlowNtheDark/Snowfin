@@ -77,6 +77,7 @@ extension Defaults.Keys {
     /// The appearance default for non-user contexts.
     /// /// Only use for `set`, use `appearance` for `get`.
     static let appAppearance: Key<AppAppearance> = AppKey("appAppearance", default: .system)
+    static let appFontChoice: Key<AppFontChoice> = AppKey("appFontChoice", default: .system)
 
     static let backgroundSignOutInterval: Key<TimeInterval> = AppKey("backgroundSignOutInterval", default: 3600)
     static let backgroundTimeStamp: Key<Date> = AppKey("backgroundTimeStamp", default: Date.now)

@@ -21,6 +21,20 @@ struct SettingsView: View {
     @Default(.userAccentColor)
     private var accentColor
 
+    #if os(tvOS)
+    @Default(.appFontChoice)
+    private var appFontChoice
+
+    @State
+    private var isAppFontMenuPresented = false
+
+    @FocusState
+    private var appFontFocusTarget: AppFontFocusTarget?
+
+    @Namespace
+    private var appFontFocusScope
+    #endif
+
     @Default(.VideoPlayer.videoPlayerType)
     private var videoPlayerType
 
@@ -51,6 +65,26 @@ struct SettingsView: View {
         }
         .background {
             SnowfinSettingsBackground()
+        }
+        .overlayPreferenceValue(AppFontMenuAnchorKey.self) { anchor in
+            GeometryReader { geometry in
+                if isAppFontMenuPresented, let anchor {
+                    let rowFrame = geometry[anchor]
+                    AppFontChoiceMenu(
+                        selection: $appFontChoice,
+                        focusedTarget: $appFontFocusTarget,
+                        dismiss: dismissAppFontMenu
+                    )
+                    .focusScope(appFontFocusScope)
+                    .focusSection()
+                    .position(x: rowFrame.maxX - 160, y: rowFrame.midY)
+                    .zIndex(1)
+                }
+            }
+        }
+        .onExitCommand {
+            guard isAppFontMenuPresented else { return }
+            dismissAppFontMenu()
         }
         #else
         Form(image: .jellyfinBlobBlue) {
@@ -176,6 +210,14 @@ struct SettingsView: View {
 
             ColorPicker(L10n.accentColor, selection: $accentColor, supportsOpacity: false)
 
+            #if os(tvOS)
+            AppFontSelectionRow(
+                selection: $appFontChoice,
+                isMenuPresented: $isAppFontMenuPresented,
+                focusedTarget: $appFontFocusTarget
+            )
+            #endif
+
             ChevronButton(L10n.advanced) {
                 router.route(to: .customizeSettingsView)
             }
@@ -209,9 +251,174 @@ struct SettingsView: View {
             #endif
         }
     }
+
+    #if os(tvOS)
+    private func dismissAppFontMenu() {
+        isAppFontMenuPresented = false
+        appFontFocusTarget = .row
+    }
+    #endif
 }
 
 #if os(tvOS)
+private enum AppFontFocusTarget: Hashable {
+    case row
+    case choice(AppFontChoice)
+}
+
+private struct AppFontMenuAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+private struct AppFontSelectionRow: View {
+
+    @Binding
+    var selection: AppFontChoice
+
+    @Binding
+    var isMenuPresented: Bool
+
+    var focusedTarget: FocusState<AppFontFocusTarget?>.Binding
+
+    private var isRowFocused: Bool {
+        focusedTarget.wrappedValue == .row
+    }
+
+    var body: some View {
+        Button {
+            isMenuPresented = true
+            focusedTarget.wrappedValue = nil
+        } label: {
+            rowLabel
+        }
+        .buttonStyle(.plain)
+        .focused(focusedTarget, equals: .row)
+        .listRowInsets(.zero)
+        .listRowBackground(Color.clear)
+        .anchorPreference(key: AppFontMenuAnchorKey.self, value: .bounds) { $0 }
+    }
+
+    @ViewBuilder
+    private var rowLabel: some View {
+        if UIDevice.supportsLiquidGlass {
+            labelView
+                .glassEffect(
+                    .regular.tint(isRowFocused ? .white : nil),
+                    in: .rect
+                )
+                .scaleEffect(x: isRowFocused ? 1.01 : 1.0, y: isRowFocused ? 1.05 : 1.0, anchor: .center)
+                .animation(.easeInOut(duration: 0.125), value: isRowFocused)
+        } else {
+            labelView
+                .background {
+                    ZStack {
+                        Rectangle()
+                            .fill(isRowFocused ? Color.white : Color.clear)
+
+                        if isRowFocused {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.8))
+                                .scaleEffect(x: 1, y: 1.1, anchor: .center)
+                        }
+                    }
+                }
+                .scaleEffect(x: isRowFocused ? 1.01 : 1.0, y: isRowFocused ? 1.05 : 1.0, anchor: .center)
+                .animation(.easeInOut(duration: 0.125), value: isRowFocused)
+        }
+    }
+
+    private var labelView: some View {
+        HStack {
+            Text(L10n.appFont)
+                .foregroundStyle(isRowFocused ? .black : .white)
+                .padding(.leading, 4)
+
+            Spacer()
+
+            Text(selection.displayTitle)
+                .foregroundStyle(isRowFocused ? .black : .secondary)
+                .brightness(isRowFocused ? 0.4 : 0)
+
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.body)
+                .fontWeight(.regular)
+                .foregroundStyle(isRowFocused ? .black : .secondary)
+                .brightness(isRowFocused ? 0.4 : 0)
+        }
+        .padding(.horizontal)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+private struct AppFontChoiceMenu: View {
+
+    @Binding
+    var selection: AppFontChoice
+
+    var focusedTarget: FocusState<AppFontFocusTarget?>.Binding
+
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(AppFontChoice.allCases, id: \.self) { choice in
+                Button {
+                    selection = choice
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(choice.displayTitle)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+
+                        Spacer(minLength: 16)
+
+                        if choice == selection {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(focusedTarget.wrappedValue == .choice(choice) ? .black : .white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 48)
+                    .background {
+                        if focusedTarget.wrappedValue == .choice(choice) {
+                            Capsule().fill(Color.white)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .focused(focusedTarget, equals: .choice(choice))
+                .onExitCommand(perform: dismiss)
+                .onKeyPress(.escape) {
+                    dismiss()
+                    return .handled
+                }
+            }
+        }
+        .padding(8)
+        .frame(width: 320)
+        .background(Color.snowfinDeepNavy.opacity(0.98), in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        }
+        .focusSection()
+        .defaultFocus(focusedTarget, .choice(selection), priority: .userInitiated)
+        .onKeyPress(.escape) {
+            dismiss()
+            return .handled
+        }
+        .onAppear {
+            focusedTarget.wrappedValue = .choice(selection)
+        }
+    }
+}
+
 private struct SnowfinSettingsBackground: View {
 
     var body: some View {

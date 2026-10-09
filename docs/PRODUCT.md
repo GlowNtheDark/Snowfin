@@ -24,6 +24,7 @@ compact actions, and clear remote focus.
 | Starting/stopping media | [Playback](product-specs/playback.md) |
 | Episode transition | [Play Next](product-specs/play-next.md) |
 | Resume and next episodes | [Continue Watching](product-specs/continue-watching.md) |
+| App UI typography | [App font](product-specs/app-font.md) |
 | Returning to content | [Focus restoration](product-specs/focus-restoration.md) |
 
 These specs distinguish explicit direction from implementation-derived behavior.

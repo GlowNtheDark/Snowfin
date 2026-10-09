@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 @main
@@ -19,11 +20,30 @@ struct SwiftfinApp: App {
 
     var body: some Scene {
         WindowGroup {
-            OverlayToastView {
-                WithUserAuthentication {
-                    RootView()
+            AppFontEnvironment {
+                OverlayToastView {
+                    WithUserAuthentication {
+                        RootView()
+                    }
                 }
             }
         }
+    }
+}
+
+private struct AppFontEnvironment<Content: View>: View {
+
+    @Default(.appFontChoice)
+    private var appFontChoice
+
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .fontDesign(appFontChoice.fontDesign)
     }
 }

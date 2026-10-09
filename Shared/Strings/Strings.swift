@@ -122,6 +122,8 @@ internal enum L10n {
   internal static let apiKeysDescription = L10n.tr("Localizable", "apiKeysDescription", fallback: "External applications require an API key to communicate with your server.")
   /// Appearance
   internal static let appearance = L10n.tr("Localizable", "appearance", fallback: "Appearance")
+  /// App Font
+  internal static let appFont = L10n.tr("Localizable", "appFont", fallback: "App Font")
   /// App icon
   internal static let appIcon = L10n.tr("Localizable", "appIcon", fallback: "App icon")
   /// Application name
@@ -1424,6 +1426,8 @@ internal enum L10n {
   internal static let role = L10n.tr("Localizable", "role", fallback: "Role")
   /// Rotate
   internal static let rotate = L10n.tr("Localizable", "rotate", fallback: "Rotate")
+  /// Rounded
+  internal static let rounded = L10n.tr("Localizable", "rounded", fallback: "Rounded")
   /// Run
   internal static let run = L10n.tr("Localizable", "run", fallback: "Run")
   /// Running...
@@ -1486,6 +1490,8 @@ internal enum L10n {
   internal static let seriesDatePlayed = L10n.tr("Localizable", "seriesDatePlayed", fallback: "Series date watched")
   /// Series name
   internal static let seriesName = L10n.tr("Localizable", "seriesName", fallback: "Series name")
+  /// Serif
+  internal static let serif = L10n.tr("Localizable", "serif", fallback: "Serif")
   /// Server
   internal static let server = L10n.tr("Localizable", "server", fallback: "Server")
   /// Server logs
