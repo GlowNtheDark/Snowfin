@@ -26,6 +26,11 @@ struct PosterHStackLibrarySection<Library: PagingLibrary>: View
     @Router
     private var router
 
+    #if os(tvOS)
+    @Environment(\.suppressesHomeDefaultFocus)
+    private var suppressesHomeDefaultFocus
+    #endif
+
     let group: PosterGroup<Library>
 
     private func routeToLibrary() {
@@ -82,32 +87,51 @@ struct PosterHStackLibrarySection<Library: PagingLibrary>: View
         #endif
     }
 
+    private var section: some View {
+        ContentGroupSection {
+            PosterHStack(
+                elements: viewModel.elements.elements,
+                displayType: group.posterDisplayType,
+                size: group.posterSize
+            ) { element, namespace in
+                element.libraryDidSelectElement(router: router, in: namespace)
+            }
+            .withViewContext(.isThumb)
+            .focusSection()
+            .focused($focusedSection, equals: .content)
+        } header: {
+            sectionHeader
+                .edgePadding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    @ViewBuilder
     var body: some View {
         if viewModel.elements.isNotEmpty {
-            ContentGroupSection {
-                PosterHStack(
-                    elements: viewModel.elements.elements,
-                    displayType: group.posterDisplayType,
-                    size: group.posterSize
-                ) { element, namespace in
-                    element.libraryDidSelectElement(router: router, in: namespace)
-                }
-                .withViewContext(.isThumb)
-                .focusSection()
-                .focused($focusedSection, equals: .content)
-            } header: {
-                sectionHeader
-                    .edgePadding(.horizontal)
-                    .accessibilityAddTraits(.isHeader)
+            #if os(tvOS)
+            if suppressesHomeDefaultFocus {
+                section
+                    .focusSection()
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(viewModel.library.parent.displayTitle)
+            } else {
+                section
+                    .focusSection()
+                    .defaultFocus(
+                        $focusedSection,
+                        .content,
+                        priority: .userInitiated
+                    )
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(viewModel.library.parent.displayTitle)
             }
-            .focusSection()
-            .defaultFocus(
-                $focusedSection,
-                .content,
-                priority: .userInitiated
-            )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(viewModel.library.parent.displayTitle)
+            #else
+            section
+                .focusSection()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(viewModel.library.parent.displayTitle)
+            #endif
         }
     }
 }

@@ -29,6 +29,9 @@ struct MainTabView: View {
     private var focusedSidebarTabID: String?
 
     @State
+    private var isSidebarHandoffInProgress = false
+
+    @State
     private var previewedSidebarTabID: String?
 
     @State
@@ -133,7 +136,7 @@ struct MainTabView: View {
     }
     #else
     private var isSidebarExpanded: Bool {
-        focusedSidebarTabID != nil
+        focusedSidebarTabID != nil && !isSidebarHandoffInProgress
     }
 
     private var displayedTabID: String? {
@@ -142,16 +145,32 @@ struct MainTabView: View {
 
     private func activateSidebarTab(_ tab: TabCoordinator.TabData) {
         homePlaybackCoordinator?.cancelHomeReturn()
+        let isHome = tab.item.id == tabCoordinator.tabs.first?.item.id
+        if isHome {
+            homePlaybackCoordinator?.prepareSidebarHomeReturn()
+        } else {
+            homePlaybackCoordinator?.cancelSidebarHomeReturn()
+        }
+        let restoresHomeTile = isHome && homePlaybackCoordinator?.isRestoringSidebarHomeFocus == true
+        isSidebarHandoffInProgress = restoresHomeTile
         previewedSidebarTabID = tab.item.id
         if tabCoordinator.selectedTabID != tab.item.id {
             tabCoordinator.selectedTabID = tab.item.id
         }
         focusedSidebarTabID = nil
+        if restoresHomeTile {
+            homePlaybackCoordinator?.sidebarReleasedHomeFocus()
+        }
 
         if tab.item.id == TabItem.search.id, tab.coordinator.path.isEmpty {
             searchFocus.requestEntry()
             return
         }
+
+        // The exact Home tile request above replaces the generic root-tab
+        // request. Sending both would restore the tile, then move focus to the
+        // first Home group when the queued root event arrives.
+        guard !restoresHomeTile else { return }
 
         // Let the sidebar relinquish focus before delivering the repeated-tab
         // event that asks the destination to focus its primary content.
@@ -209,9 +228,9 @@ struct MainTabView: View {
                     set: { _ in }
                 ) : .constant(true))
                 .opacity(isActive ? 1 : 0)
-                .disabled(!isActive)
+                .disabled(!isActive || isSidebarExpanded)
                 .allowsHitTesting(isActive)
-                .accessibilityHidden(!isActive)
+                .accessibilityHidden(!isActive || isSidebarExpanded)
                 .environment(\.initialTabCandidateReady) {
                     requestInitialHomeContentFocus(for: tab)
                 }
@@ -220,8 +239,13 @@ struct MainTabView: View {
                 }
                 .environment(\.registerHomeFocus) { coordinator, navigationCoordinator in
                     guard tab.item.id == tabCoordinator.tabs.first?.item.id else { return }
+                    let previousCoordinator = homePlaybackCoordinator
+                    coordinator.inheritLastFocusedHomeTile(homePlaybackCoordinator?.lastFocusedHomeTile)
                     homePlaybackCoordinator = coordinator
                     homeNavigationCoordinator = navigationCoordinator
+                    if focusedSidebarTabID == tab.item.id || previousCoordinator?.isRestoringSidebarHomeFocus == true {
+                        coordinator.prepareSidebarHomeReturn()
+                    }
                 }
                 .onExitCommand {
                     guard isActive, !protectsHomePlaybackReturn else { return }
@@ -333,16 +357,22 @@ struct MainTabView: View {
             }
             .focusScope(sidebarFocusNamespace)
             .focusSection()
-            .disabled(protectsHomePlaybackReturn || isAwaitingLaunchContentFocus)
+            .disabled(protectsHomePlaybackReturn || isAwaitingLaunchContentFocus || isSidebarHandoffInProgress)
             .clipped()
             // Expand the complete rail, including its background and clipping bounds.
             .ignoresSafeArea(.container, edges: [.horizontal, .vertical])
             .zIndex(1)
             .onChange(of: focusedSidebarTabID) { _, tabID in
-                guard let tabID,
-                      tabCoordinator.tabs.contains(where: { $0.item.id == tabID })
-                else { return }
+                guard let tabID else { return }
+                guard tabCoordinator.tabs.contains(where: { $0.item.id == tabID }) else { return }
 
+                if tabID != tabCoordinator.tabs.first?.item.id {
+                    homePlaybackCoordinator?.cancelSidebarHomeReturn()
+                }
+
+                if tabID == tabCoordinator.tabs.first?.item.id {
+                    homePlaybackCoordinator?.prepareSidebarHomeReturn()
+                }
                 previewedSidebarTabID = tabID
             }
         }
@@ -386,6 +416,14 @@ struct MainTabView: View {
             protectsHomePlaybackReturn = protecting
             if protecting {
                 focusedSidebarTabID = nil
+            }
+        }
+        .onReceive(
+            homePlaybackCoordinator?.$isRestoringSidebarHomeFocus.eraseToAnyPublisher() ??
+                Just(false).eraseToAnyPublisher()
+        ) { restoring in
+            if !restoring {
+                isSidebarHandoffInProgress = false
             }
         }
         .onChange(of: tabCoordinator.selectedTabID) { _, tabID in

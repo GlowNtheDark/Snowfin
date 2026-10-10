@@ -34,12 +34,21 @@ final class FocusCoordinator: ObservableObject {
         }
     }
 
+    private(set) var focusRequestRevision = 0
+
     @Published
     private(set) var protectsHomeReturn = false
     @Published
     private(set) var homeRevision = 0
     @Published
     private(set) var homeReturnTarget: HomeTile?
+    @Published
+    private(set) var sidebarHomeReturnTarget: HomeTile?
+    @Published
+    private(set) var isRestoringSidebarHomeFocus = false
+    @Published
+    private(set) var didRestoreSidebarHomeFocus = false
+    private(set) var lastFocusedHomeTile: HomeTile?
     @Published
     private(set) var defersHomeRefresh = false
     private var homeOrigin: HomeTile?
@@ -60,11 +69,44 @@ final class FocusCoordinator: ObservableObject {
     private var homeVerticalScrollSuppressions: Set<String> = []
     private var homeVerticalRecognizer: HomeVerticalTransitionRecognizer?
 
+    private var readySidebarHomeTarget: String?
+    private var revealedSidebarHomeTarget: String?
+    private var sidebarReleasedForHomeReturn = false
+
+    var requestedHomeFocusTarget: String? {
+        sidebarHomeReturnTarget?.target ?? homeReturnTarget?.target
+    }
+
+    func shouldRestoreHomeFocus(to tile: HomeTile) -> Bool {
+        sidebarHomeReturnTarget?.target == tile.target || homeReturnTarget?.target == tile.target
+    }
+
+    func inheritLastFocusedHomeTile(_ tile: HomeTile?) {
+        guard lastFocusedHomeTile == nil else { return }
+        lastFocusedHomeTile = tile
+    }
+
     func updateHomeFocusRows(_ rows: [HomeFocusRow]) {
         if homeFocusRows.map(\.membershipSignature) != rows.map(\.membershipSignature) {
             lastHomeVerticalTransition = nil
         }
         homeFocusRows = rows
+
+        if let sidebarHomeReturnTarget,
+           !rows.contains(where: { row in
+               row.groupID == sidebarHomeReturnTarget.groupID &&
+                   row.tiles.contains { $0.itemID == sidebarHomeReturnTarget.itemID }
+           })
+        {
+            if request == sidebarHomeReturnTarget.target {
+                clearRequest()
+            }
+            self.sidebarHomeReturnTarget = nil
+            readySidebarHomeTarget = nil
+            revealedSidebarHomeTarget = nil
+        }
+
+        resolveSidebarHomeReturn(rows: rows)
     }
 
     func registerHomeFocusTile(_ tile: HomeTile, from view: UIView) {
@@ -90,8 +132,49 @@ final class FocusCoordinator: ObservableObject {
                 lastHomeVerticalTransition = nil
             }
             focusedHomeTile = tile
+            lastFocusedHomeTile = tile
         } else if focusedHomeTile?.target == tile.target {
             focusedHomeTile = nil
+        }
+    }
+
+    /// Starts sidebar return from the last semantic Home tile. The target is
+    /// resolved against the current rows once their preference manifest arrives.
+    func prepareSidebarHomeReturn() {
+        guard !isRestoringSidebarHomeFocus,
+              lastFocusedHomeTile != nil
+        else { return }
+        invalidatePendingFocusRequests()
+        isRestoringSidebarHomeFocus = true
+        sidebarHomeReturnTarget = nil
+        readySidebarHomeTarget = nil
+        revealedSidebarHomeTarget = nil
+        sidebarReleasedForHomeReturn = false
+        clearRequest()
+        resolveSidebarHomeReturn(rows: homeFocusRows)
+    }
+
+    func resolveSidebarHomeReturn(rows: [HomeFocusRow]) {
+        guard isRestoringSidebarHomeFocus,
+              sidebarHomeReturnTarget == nil,
+              let origin = lastFocusedHomeTile,
+              !rows.isEmpty
+        else { return }
+
+        let ordered = rows.sorted { $0.order < $1.order }
+        let originalRow = ordered.first { $0.groupID == origin.groupID }?.tiles ?? []
+        let exact = originalRow.first { $0.itemID == origin.itemID }
+        let nearest = originalRow.min {
+            let lhs = abs($0.index - origin.index)
+            let rhs = abs($1.index - origin.index)
+            return lhs == rhs ? $0.index < $1.index : lhs < rhs
+        }
+        sidebarHomeReturnTarget = exact ?? nearest ?? ordered.flatMap(\.tiles).first
+
+        if sidebarHomeReturnTarget == nil {
+            cancelSidebarHomeReturn()
+        } else {
+            revealSidebarHomeTile()
         }
     }
 
@@ -365,6 +448,7 @@ final class FocusCoordinator: ObservableObject {
                     return true
                 }
                 revealHomeTile()
+                revealSidebarHomeTile()
                 return
             }
             ancestor = current.superview
@@ -381,9 +465,14 @@ final class FocusCoordinator: ObservableObject {
     }
 
     func homeTileReady(_ tile: HomeTile) {
-        guard protectsHomeReturn, homeReturnTarget?.target == tile.target else { return }
-        readyHomeTarget = tile.target
-        requestHomeFocusIfReady()
+        if protectsHomeReturn, homeReturnTarget?.target == tile.target {
+            readyHomeTarget = tile.target
+            requestHomeFocusIfReady()
+        }
+        if isRestoringSidebarHomeFocus, sidebarHomeReturnTarget?.target == tile.target {
+            readySidebarHomeTarget = tile.target
+            requestSidebarHomeFocusIfReady()
+        }
     }
 
     private func requestHomeFocusIfReady() {
@@ -394,9 +483,54 @@ final class FocusCoordinator: ObservableObject {
     }
 
     func homeTileAcquired(_ tile: HomeTile) {
-        guard homeReturnTarget?.target == tile.target else { return }
-        cancelHomeReturn()
-        clearRequest()
+        if homeReturnTarget?.target == tile.target {
+            cancelHomeReturn()
+            clearRequest()
+        }
+        if sidebarHomeReturnTarget?.target == tile.target {
+            didRestoreSidebarHomeFocus = true
+            cancelSidebarHomeReturn()
+            clearRequest()
+        }
+    }
+
+    private func revealSidebarHomeTile() {
+        guard let tile = sidebarHomeReturnTarget,
+              revealedSidebarHomeTarget != tile.target,
+              let scroll = rowScrollers[tile.groupID]
+        else { return }
+        revealedSidebarHomeTarget = tile.target
+        if !scroll(tile.index) {
+            revealedSidebarHomeTarget = nil
+        }
+    }
+
+    private func requestSidebarHomeFocusIfReady() {
+        guard isRestoringSidebarHomeFocus,
+              sidebarReleasedForHomeReturn,
+              let target = sidebarHomeReturnTarget?.target,
+              readySidebarHomeTarget == target
+        else { return }
+        focus(target)
+    }
+
+    func sidebarReleasedHomeFocus() {
+        guard isRestoringSidebarHomeFocus else { return }
+        sidebarReleasedForHomeReturn = true
+        requestSidebarHomeFocusIfReady()
+    }
+
+    func cancelSidebarHomeReturn() {
+        let target = sidebarHomeReturnTarget?.target
+        invalidatePendingFocusRequests()
+        isRestoringSidebarHomeFocus = false
+        sidebarHomeReturnTarget = nil
+        readySidebarHomeTarget = nil
+        revealedSidebarHomeTarget = nil
+        sidebarReleasedForHomeReturn = false
+        if request == target {
+            clearRequest()
+        }
     }
 
     func cancelHomeReturn() {
@@ -420,8 +554,22 @@ final class FocusCoordinator: ObservableObject {
     }
 
     func focus(_ id: String) {
+        #if os(tvOS)
+        invalidatePendingFocusRequests()
+        #endif
         request = id
     }
+
+    #if os(tvOS)
+    func focus(_ id: String, ifUnchangedSince revision: Int) {
+        guard focusRequestRevision == revision else { return }
+        focus(id)
+    }
+
+    private func invalidatePendingFocusRequests() {
+        focusRequestRevision += 1
+    }
+    #endif
 
     func clearRequest() {
         request = nil
@@ -552,6 +700,8 @@ struct HomeFocusRowsKey: PreferenceKey {
 extension EnvironmentValues {
     @Entry
     var homeTileCoordinator: FocusCoordinator? = nil
+    @Entry
+    var suppressesHomeDefaultFocus = false
     @Entry
     var homeFocusGroup: String? = nil
     @Entry

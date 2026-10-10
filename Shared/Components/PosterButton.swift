@@ -265,11 +265,19 @@ private struct RegisteredHomeTile: ViewModifier {
             .id(tile.target)
             .onReceive(coordinator.$request) { target in
                 if target == tile.target {
+                    if coordinator.isRestoringSidebarHomeFocus {
+                        guard coordinator.request == tile.target,
+                              coordinator.shouldRestoreHomeFocus(to: tile)
+                        else { return }
+                        focused.wrappedValue = true
+                        return
+                    }
+
                     // Apply FocusState outside the published coordinator update,
                     // then revalidate that this visible registration is current.
                     DispatchQueue.main.async {
                         guard coordinator.request == tile.target,
-                              coordinator.homeReturnTarget?.target == tile.target
+                              coordinator.shouldRestoreHomeFocus(to: tile)
                         else { return }
                         focused.wrappedValue = true
                     }
@@ -289,7 +297,7 @@ private struct RegisteredHomeTile: ViewModifier {
             .background {
                 LaunchFocusCandidateProbe(
                     onReady: { coordinator.homeTileReady(tile) },
-                    readinessID: coordinator.homeReturnTarget?.target,
+                    readinessID: coordinator.requestedHomeFocusTarget,
                     homeTile: tile,
                     onRequestFocus: { focused.wrappedValue = true },
                     onLayout: {

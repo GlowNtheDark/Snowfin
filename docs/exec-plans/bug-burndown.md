@@ -1,13 +1,13 @@
 # Screen bug-burn-down register
 
 Audit date: 2026-10-10
-Scope: A01/A02 shared playback Back-path fix and focused simulator acceptance; other register entries retain their prior evidence.
-Baseline source revision: `8da2e06b1935bb7fa86b2b08a0705acf6d1dea2f` on `codex/phase1-shared-item-state`; the two playback files below contain uncommitted remediation changes.
+Scope: A01/A02 shared playback Back-path fix, B01 sidebar-return fix, and focused simulator acceptance; other register entries retain their prior evidence.
+Original audit baseline: `8da2e06b1935bb7fa86b2b08a0705acf6d1dea2f` on `codex/phase1-shared-item-state`. B01 follow-up started from `aba7494196f8be6dba4a32542d3b00b4fc609776` on the same branch; the B01 remediation changes in this working tree are uncommitted.
 Runtime target: Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator. No physical Apple TV was used.
 
 ## Executive summary
 
-The 26 initial register items were reviewed: **2 confirmed open bugs**, **10 runtime passes**, **8 source-verified cases with runtime coverage still incomplete**, **1 previously reported issue not reproduced**, **5 unverified cases**, and **0 blocked cases**. No P0 was found. The remaining confirmed bugs are P1: Up Episodes can reopen with the season selector focused after a cross-season change, and Home sidebar Right can restore the wrong tile. A01 and A02 now pass their original playback Back acceptance paths on the requested simulator; B01 reproduced twice in the earlier audit.
+The 26 initial register items were reviewed: **1 confirmed open bug**, **11 runtime passes**, **8 source-verified cases with runtime coverage still incomplete**, **1 previously reported issue not reproduced**, **5 unverified cases**, and **0 blocked cases**. No P0 was found. The remaining confirmed bug is P1: Up Episodes can reopen with the season selector focused after a cross-season change. A01, A02, and B01 pass their focused simulator acceptance paths; B01's pre-fix reproduction and corrected return paths are recorded below.
 
 **A01/A02 remediation:** both failures shared the outer Menu/Back delivery path, while the coordinator's Intro and credits transitions remain distinct. The corrected simulator runs confirm a single Back press is consumed by the active segment layer; details are recorded below.
 
@@ -19,8 +19,8 @@ Current evidence does **not** establish a known-bug-free baseline. Membership/fo
 
 | Status | Count | IDs |
 | --- | ---: | --- |
-| CONFIRMED BUG | 2 | A03, B01 |
-| PASS | 10 | A01, A02, A04, A05, C02, D01, D03, E03, F01, F03 |
+| CONFIRMED BUG | 1 | A03 |
+| PASS | 11 | A01, A02, A04, A05, B01, C02, D01, D03, E03, F01, F03 |
 | SOURCE VERIFIED | 8 | B02-B07, E02, F02 |
 | NOT REPRODUCED | 1 | C01 |
 | UNVERIFIED | 5 | B08, D02, E01, F04, F05 |
@@ -40,15 +40,16 @@ Severity describes the impact if a behavior regresses, not its current status. A
 - **Dependencies / blocker:** Focus candidate timing during cross-season player-item replacement; current candidate registration must precede the focus request.
 - **Next action:** Trace `focusedTarget`, shelf candidate registration, and focus-update ordering immediately after cross-season selection. Retest with S2:E1 and an episode in a second season; do not add a delay-based correction.
 
-### B01 — Sidebar Right restores the wrong Home tile
+### B01 — Sidebar return restores the remembered Home tile
 
-- **Subsystem / severity / status:** Home/sidebar focus acquisition; P1; **CONFIRMED BUG**.
-- **Reproduction:** On the current simulator, focus the first tile in Home's Recently Added TV Shows row (The Secret Lives of Mormon Wives), press Left to enter the Home sidebar, then press Right once. Repeat the same path.
-- **Expected:** Right returns to the remembered TV Shows tile; the Home row and tile target remain stable.
-- **Observed / evidence:** Both attempts returned focus to the Continue Watching S3:E10 tile instead. This reproduces the existing 2026-09-22 sidebar-entry timing report. The current test had one Back/Right transition at a time; it did not show duplicate movement, but the selected return target was wrong.
-- **References:** [tech-debt evidence](tech-debt.md#deferred-findings-and-review-needs), [focus contract](../design-docs/focus-navigation-contract.md#root-and-launch), lines 145-156 and 547.
-- **Dependencies / blocker:** Home's restored target races native first focus acquisition when the sidebar exits. The old passes were reverted; inspect current target preferences and event ordering before changing the owner.
-- **Next action:** Trace Right handling, first eligible shelf/tile acquisition, and remembered target readiness in one simulator recording. Verify both Right and Select entry, offscreen target reveal, launch focus, and exact restoration after Details/player return.
+- **Subsystem / severity / status:** Home/sidebar focus acquisition; P1; **PASS**.
+- **Original reproduction / pre-fix evidence:** Focus the first tile in Home's Recently Added TV Shows row (The Secret Lives of Mormon Wives), press Left to enter the Home sidebar, then press Right once. The pre-fix simulator returned to Continue Watching S3:E10 instead of the remembered tile, reproducing the earlier sidebar-entry timing report.
+- **Expected:** Sidebar return restores the last valid Home tile, reveals it if its shelf is horizontally scrolled, preserves initial Home launch focus, and performs one transition without a delayed corrective jump.
+- **Corrected runtime evidence:** On the Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator, the original Left/Right path restored The Secret Lives of Mormon Wives. Repeating the return with Select also restored it. Returning from Circle in Recently Added Movies restored Circle; returning from Coyote vs. Acme with the Movies shelf horizontally scrolled restored that exact tile and kept the scroll offset. After sidebar return, Up to Circle then Down restored the exact Secret Lives tile. Opening the series Details from that tile and pressing Back returned to it. Initial Home entry focused Futurama, the first Continue Watching candidate. Each sampled press produced one visible transition, and no later first-tile jump was observed.
+- **Root cause / fix:** `FocusCoordinator` kept only the currently focused Home tile, which was cleared as focus moved to the sidebar. The root-tab repeat path then requested the first Home group, while each row's high-priority `defaultFocus` could reacquire its first poster after restoration. Home now retains the last semantic tile, resolves exact item then nearest same-row then first available fallback, reveals the target row/cell, and waits for the sidebar to relinquish focus before requesting it. The exact-target path skips the competing generic root request, invalidates stale focus requests, and keeps row default focus suppressed after the remembered tile is acquired. Initial Home entry still uses its original first-candidate request.
+- **References:** [Home focus ownership](<../../Shared/Objects/FocusCoordinator.swift:32>), [sidebar activation](<../../Shared/Coordinators/Tabs/MainTabView.swift:135>), [Home initial/root focus](<../../Shared/Views/ContentGroupView.swift:61>), [row default focus](<../../Shared/Components/PosterHStackLibrarySection.swift:87>), [focus contract](../design-docs/focus-navigation-contract.md#root-and-launch), lines 145-156 and 547.
+- **Dependencies / blocker:** No blocker for the verified simulator paths. Physical Apple TV behavior was not tested, as requested.
+- **Next action:** Keep B01 in the sidebar/Home regression checklist; include Right and Select, an offscreen shelf target, Home vertical reverse, and Details return after future focus changes.
 
 ## Previously reported bugs not reproduced
 
@@ -159,7 +160,7 @@ Severity describes the impact if a behavior regresses, not its current status. A
 - **Subsystem / severity / status:** tvOS remote navigation; P1; **PASS**.
 - **Reproduction:** During this audit, test Home row Down/Up and Left/Right, Search no-results Down, Settings menu Select/Back, Episodes open/Back, and player/Details/Home Back one press at a time.
 - **Expected:** One remote press produces at most one region/route transition and no delayed corrective jump.
-- **Observed / evidence:** The sampled presses produced one visible transition each. Immediate App Font reopen worked. The Home Right transition produced a single but incorrect target and is tracked as B01, not a duplicate-press failure. This sample is not a claim that every app boundary was tested.
+- **Observed / evidence:** The sampled presses produced one visible transition each. Immediate App Font reopen worked. The pre-fix Home Right result was one transition to the wrong tile (B01); the B01 follow-up restored exact targets through Right and Select without a delayed jump. This sample is not a claim that every app boundary was tested.
 - **References:** [one-press contract](../design-docs/focus-navigation-contract.md#root-and-launch), lines 145-156 and 558-568; [Home vertical focus](../design-docs/focus-navigation-contract.md#home-and-shelves).
 - **Dependencies / blocker:** Covers representative simulator paths only; hardware input remains untested.
 - **Next action:** Recheck one-press ownership alongside each confirmed fix; do not infer full navigation coverage from this sample.
@@ -293,7 +294,7 @@ Severity describes the impact if a behavior regresses, not its current status. A
 - **Subsystem / severity / status:** Cross-screen focus boundaries; P1; **UNVERIFIED**.
 - **Reproduction:** Current audit checked Home first TV Shows tile Left to sidebar, Home shelves Down/Up, Search first key Left, and Search no-results Down. Existing Episodes checks exercised several selector/shelf edges, but no single full boundary matrix was run.
 - **Expected:** Representative first/last targets, section transitions, empty regions, and missing-target fallbacks retain focus or choose the documented deterministic destination with one press.
-- **Observed / evidence:** Individual tested boundaries moved once. Home sidebar return still restores the wrong item (B01). Search fallback to field/key is explicit in source. Libraries, Settings, Details shelves, Episodes edge retention, and disappearing-item fallback were not all exercised.
+- **Observed / evidence:** Individual tested boundaries moved once. B01's sidebar return now restored the saved Home target in the focused follow-up. Search fallback to field/key is explicit in source. Libraries, Settings, Details shelves, Episodes edge retention, and disappearing-item fallback were not all exercised.
 - **References:** [focus contract known deviations](../design-docs/focus-navigation-contract.md#known-deviations-and-required-confirmation), lines 543-554; [Home fallback](<../../Shared/Objects/FocusCoordinator.swift:326>); [Search fallback](<../../Shared/Views/SearchView.swift:99>).
 - **Dependencies / blocker:** Some focus regions use native tvOS spatial movement; device confirmation remains outstanding.
 - **Next action:** Maintain a compact per-region first/last/empty-target checklist and rerun only affected paths with navigation changes.
@@ -304,7 +305,7 @@ None. D02 remains **UNVERIFIED**, not BLOCKED: a safe deterministic failure inje
 
 ## Newly discovered issues
 
-No additional reproducible app bug outside the initial register was found. B01 reproduced again during this audit, but is the already documented sidebar-acquisition issue, not a new issue. The Search keyboard capture mismatch (`aaaaa` rather than the typed synthetic query) came from Device Hub input handling and was not counted as an app bug.
+No additional reproducible app bug outside the initial register was found. B01 reproduced on the pre-fix baseline and passed after the focused correction; it was not a new issue. The Search keyboard capture mismatch (`aaaaa` rather than the typed synthetic query) came from Device Hub input handling and was not counted as an app bug.
 
 ### X01 — Play Next product acceptance and native-player coverage
 
@@ -318,11 +319,10 @@ No additional reproducible app bug outside the initial register was found. B01 r
 
 ## Recommended repair order
 
-1. **B01 — Home sidebar remembered-target race**, reproduced twice in the earlier audit; use event-order evidence and avoid delayed corrective jumps.
-2. **A03 — Up Episodes cross-season reopening**, a separate playback focus-target readiness issue.
-3. Close the high-impact verification gaps with reversible test data: B03-B07 membership/progress/watched propagation, then D02 Search failure/recovery and D03 watched-specific assertion if desired.
-4. Complete B08 and F05 focus boundaries, F02 hidden controls, E01 EPG geometry, and any remaining F04 overlay matrix.
-5. Resolve X01 as a product/acceptance decision. Do not treat it as a confirmed bug or broaden playback architecture before that decision.
+1. **A03 — Up Episodes cross-season reopening**, a separate playback focus-target readiness issue.
+2. Close the high-impact verification gaps with reversible test data: B03-B07 membership/progress/watched propagation, then D02 Search failure/recovery and D03 watched-specific assertion if desired.
+3. Complete B08 and F05 focus boundaries, F02 hidden controls, E01 EPG geometry, and any remaining F04 overlay matrix.
+4. Resolve X01 as a product/acceptance decision. Do not treat it as a confirmed bug or broaden playback architecture before that decision.
 
 There are two useful shared investigations: (a) A01/A02 exposed the same outer player Back-delivery failure and now pass after one UIKit container owner was restored; their Intro-dismissal and countdown-then-choice transitions remain distinct, as does F04's separate segment surface; (b) B02-B07 share typed ItemState publication and targeted collection invalidation, but presentation-only updates must stay distinct from membership/order refresh. B01 and A03 both involve focus timing, yet they have different owners (Home sidebar candidate acquisition vs episode-card candidate readiness) and should not be patched by a shared delay.
 
@@ -333,7 +333,7 @@ There are two useful shared investigations: (a) A01/A02 exposed the same outer p
 - [ ] A03: first and cross-season Up Episodes reopens focus current episode; Left/Right and selector/shelf boundaries retain their owner.
 - [ ] A04: Details-origin playback returns to same Details, then Home exact origin only after Home is visible.
 - [ ] A05: Play returns to Play, Replay/Play From Beginning returns to its exact action, unavailable Replay falls back to Play.
-- [ ] B01: sidebar Right/Select return to the remembered Home tile, including offscreen/launch/detail-return targets.
+- [x] B01: sidebar Right and Select restored the remembered tile from the TV Shows row, Movies row, and a horizontally scrolled Movies shelf; Home Up/Down reverse and Details return preserved the exact target. Initial launch still focused the first Home candidate. (Apple TV 4K 3rd gen, 1080p, tvOS 27.0 simulator.)
 - [ ] B02-B07: focused tile updates, Continue membership add/remove, completion/Next Up ordering, descendant unwatch reconciliation, unrelated shelves, and deterministic focus.
 - [ ] B08: adjacent shelf, nearest visible tile, short-row fallback, immediate reverse, scrolled offset, Details return, one press.
 - [ ] C01-C02: native menu and App Font Back/selection return to invoking row; immediate reopen; no delayed jump.

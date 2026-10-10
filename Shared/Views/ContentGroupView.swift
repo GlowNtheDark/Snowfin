@@ -65,8 +65,10 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
 
         pendingFirstGroupFocus = false
         proxy.scrollTo("top", anchor: .top)
+        let focusRequestRevision = focusCoordinator.focusRequestRevision
         DispatchQueue.main.async {
-            focusCoordinator.focus(firstGroup.id)
+            guard !focusCoordinator.isRestoringSidebarHomeFocus else { return }
+            focusCoordinator.focus(firstGroup.id, ifUnchangedSince: focusRequestRevision)
         }
     }
     #endif
@@ -106,6 +108,11 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
                 resolveHomeReturn()
             }
             .onChange(of: focusCoordinator.homeReturnTarget) { _, tile in
+                if let tile {
+                    proxy.scrollTo(tile.groupID, anchor: .center)
+                }
+            }
+            .onChange(of: focusCoordinator.sidebarHomeReturnTarget) { _, tile in
                 if let tile {
                     proxy.scrollTo(tile.groupID, anchor: .center)
                 }
@@ -158,6 +165,10 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         .animation(.linear(duration: 0.2), value: viewModel.background.states)
         #if os(tvOS)
             .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
+            .environment(
+                \.suppressesHomeDefaultFocus,
+                isHome && (focusCoordinator.isRestoringSidebarHomeFocus || focusCoordinator.didRestoreSidebarHomeFocus)
+            )
             .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
             .environment(\.itemStateStore, currentUserSession?.itemStateStore)
             .onAppear {
@@ -189,6 +200,10 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             }
             .onReceive(tabItemSelected) { event in
                 if event.isRepeat, event.isRoot {
+                    guard !focusCoordinator.isRestoringSidebarHomeFocus else {
+                        pendingFirstGroupFocus = false
+                        return
+                    }
                     pendingFirstGroupFocus = true
                 }
             }
