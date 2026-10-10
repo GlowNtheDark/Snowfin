@@ -101,7 +101,27 @@ extension VideoPlayer.PlaybackControls {
         }
 
         if containerState.isPresentingPlaybackEpisodes {
-            press.resolve(.fallback)
+            let direction: PlaybackEpisodesMoveRequest.Direction? = switch press.type {
+            case .upArrow:
+                .up
+            case .downArrow:
+                .down
+            case .leftArrow:
+                .left
+            case .rightArrow:
+                .right
+            default:
+                nil
+            }
+
+            if let direction {
+                if press.phase == .ended {
+                    containerState.playbackEpisodesMoveRequest = .init(direction)
+                }
+                press.resolve(.handled)
+            } else {
+                press.resolve(.fallback)
+            }
             return
         }
 

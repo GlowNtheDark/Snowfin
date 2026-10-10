@@ -17,6 +17,23 @@ enum PlaybackDropdownFocusRequest: Equatable {
     case restartEpisode
     case technicalDetailsFirstRow
 }
+
+struct PlaybackEpisodesMoveRequest: Equatable {
+    enum Direction: Equatable {
+        case up
+        case down
+        case left
+        case right
+    }
+
+    let id: UUID
+    let direction: Direction
+
+    init(_ direction: Direction) {
+        self.id = UUID()
+        self.direction = direction
+    }
+}
 #endif
 
 // TODO: turned into spaghetti to get out, clean up with a better state system
@@ -216,6 +233,9 @@ class VideoPlayerContainerState: ObservableObject {
 
     @Published
     var playbackDropdownFocusRequest: PlaybackDropdownFocusRequest?
+
+    @Published
+    var playbackEpisodesMoveRequest: PlaybackEpisodesMoveRequest?
 
     @Published
     var isPlaybackOverlayMenuDismissalGuarded = false

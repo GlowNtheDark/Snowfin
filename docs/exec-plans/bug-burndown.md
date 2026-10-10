@@ -1,13 +1,13 @@
 # Screen bug-burn-down register
 
 Audit date: 2026-10-10
-Scope: A01/A02 shared playback Back-path fix, B01 sidebar-return fix, and focused simulator acceptance; other register entries retain their prior evidence.
+Scope: A01/A02 shared playback Back-path fix, B01 sidebar-return fix, A03 Episodes focus-restoration fix, and focused simulator acceptance; other register entries retain their prior evidence.
 Original audit baseline: `8da2e06b1935bb7fa86b2b08a0705acf6d1dea2f` on `codex/phase1-shared-item-state`. B01 follow-up started from `aba7494196f8be6dba4a32542d3b00b4fc609776` on the same branch; the B01 remediation changes in this working tree are uncommitted.
 Runtime target: Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator. No physical Apple TV was used.
 
 ## Executive summary
 
-The 26 initial register items were reviewed: **1 confirmed open bug**, **11 runtime passes**, **8 source-verified cases with runtime coverage still incomplete**, **1 previously reported issue not reproduced**, **5 unverified cases**, and **0 blocked cases**. No P0 was found. The remaining confirmed bug is P1: Up Episodes can reopen with the season selector focused after a cross-season change. A01, A02, and B01 pass their focused simulator acceptance paths; B01's pre-fix reproduction and corrected return paths are recorded below.
+The 26 initial register items plus one newly discovered Episodes boundary case were reviewed: **0 confirmed open bugs**, **13 runtime passes**, **8 source-verified cases with runtime coverage still incomplete**, **1 previously reported issue not reproduced**, **5 unverified cases**, and **0 blocked cases**. No P0 was found. A01, A02, A03, B01, and F06 pass their focused simulator acceptance paths; the original A03 cross-season reproduction and its correction are recorded below.
 
 **A01/A02 remediation:** both failures shared the outer Menu/Back delivery path, while the coordinator's Intro and credits transitions remain distinct. The corrected simulator runs confirm a single Back press is consumed by the active segment layer; details are recorded below.
 
@@ -19,26 +19,27 @@ Current evidence does **not** establish a known-bug-free baseline. Membership/fo
 
 | Status | Count | IDs |
 | --- | ---: | --- |
-| CONFIRMED BUG | 1 | A03 |
-| PASS | 11 | A01, A02, A04, A05, B01, C02, D01, D03, E03, F01, F03 |
+| CONFIRMED BUG | 0 | — |
+| PASS | 13 | A01, A02, A03, A04, A05, B01, C02, D01, D03, E03, F01, F03, F06 |
 | SOURCE VERIFIED | 8 | B02-B07, E02, F02 |
 | NOT REPRODUCED | 1 | C01 |
 | UNVERIFIED | 5 | B08, D02, E01, F04, F05 |
 | BLOCKED | 0 | — |
 
-Severity describes the impact if a behavior regresses, not its current status. Across the 26 items: **15 P1, 10 P2, 1 P3, 0 P0**. Confirmed open bugs: **2 P1**.
+Severity describes the impact if a behavior regresses, not its current status. Across the 27 tracked items: **16 P1, 10 P2, 1 P3, 0 P0**. Confirmed open bugs: **0**.
 
-## Confirmed open bugs
+## Confirmed bug reports and dispositions
 
 ### A03 — Up Episodes can reopen focused on the season selector
 
-- **Subsystem / severity / status:** Playback Episodes focus restoration; P1; **CONFIRMED BUG**.
+- **Subsystem / severity / status:** Playback Episodes focus restoration; P1; **PASS**.
 - **Reproduction:** On the 2026-09-28 simulator run, select S2:E1 from Season 2, close Episodes, then reopen it and press Right once.
 - **Expected:** Reopening selects the current playing season and focuses the current episode card (S2:E1); Right then advances within that episode shelf.
-- **Observed / evidence:** Right changed the selected shelf to Season 3, proving focus had returned to the Season 2 selector rather than the S2:E1 card. The initial S3:E10 open before cross-season selection did focus the current episode correctly, so the failure is path-dependent. Two narrow focus passes did not make the return reliable. During this audit, a no-season-change reopen correctly focused the current S3:E10 card; that does not cover the failing path.
+- **Observed / evidence:** The original Right-to-Season-3 reproduction passed on the signed Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator after the fix. Same-season S3:E11 and cross-season S2:E1 reopens focused the currently playing card; selecting S2:E2 started it and the next reopen focused S2:E2. Back closed Episodes to the HUD. Up from the S3:E11 card focused Season 3; Left selected Season 2 in one step; Down focused S2:E1 because S3:E11 is absent there. After acquisition, focus remained stable and no corrective jump occurred.
+- **Root cause / fix:** The shelf's old `focus(_:)` scrolled and assigned `focusedTarget` before the matching episode Button registered. After season/item replacement, the default-focus request could target a candidate that did not yet exist, leaving focus with the selector. The shelf now waits for the target card's `onAppear` registration and issues one deduplicated focus request. During acquisition, only the requested card is an eligible episode Button and season chips are non-focusable. Episodes directional input is consumed at the player press-event owner and converted into a unique move request; the surface applies one-step movement and clamps boundaries instead of competing with native spatial focus.
 - **References:** [tech-debt evidence](tech-debt.md#deferred-findings-and-review-needs), [Episodes contract](../design-docs/focus-navigation-contract.md#up-episodes-surface), lines 466-480, and [playback focus notes](../design-docs/focus-system.md).
-- **Dependencies / blocker:** Focus candidate timing during cross-season player-item replacement; current candidate registration must precede the focus request.
-- **Next action:** Trace `focusedTarget`, shelf candidate registration, and focus-update ordering immediately after cross-season selection. Retest with S2:E1 and an episode in a second season; do not add a delay-based correction.
+- **Dependencies / blocker:** None for the verified simulator paths. A truly missing episode uses the first eligible card; this is source-reviewed, while the cross-season fallback to S2:E1 was runtime-tested.
+- **Next action:** Keep the cross-season reopen, missing-current-season fallback, directional boundaries, and Episodes Back path in the playback regression checklist.
 
 ### B01 — Sidebar return restores the remembered Home tile
 
@@ -164,6 +165,17 @@ Severity describes the impact if a behavior regresses, not its current status. A
 - **References:** [one-press contract](../design-docs/focus-navigation-contract.md#root-and-launch), lines 145-156 and 558-568; [Home vertical focus](../design-docs/focus-navigation-contract.md#home-and-shelves).
 - **Dependencies / blocker:** Covers representative simulator paths only; hardware input remains untested.
 - **Next action:** Recheck one-press ownership alongside each confirmed fix; do not infer full navigation coverage from this sample.
+
+### F06 — Episodes directional focus can wrap at a shelf boundary
+
+- **Subsystem / severity / status:** Playback Episodes focus boundaries; P1; **PASS**.
+- **Reproduction:** During A03 simulator validation, focus the final S3:E11 card while S3:E11 is playing, then press Right once.
+- **Expected:** The last eligible card retains focus; one press cannot wrap to a different card or change seasons.
+- **Observed / evidence:** Before the retained press-owner change, Right wrapped from S3:E11 to the currently playing S2:E2 card. The final signed build routes all four Episodes directions through one player press-event owner and clamps movement at collection bounds. On the Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator, Right at S3:E11 remained there; Left moved once to S3:E10. Left at the first S1 selector remained on Season 1; Right at the last selector remained on Season 5. Season3 Left selected Season2 once, and Down from Season2 focused the first eligible card S2:E1. Back layering remained Episodes → HUD → hidden HUD → Details.
+- **Root cause / fix:** Episodes arrows previously fell through to native tvOS spatial movement while the surface also changed selected content from focus updates. Native geometry could wrap to a visible card. UIKit press delivery now consumes each directional press once; the Episodes surface applies one adjacent index move and keeps focus unchanged at either boundary.
+- **References:** [Episodes directional contract](../design-docs/focus-navigation-contract.md#up-episodes-surface), [press handling](<../../Swiftfin tvOS/Views/VideoPlayer/PlaybackControls/Components/PlaybackControls+PressHandling.swift:103>), [Episodes surface](<../../Swiftfin tvOS/Views/VideoPlayer/PlaybackControls/PlaybackControls+Episodes.swift:245>).
+- **Dependencies / blocker:** None for the tested simulator paths; physical Apple TV behavior was not requested or tested.
+- **Next action:** Keep these first/last card and season-selector paths in the playback focus checklist.
 
 ## Source-verified; runtime verification remains incomplete
 
@@ -305,7 +317,7 @@ None. D02 remains **UNVERIFIED**, not BLOCKED: a safe deterministic failure inje
 
 ## Newly discovered issues
 
-No additional reproducible app bug outside the initial register was found. B01 reproduced on the pre-fix baseline and passed after the focused correction; it was not a new issue. The Search keyboard capture mismatch (`aaaaa` rather than the typed synthetic query) came from Device Hub input handling and was not counted as an app bug.
+F06 was discovered during A03 testing and is now PASS after the same playback-surface press owner was made explicit; the original wrap and final boundary acceptance evidence are recorded above. No newly discovered playback bug remains unresolved. B01 reproduced on the pre-fix baseline and passed after the focused correction; it was not a new issue. The Search keyboard capture mismatch (`aaaaa` rather than the typed synthetic query) came from Device Hub input handling and was not counted as an app bug.
 
 ### X01 — Play Next product acceptance and native-player coverage
 
@@ -319,7 +331,7 @@ No additional reproducible app bug outside the initial register was found. B01 r
 
 ## Recommended repair order
 
-1. **A03 — Up Episodes cross-season reopening**, a separate playback focus-target readiness issue.
+1. Retain A03 cross-season current-episode restoration and F06 directional boundary ownership in focused playback regression checks.
 2. Close the high-impact verification gaps with reversible test data: B03-B07 membership/progress/watched propagation, then D02 Search failure/recovery and D03 watched-specific assertion if desired.
 3. Complete B08 and F05 focus boundaries, F02 hidden controls, E01 EPG geometry, and any remaining F04 overlay matrix.
 4. Resolve X01 as a product/acceptance decision. Do not treat it as a confirmed bug or broaden playback architecture before that decision.
@@ -330,7 +342,7 @@ There are two useful shared investigations: (a) A01/A02 exposed the same outer p
 
 - [x] A01: Intro Back dismisses only prompt; same player continues without a seek; HUD returns.
 - [x] A02: first Back cancels countdown, second dismisses choice to the HUD; neither press exits the player.
-- [ ] A03: first and cross-season Up Episodes reopens focus current episode; Left/Right and selector/shelf boundaries retain their owner.
+- [x] A03: same-season and cross-season Up Episodes reopens focused the current episode; unavailable-in-season fallback selected the first eligible card; Back returned Episodes → HUD → hidden HUD → Details.
 - [ ] A04: Details-origin playback returns to same Details, then Home exact origin only after Home is visible.
 - [ ] A05: Play returns to Play, Replay/Play From Beginning returns to its exact action, unavailable Replay falls back to Play.
 - [x] B01: sidebar Right and Select restored the remembered tile from the TV Shows row, Movies row, and a horizontally scrolled Movies shelf; Home Up/Down reverse and Details return preserved the exact target. Initial launch still focused the first Home candidate. (Apple TV 4K 3rd gen, 1080p, tvOS 27.0 simulator.)
@@ -340,6 +352,7 @@ There are two useful shared investigations: (a) A01/A02 exposed the same outer p
 - [ ] D01-D03: no-results input focus, controlled request failure/recovery, exact result return and accepted user-state presentation.
 - [ ] E01-E03: System/Rounded/Serif EPG geometry; subtitle font independence; episode title/locator/series/fallback and Movie HUD.
 - [ ] F01-F05: exact route restoration, hidden/inactive focus eligibility, one-press transitions, full overlay stack, and first/last/empty target fallback.
+- [x] F06: Episodes selector/shelf directional movement is one step; first/last season and episode boundaries retain focus. (Apple TV 4K 3rd gen, 1080p, tvOS 27.0 simulator.)
 
 ## Known-bug-free exit criteria
 

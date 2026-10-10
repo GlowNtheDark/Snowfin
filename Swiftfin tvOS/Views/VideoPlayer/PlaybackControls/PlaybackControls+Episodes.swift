@@ -40,6 +40,15 @@ extension VideoPlayer.PlaybackControls {
         @State
         private var pendingEpisodeFocusSeasonID: String?
 
+        @State
+        private var requestedEpisodeFocusID: String?
+
+        @State
+        private var pendingSeasonFocusID: String?
+
+        @State
+        private var isRestoringCurrentEpisodeFocus = true
+
         init(queue: EpisodeMediaPlayerQueue) {
             self._seasonsViewModel = ObservedObject(wrappedValue: queue.seasonsViewModel)
         }
@@ -115,7 +124,10 @@ extension VideoPlayer.PlaybackControls {
                 .episode(manager.item.id ?? manager.item.displayTitle),
                 priority: .userInitiated
             )
-            .onAppear(perform: restoreCurrentSeason)
+            .onAppear {
+                isRestoringCurrentEpisodeFocus = true
+                restoreCurrentSeason()
+            }
             .onReceive(seasonsViewModel.$elements) { _ in
                 if selectedSeasonID == nil {
                     restoreCurrentSeason()
@@ -127,7 +139,10 @@ extension VideoPlayer.PlaybackControls {
             .onChange(of: manager.item.parentIndexNumber) {
                 restoreCurrentSeason()
             }
-            .onMoveCommand(perform: handleMoveCommand)
+            .onChange(of: containerState.playbackEpisodesMoveRequest) { _, request in
+                guard let request else { return }
+                handleMoveCommand(request.direction)
+            }
         }
 
         @ViewBuilder
@@ -137,20 +152,8 @@ extension VideoPlayer.PlaybackControls {
                     ScrollView(.horizontal) {
                         HStack(spacing: 12) {
                             ForEach(seasonsViewModel.elements) { season in
-                                let isSelected = selectedSeasonID == season.id
-
-                                Button {
-                                    select(season: season)
-                                } label: {
-                                    Text(season.library.parent.displayTitle)
-                                        .font(.callout.weight(.semibold))
-                                        .padding(.horizontal, 18)
-                                        .padding(.vertical, 12)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(EpisodesButtonStyle(isSelected: isSelected))
-                                .focused($focusedTarget, equals: .season(season.id))
-                                .id(season.id)
+                                seasonOption(season)
+                                    .id(season.id)
                             }
                         }
                     }
@@ -159,11 +162,63 @@ extension VideoPlayer.PlaybackControls {
                     .focusSection()
                     .onChange(of: focusedTarget) { _, target in
                         guard case let .season(seasonID) = target else { return }
+                        if pendingSeasonFocusID == seasonID {
+                            pendingSeasonFocusID = nil
+                        }
+                        if selectedSeasonID != seasonID,
+                           let season = seasonsViewModel.elements[id: seasonID]
+                        {
+                            select(season: season)
+                        }
                         withAnimation(.easeInOut(duration: 0.18)) {
                             scrollProxy.scrollTo(seasonID, anchor: .center)
                         }
                     }
                 }
+            }
+        }
+
+        @ViewBuilder
+        private func seasonOption(_ season: PagingLibraryViewModel<EpisodeLibrary>) -> some View {
+            let isSelected = selectedSeasonID == season.id
+            let shouldRenderButton = !isRestoringCurrentEpisodeFocus &&
+                (pendingSeasonFocusID == nil || pendingSeasonFocusID == season.id)
+
+            if shouldRenderButton {
+                Button {
+                    select(season: season)
+                } label: {
+                    Text(season.library.parent.displayTitle)
+                        .font(.callout.weight(.semibold))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(EpisodesButtonStyle(isSelected: isSelected))
+                .focused($focusedTarget, equals: .season(season.id))
+            } else {
+                Text(season.library.parent.displayTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                    .background {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .overlay {
+                                Rectangle()
+                                    .fill(Color.snowfinDeepNavy.opacity(isSelected ? 0.42 : 0.7))
+                            }
+                    }
+                    .overlay {
+                        Rectangle()
+                            .stroke(
+                                isSelected ? accentColor.opacity(0.92) : Color.white.opacity(0.14),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    }
+                    .accessibilityHidden(true)
             }
         }
 
@@ -179,12 +234,14 @@ extension VideoPlayer.PlaybackControls {
                     currentEpisodeID: manager.item.id,
                     focusedTarget: $focusedTarget,
                     pendingEpisodeFocusSeasonID: $pendingEpisodeFocusSeasonID,
+                    requestedEpisodeFocusID: $requestedEpisodeFocusID,
+                    isRestoringCurrentEpisodeFocus: $isRestoringCurrentEpisodeFocus,
                     onSelect: select(episode:)
                 )
             }
         }
 
-        private func handleMoveCommand(_ direction: MoveCommandDirection) {
+        private func handleMoveCommand(_ direction: PlaybackEpisodesMoveRequest.Direction) {
             switch direction {
             case .up:
                 guard seasonsViewModel.elements.count > 1,
@@ -192,6 +249,7 @@ extension VideoPlayer.PlaybackControls {
                       let selectedSeason
                 else { return }
 
+                pendingSeasonFocusID = selectedSeason.id
                 focusedTarget = .season(selectedSeason.id)
 
             case .down:
@@ -202,80 +260,55 @@ extension VideoPlayer.PlaybackControls {
                 focusEpisode(in: season)
 
             case .left, .right:
-                switch focusedTarget {
-                case .season:
-                    moveSeason(direction: direction)
-                case .episode:
-                    moveEpisode(direction: direction)
-                case .none:
-                    break
+                moveHorizontally(direction)
+            }
+        }
+
+        private func moveHorizontally(_ direction: PlaybackEpisodesMoveRequest.Direction) {
+            let offset = direction == .left ? -1 : 1
+
+            switch focusedTarget {
+            case let .season(seasonID):
+                guard let index = seasonsViewModel.elements.firstIndex(where: { $0.id == seasonID }) else {
+                    return
                 }
 
-            default:
+                let nextIndex = index + offset
+                guard seasonsViewModel.elements.indices.contains(nextIndex) else { return }
+                focusedTarget = .season(seasonsViewModel.elements[nextIndex].id)
+
+            case let .episode(episodeID):
+                guard let selectedSeason,
+                      let index = selectedSeason.elements.firstIndex(where: {
+                          ($0.id ?? $0.displayTitle) == episodeID
+                      })
+                else { return }
+
+                let nextIndex = index + offset
+                guard selectedSeason.elements.indices.contains(nextIndex) else { return }
+                let episode = selectedSeason.elements[nextIndex]
+                focusedTarget = .episode(episode.id ?? episode.displayTitle)
+
+            case .none:
                 break
             }
-        }
-
-        private func moveSeason(direction: MoveCommandDirection) {
-            guard case let .season(focusedSeasonID) = focusedTarget,
-                  let currentIndex = seasonsViewModel.elements.firstIndex(where: { $0.id == focusedSeasonID })
-            else { return }
-
-            let offset: Int
-            switch direction {
-            case .left:
-                offset = -1
-            case .right:
-                offset = 1
-            default:
-                return
-            }
-            let nextIndex = currentIndex + offset
-            guard seasonsViewModel.elements.indices.contains(nextIndex) else { return }
-
-            let season = seasonsViewModel.elements[nextIndex]
-            select(season: season)
-            focusedTarget = .season(season.id)
-        }
-
-        private func moveEpisode(direction: MoveCommandDirection) {
-            guard case let .episode(focusedEpisodeID) = focusedTarget,
-                  let season = selectedSeason
-            else { return }
-
-            let episodes = season.elements
-            guard let currentIndex = episodes.firstIndex(where: { episodeID($0) == focusedEpisodeID })
-            else { return }
-
-            let offset: Int
-            switch direction {
-            case .left:
-                offset = -1
-            case .right:
-                offset = 1
-            default:
-                return
-            }
-            let nextIndex = currentIndex + offset
-            guard episodes.indices.contains(nextIndex) else { return }
-
-            focusedTarget = .episode(episodeID(episodes[nextIndex]))
         }
 
         private func focusEpisode(in season: PagingLibraryViewModel<EpisodeLibrary>) {
             // The shelf owns the episode focus candidates. Leave this request pending
             // until its content publisher can target the registered card; setting the
             // parent FocusState here can be ignored while the shelf is being inserted.
+            isRestoringCurrentEpisodeFocus = true
             pendingEpisodeFocusSeasonID = season.id
-        }
-
-        private func episodeID(_ episode: BaseItemDto) -> String {
-            episode.id ?? episode.displayTitle
+            requestedEpisodeFocusID = season.elements.first {
+                $0.id == manager.item.id
+            }?.id ?? season.elements.first?.id
         }
 
         private func restoreCurrentSeason() {
             guard !seasonsViewModel.elements.isEmpty else { return }
 
+            isRestoringCurrentEpisodeFocus = true
             let season = seasonsViewModel.elements.first {
                 $0.library.parent.id == manager.item.seasonID
             } ?? seasonsViewModel.elements.first {
@@ -333,7 +366,20 @@ extension VideoPlayer.PlaybackControls {
         let focusedTarget: FocusState<EpisodesFocusTarget?>.Binding
         @Binding
         var pendingEpisodeFocusSeasonID: String?
+        @Binding
+        var requestedEpisodeFocusID: String?
+        @Binding
+        var isRestoringCurrentEpisodeFocus: Bool
         let onSelect: (BaseItemDto) -> Void
+
+        @State
+        private var registeredEpisodeIDs: Set<String> = []
+
+        @State
+        private var pendingFocusTargetID: String?
+
+        @State
+        private var hasIssuedFocusRequest = false
 
         var body: some View {
             switch season.state {
@@ -352,6 +398,10 @@ extension VideoPlayer.PlaybackControls {
                     Text(L10n.noItems)
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .onAppear {
+                            isRestoringCurrentEpisodeFocus = false
+                            pendingEpisodeFocusSeasonID = nil
+                        }
                 } else {
                     ScrollViewReader { scrollProxy in
                         ScrollView(.horizontal) {
@@ -371,8 +421,9 @@ extension VideoPlayer.PlaybackControls {
 
                             let itemID = initialEpisode.id ?? initialEpisode.displayTitle
 
-                            if pendingEpisodeFocusSeasonID == season.id || focusedTarget.wrappedValue == nil {
-                                focus(initialEpisode, using: scrollProxy)
+                            if pendingEpisodeFocusSeasonID == season.id || isRestoringCurrentEpisodeFocus {
+                                requestedEpisodeFocusID = itemID
+                                requestFocus(initialEpisode, using: scrollProxy)
                             } else {
                                 scrollProxy.scrollTo(itemID, anchor: .center)
                             }
@@ -382,10 +433,15 @@ extension VideoPlayer.PlaybackControls {
                                   let episode = season.elements.first(where: { $0.id == currentEpisodeID }) ?? season.elements.first
                             else { return }
 
-                            focus(episode, using: scrollProxy)
+                            requestFocus(episode, using: scrollProxy)
                         }
                         .onChange(of: focusedTarget.wrappedValue) { _, target in
                             guard case let .episode(itemID) = target else { return }
+
+                            if isRestoringCurrentEpisodeFocus {
+                                guard finishFocusRequest(on: itemID) else { return }
+                            }
+
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 scrollProxy.scrollTo(itemID, anchor: .center)
                             }
@@ -395,93 +451,148 @@ extension VideoPlayer.PlaybackControls {
             }
         }
 
-        private func focus(_ episode: BaseItemDto, using scrollProxy: ScrollViewProxy) {
+        private func requestFocus(_ episode: BaseItemDto, using scrollProxy: ScrollViewProxy) {
             let itemID = episode.id ?? episode.displayTitle
+            if pendingFocusTargetID != itemID {
+                pendingFocusTargetID = itemID
+                hasIssuedFocusRequest = false
+            }
             scrollProxy.scrollTo(itemID, anchor: .center)
-            focusedTarget.wrappedValue = .episode(itemID)
-            pendingEpisodeFocusSeasonID = nil
+
+            guard registeredEpisodeIDs.contains(itemID) else { return }
+            if focusedTarget.wrappedValue == .episode(itemID) {
+                _ = finishFocusRequest(on: itemID)
+            } else {
+                acquireFocus(on: itemID)
+            }
         }
 
+        private func registerEpisode(_ itemID: String) {
+            registeredEpisodeIDs.insert(itemID)
+            guard pendingFocusTargetID == itemID else { return }
+
+            if focusedTarget.wrappedValue == .episode(itemID) {
+                _ = finishFocusRequest(on: itemID)
+            } else {
+                acquireFocus(on: itemID)
+            }
+        }
+
+        @discardableResult
+        private func finishFocusRequest(on itemID: String) -> Bool {
+            guard pendingFocusTargetID == itemID else { return false }
+            pendingFocusTargetID = nil
+            hasIssuedFocusRequest = false
+            isRestoringCurrentEpisodeFocus = false
+            pendingEpisodeFocusSeasonID = nil
+            requestedEpisodeFocusID = nil
+            return true
+        }
+
+        private func acquireFocus(on itemID: String) {
+            guard pendingFocusTargetID == itemID, !hasIssuedFocusRequest else { return }
+            hasIssuedFocusRequest = true
+            focusedTarget.wrappedValue = .episode(itemID)
+        }
+
+        @ViewBuilder
         private func episodeButton(_ episode: BaseItemDto) -> some View {
             let itemID = episode.id ?? episode.displayTitle
             let isCurrent = episode.id == currentEpisodeID
 
-            return Button {
-                onSelect(episode)
-            } label: {
-                VStack(alignment: .leading, spacing: CardMetrics.metadataSpacing) {
-                    ZStack(alignment: .topLeading) {
-                        ImageView(
-                            episode.imageSource(
-                                .primary,
-                                environment: ImageSourceOptions(maxWidth: 480)
-                            )
-                        )
-                        .failure {
-                            SystemImageContentView(systemName: episode.systemImage)
-                        }
-                        .aspectRatio(16 / 9, contentMode: .fill)
-                        .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
-                        .background(Color.snowfinDeepNavy)
-                        .clipped()
-
-                        if isCurrent {
-                            Label {
-                                // swiftlint:disable:next hard_coded_display_string
-                                Text("Now Playing")
-                            } icon: {
-                                Image(systemName: "play.fill")
-                            }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(accentColor.overlayColor)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(Rectangle().fill(accentColor))
-                        }
+            Group {
+                if isRestoringCurrentEpisodeFocus, requestedEpisodeFocusID != itemID {
+                    episodeCardContent(episode, isCurrent: isCurrent)
+                        .accessibilityHidden(true)
+                } else {
+                    Button {
+                        onSelect(episode)
+                    } label: {
+                        episodeCardContent(episode, isCurrent: isCurrent)
                     }
-                    .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
-                    .overlay {
-                        Rectangle()
-                            .stroke(isCurrent ? accentColor : Color.white.opacity(0.16), lineWidth: isCurrent ? 3 : 1)
+                    .buttonStyle(EpisodesButtonStyle(isSelected: isCurrent))
+                    .focused(focusedTarget, equals: .episode(itemID))
+                    // swiftlint:disable:next hard_coded_display_string
+                    .accessibilityLabel(
+                        isCurrent ? "\(episode.displayTitle), Now Playing" : episode.displayTitle
+                    )
+                    .onAppear {
+                        registerEpisode(itemID)
                     }
-
-                    Text(episode.seasonEpisodeLabel ?? " ")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: CardMetrics.seasonLabelHeight, alignment: .topLeading)
-                        .opacity(episode.seasonEpisodeLabel == nil ? 0 : 1)
-                        .accessibilityHidden(episode.seasonEpisodeLabel == nil)
-
-                    Text(episode.displayTitle)
-                        .font(.headline)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .frame(height: CardMetrics.titleHeight, alignment: .topLeading)
-                        .clipped()
-
-                    Text(episode.runTimeLabel ?? " ")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: CardMetrics.runtimeHeight, alignment: .topLeading)
-                        .opacity(episode.runTimeLabel == nil ? 0 : 1)
-                        .accessibilityHidden(episode.runTimeLabel == nil)
+                    .onDisappear {
+                        registeredEpisodeIDs.remove(itemID)
+                    }
                 }
-                .frame(width: CardMetrics.width, height: CardMetrics.height, alignment: .topLeading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(EpisodesButtonStyle(isSelected: isCurrent))
-            .focused(focusedTarget, equals: .episode(itemID))
-            // swiftlint:disable:next hard_coded_display_string
-            .accessibilityLabel(
-                isCurrent ? "\(episode.displayTitle), Now Playing" : episode.displayTitle
-            )
             .id(itemID)
+        }
+
+        private func episodeCardContent(_ episode: BaseItemDto, isCurrent: Bool) -> some View {
+            VStack(alignment: .leading, spacing: CardMetrics.metadataSpacing) {
+                ZStack(alignment: .topLeading) {
+                    ImageView(
+                        episode.imageSource(
+                            .primary,
+                            environment: ImageSourceOptions(maxWidth: 480)
+                        )
+                    )
+                    .failure {
+                        SystemImageContentView(systemName: episode.systemImage)
+                    }
+                    .aspectRatio(16 / 9, contentMode: .fill)
+                    .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
+                    .background(Color.snowfinDeepNavy)
+                    .clipped()
+
+                    if isCurrent {
+                        Label {
+                            // swiftlint:disable:next hard_coded_display_string
+                            Text("Now Playing")
+                        } icon: {
+                            Image(systemName: "play.fill")
+                        }
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(accentColor.overlayColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Rectangle().fill(accentColor))
+                    }
+                }
+                .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
+                .overlay {
+                    Rectangle()
+                        .stroke(isCurrent ? accentColor : Color.white.opacity(0.16), lineWidth: isCurrent ? 3 : 1)
+                }
+
+                Text(episode.seasonEpisodeLabel ?? " ")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: CardMetrics.seasonLabelHeight, alignment: .topLeading)
+                    .opacity(episode.seasonEpisodeLabel == nil ? 0 : 1)
+                    .accessibilityHidden(episode.seasonEpisodeLabel == nil)
+
+                Text(episode.displayTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(height: CardMetrics.titleHeight, alignment: .topLeading)
+                    .clipped()
+
+                Text(episode.runTimeLabel ?? " ")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: CardMetrics.runtimeHeight, alignment: .topLeading)
+                    .opacity(episode.runTimeLabel == nil ? 0 : 1)
+                    .accessibilityHidden(episode.runTimeLabel == nil)
+            }
+            .frame(width: CardMetrics.width, height: CardMetrics.height, alignment: .topLeading)
+            .contentShape(Rectangle())
         }
     }
 
