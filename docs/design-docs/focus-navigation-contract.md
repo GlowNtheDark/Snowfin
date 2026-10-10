@@ -505,12 +505,14 @@ selection uses `playNewItem`. Back first cancels a running countdown, then on a 
 press dismisses the remaining segment presentation. Dismissal restores the HUD with
 progress as its default focus. Native player does not attach this overlay.
 
-**Deviation / runtime check.** Source now exposes both product-required choices and
-consumes one Back press per active segment layer, but these transitions still require
-the requested 1080p Apple TV runtime check. The current overlay's visual acceptance
-remains a separate review item in [tech debt](../exec-plans/tech-debt.md). Credits,
-natural-end queue autoplay, and Play Next are separate paths; do not unify their state
-or dismissals.
+**Deviation / runtime check.** Simulator acceptance passed on Apple TV 4K (3rd
+generation), 1080p, tvOS 27.0: Back dismisses the Intro prompt without seeking;
+during Credits countdown, the first Back cancels the countdown and a later Back
+dismisses Play Next. HUD focus returns after segment dismissal. Physical Apple TV
+behavior remains unverified. The current overlay's visual acceptance remains a
+separate review item in [tech debt](../exec-plans/tech-debt.md). Credits, natural-end
+queue autoplay, and Play Next are separate paths; do not unify their state or
+dismissals.
 
 ## Player dismissal and return focus
 
@@ -548,7 +550,7 @@ The following are known gaps, not alternate intended behavior:
 | Exact nested-route restoration | `ItemView`, library routes, and Settings do not all store a semantic prior target. | Verify platform restoration on device; add explicit target ownership only if a reproducible failure warrants it. |
 | Search return target | The prior result can disappear after its child route is dismissed. | Restore that result when still valid; otherwise focus the Search field. |
 | Episodes shelf horizontal boundary | Season change handler may receive Left/Right while episode card owns focus. | Trace focus owner and press route on simulator/device; assign one owner to each direction. |
-| Intro / credits / Play Next runtime evidence | Source now defines intro dismissal, countdown cancellation, Play Next dismissal, and separate Keep Watching/Play Next actions; no post-change Apple TV trace exists yet. | Run the requested 1080p interaction sequence and verify focus entry, countdown/manual action ordering, one-layer Back, and HUD restoration. |
+| Intro / credits / Play Next runtime evidence | Simulator acceptance passed on Apple TV 4K (3rd generation), 1080p, tvOS 27.0 for Intro dismissal, countdown cancellation, Play Next dismissal, and HUD restoration. Physical Apple TV behavior remains unverified. | No remaining simulator follow-up for A01/A02; keep natural-end queue autoplay and other Play Next paths separate. |
 | Launch and Settings entry | Root and SwiftUI Form use native focus without stable app-owned entry IDs. | Validate entry and restoration on supported Apple TV OS versions. |
 | Native AVPlayer | AVKit path has no custom overlays and owns its focus/dismissal. | Treat any requested parity as a separate product/architecture decision. |
 

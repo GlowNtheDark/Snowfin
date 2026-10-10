@@ -42,19 +42,22 @@ extension VideoPlayer {
         private let onPresentationWillStopPlayback: () -> Void
         private let player: Player
         private let playbackControls: PlaybackControls
+        private let segmentOverlay: () -> AnyView
 
         init(
             containerState: VideoPlayerContainerState,
             manager: MediaPlayerManager,
             onPresentationWillStopPlayback: @escaping () -> Void,
             @ViewBuilder player: @escaping () -> Player,
-            @ViewBuilder playbackControls: @escaping () -> PlaybackControls
+            @ViewBuilder playbackControls: @escaping () -> PlaybackControls,
+            segmentOverlay: @escaping () -> AnyView = { AnyView(EmptyView()) }
         ) {
             self.containerState = containerState
             self.manager = manager
             self.onPresentationWillStopPlayback = onPresentationWillStopPlayback
             self.player = player()
             self.playbackControls = playbackControls()
+            self.segmentOverlay = segmentOverlay
         }
 
         func makeUIViewController(context: Context) -> UIVideoPlayerContainerViewController {
@@ -66,12 +69,19 @@ extension VideoPlayer {
                 .environment(\.audioOffset, context.environment.audioOffset)
                 .eraseToAnyView()
 
+            let segmentOverlayView = segmentOverlay()
+                .environment(\.audioOffset, context.environment.audioOffset)
+                .environmentObject(containerState)
+                .environmentObject(manager)
+                .eraseToAnyView()
+
             return UIVideoPlayerContainerViewController(
                 containerState: containerState,
                 manager: manager,
                 onPresentationWillStopPlayback: onPresentationWillStopPlayback,
                 player: playerView,
-                playbackControls: playbackControlsView
+                playbackControls: playbackControlsView,
+                segmentOverlay: segmentOverlayView
             )
         }
 
@@ -250,8 +260,25 @@ extension VideoPlayer {
             return controller
         }()
 
+        private lazy var segmentOverlayViewController: HostingController<AnyView> = {
+            let controller = HostingController(
+                content: segmentOverlay
+                    .environmentObject(containerState)
+                    .environmentObject(manager)
+                    .eraseToAnyView()
+            )
+            controller.disableSafeArea = true
+            controller.automaticallyAllowUIKitAnimationsForNextUpdate = true
+            controller.view.translatesAutoresizingMaskIntoConstraints = false
+            return controller
+        }()
+
         override var preferredFocusEnvironments: [UIFocusEnvironment] {
             #if os(tvOS)
+            if containerState.isPresentingSegmentOverlay {
+                return [segmentOverlayViewController]
+            }
+
             let isPlaybackControlSurfacePresented = containerState.isPresentingPlaybackDropdown ||
                 containerState.isPresentingPlaybackEpisodes ||
                 (containerState.isPresentingOverlay &&
@@ -283,6 +310,10 @@ extension VideoPlayer {
 
         private var playbackControlsView: UIView {
             playbackControlsViewController.view
+        }
+
+        private var segmentOverlayView: UIView {
+            segmentOverlayViewController.view
         }
 
         private var supplementContainerView: UIView {
@@ -379,7 +410,9 @@ extension VideoPlayer {
         private let onPresentationWillStopPlayback: () -> Void
         private let player: AnyView
         private let playbackControls: AnyView
+        private let segmentOverlay: AnyView
         let containerState: VideoPlayerContainerState
+        private let playbackContentView = UIView()
 
         private var cancellables: Set<AnyCancellable> = []
         private var didInitiallyAppear: Bool = false
@@ -388,6 +421,7 @@ extension VideoPlayer {
         let onPressEvent = OnPressEvent()
         private var lastTouchPokeTime: CFTimeInterval = 0
         private var didClosePlaybackDropdownAtMenuPressBegan = false
+        private var didHandleSegmentBackAtMenuPressBegan = false
         #endif
 
         init(
@@ -395,13 +429,15 @@ extension VideoPlayer {
             manager: MediaPlayerManager,
             onPresentationWillStopPlayback: @escaping () -> Void,
             player: AnyView,
-            playbackControls: AnyView
+            playbackControls: AnyView,
+            segmentOverlay: AnyView
         ) {
             self.containerState = containerState
             self.manager = manager
             self.onPresentationWillStopPlayback = onPresentationWillStopPlayback
             self.player = player
             self.playbackControls = playbackControls
+            self.segmentOverlay = segmentOverlay
 
             super.init(nibName: nil, bundle: nil)
 
@@ -435,7 +471,7 @@ extension VideoPlayer {
             else { return }
 
             if state == .began {
-                self.view.layer.removeAllAnimations()
+                self.playbackContentView.layer.removeAllAnimations()
                 didStartPanningWithSupplement = containerState.selectedSupplement != nil
 
                 if !didStartPanningWithSupplement {
@@ -476,7 +512,7 @@ extension VideoPlayer {
             let clampedOffset: CGFloat
 
             if state == .began {
-                self.view.layer.removeAllAnimations()
+                self.playbackContentView.layer.removeAllAnimations()
                 didStartPanningWithSupplement = containerState.selectedSupplement != nil
                 verticalPanGestureStartConstant = supplementBottomAnchor.constant
                 didStartPanningUpWithoutOverlay = !containerState.isPresentingOverlay
@@ -648,7 +684,8 @@ extension VideoPlayer {
         override func viewDidLoad() {
             super.viewDidLoad()
 
-            view.backgroundColor = .black
+            view.backgroundColor = .clear
+            playbackContentView.backgroundColor = .black
 
             let isCompact = UIDevice.isPhone && view.bounds.size.isPortrait
 
@@ -679,6 +716,47 @@ extension VideoPlayer {
                     if shouldFocusPlaybackHUD {
                         self.setNeedsFocusUpdate()
                         self.updateFocusIfNeeded()
+                    }
+                }
+                .store(in: &cancellables)
+
+            containerState.$isPresentingSegmentOverlay
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isPresenting in
+                    guard let self else { return }
+                    self.segmentOverlayView.isUserInteractionEnabled = isPresenting
+                    self.setNeedsFocusUpdate()
+                    self.updateFocusIfNeeded()
+                }
+                .store(in: &cancellables)
+
+            manager.snowfinSegmentCoordinator.$presentation
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] presentation in
+                    guard let self else { return }
+                    let isNextEpisodeTransition: Bool = if let presentation {
+                        switch presentation.kind {
+                        case .intro:
+                            false
+                        case .nextEpisode, .countdown:
+                            true
+                        }
+                    } else {
+                        false
+                    }
+
+                    let transform = CGAffineTransform(
+                        scaleX: isNextEpisodeTransition ? 0.72 : 1,
+                        y: isNextEpisodeTransition ? 0.72 : 1
+                    )
+                    let alpha: CGFloat = isNextEpisodeTransition ? 0.5 : 1
+                    UIView.animate(
+                        withDuration: 0.3,
+                        delay: 0,
+                        options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut]
+                    ) {
+                        self.playbackContentView.transform = transform
+                        self.playbackContentView.alpha = alpha
                     }
                 }
                 .store(in: &cancellables)
@@ -715,8 +793,8 @@ extension VideoPlayer {
         // prevent player playing before the view is done presenting
         private func setupPlayerView() {
             addChild(playerViewController)
-            view.addSubview(playerView)
-            view.sendSubviewToBack(playerView)
+            playbackContentView.addSubview(playerView)
+            playbackContentView.sendSubviewToBack(playerView)
             playerViewController.didMove(toParent: self)
             playerView.backgroundColor = .black
 
@@ -728,16 +806,16 @@ extension VideoPlayer {
             playerCompactBottomAnchor = bottomAnchor
 
             playerCompactConstraints = [
-                playerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                playerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                playerView.topAnchor.constraint(equalTo: view.topAnchor),
+                playerView.leadingAnchor.constraint(equalTo: playbackContentView.leadingAnchor),
+                playerView.trailingAnchor.constraint(equalTo: playbackContentView.trailingAnchor),
+                playerView.topAnchor.constraint(equalTo: playbackContentView.topAnchor),
                 bottomAnchor,
             ]
             playerRegularConstraints = [
-                playerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                playerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                playerView.topAnchor.constraint(equalTo: view.topAnchor),
-                playerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                playerView.leadingAnchor.constraint(equalTo: playbackContentView.leadingAnchor),
+                playerView.trailingAnchor.constraint(equalTo: playbackContentView.trailingAnchor),
+                playerView.topAnchor.constraint(equalTo: playbackContentView.topAnchor),
+                playerView.bottomAnchor.constraint(equalTo: playbackContentView.bottomAnchor),
             ]
 
             if containerState.isCompact {
@@ -748,18 +826,34 @@ extension VideoPlayer {
         }
 
         private func setupOnLoadViews() {
+            view.addSubview(playbackContentView)
+            playbackContentView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                playbackContentView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                playbackContentView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                playbackContentView.topAnchor.constraint(equalTo: view.topAnchor),
+                playbackContentView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            ])
+
             addChild(playbackControlsViewController)
-            view.addSubview(playbackControlsView)
+            playbackContentView.addSubview(playbackControlsView)
             playbackControlsViewController.didMove(toParent: self)
             playbackControlsView.backgroundColor = .clear
 
             addChild(supplementContainerViewController)
-            view.addSubview(supplementContainerView)
+            playbackContentView.addSubview(supplementContainerView)
             supplementContainerViewController.didMove(toParent: self)
             supplementContainerView.backgroundColor = .clear
 
-            view.addSubview(initialHitBlockView)
-            view.bringSubviewToFront(initialHitBlockView)
+            playbackContentView.addSubview(initialHitBlockView)
+            playbackContentView.bringSubviewToFront(initialHitBlockView)
+
+            addChild(segmentOverlayViewController)
+            view.addSubview(segmentOverlayView)
+            segmentOverlayViewController.didMove(toParent: self)
+            segmentOverlayView.backgroundColor = .clear
+            segmentOverlayView.isUserInteractionEnabled = containerState.isPresentingSegmentOverlay
+            view.bringSubviewToFront(segmentOverlayView)
         }
 
         private func setupOnLoadConstraints() {
@@ -767,21 +861,21 @@ extension VideoPlayer {
             let isCompact = UIDevice.isPhone && view.bounds.size.isPortrait
 
             let bottomAnchor = supplementContainerView.topAnchor.constraint(
-                equalTo: view.bottomAnchor,
+                equalTo: playbackContentView.bottomAnchor,
                 constant: -dismissedSupplementContainerOffset
             )
             supplementBottomAnchor = bottomAnchor
 
             let constant = supplementContainerOffset(
-                for: view.bounds.height,
+                for: playbackContentView.bounds.height,
                 isCompact: isCompact
             )
             let heightAnchor = supplementContainerView.heightAnchor.constraint(equalToConstant: constant)
             supplementHeightAnchor = heightAnchor
 
             supplementContainerConstraints = [
-                supplementContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                supplementContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                supplementContainerView.leadingAnchor.constraint(equalTo: playbackContentView.leadingAnchor),
+                supplementContainerView.trailingAnchor.constraint(equalTo: playbackContentView.trailingAnchor),
                 bottomAnchor,
                 heightAnchor,
             ]
@@ -790,7 +884,7 @@ extension VideoPlayer {
 
             #if os(tvOS)
             let playbackControlsBottomAnchor = playbackControlsView.bottomAnchor.constraint(
-                equalTo: view.bottomAnchor,
+                equalTo: playbackContentView.bottomAnchor,
                 constant: -dismissedSupplementContainerOffset
             )
             #else
@@ -800,19 +894,26 @@ extension VideoPlayer {
             #endif
 
             playbackControlsConstraints = [
-                playbackControlsView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                playbackControlsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                playbackControlsView.topAnchor.constraint(equalTo: view.topAnchor),
+                playbackControlsView.leadingAnchor.constraint(equalTo: playbackContentView.leadingAnchor),
+                playbackControlsView.trailingAnchor.constraint(equalTo: playbackContentView.trailingAnchor),
+                playbackControlsView.topAnchor.constraint(equalTo: playbackContentView.topAnchor),
                 playbackControlsBottomAnchor,
             ]
 
             NSLayoutConstraint.activate(playbackControlsConstraints)
 
             NSLayoutConstraint.activate([
-                initialHitBlockView.topAnchor.constraint(equalTo: view.topAnchor),
-                initialHitBlockView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                initialHitBlockView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                initialHitBlockView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                segmentOverlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                segmentOverlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                segmentOverlayView.topAnchor.constraint(equalTo: view.topAnchor),
+                segmentOverlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            ])
+
+            NSLayoutConstraint.activate([
+                initialHitBlockView.topAnchor.constraint(equalTo: playbackContentView.topAnchor),
+                initialHitBlockView.leadingAnchor.constraint(equalTo: playbackContentView.leadingAnchor),
+                initialHitBlockView.trailingAnchor.constraint(equalTo: playbackContentView.trailingAnchor),
+                initialHitBlockView.bottomAnchor.constraint(equalTo: playbackContentView.bottomAnchor),
             ])
         }
 
@@ -908,6 +1009,9 @@ extension VideoPlayer {
                 case .menu:
                     if containerState.closePlaybackDropdownForMenuPress() {
                         didClosePlaybackDropdownAtMenuPressBegan = true
+                    } else if manager.snowfinSegmentCoordinator.presentation != nil {
+                        didHandleSegmentBackAtMenuPressBegan = true
+                        handleMenuEnded()
                     }
                     continue
                 default:
@@ -939,6 +1043,8 @@ extension VideoPlayer {
                     if didClosePlaybackDropdownAtMenuPressBegan {
                         didClosePlaybackDropdownAtMenuPressBegan = false
                         releasePlaybackOverlayMenuDismissalGuard()
+                    } else if didHandleSegmentBackAtMenuPressBegan {
+                        didHandleSegmentBackAtMenuPressBegan = false
                     } else {
                         handleMenuEnded()
                     }
@@ -1049,7 +1155,7 @@ extension VideoPlayer {
             } else if manager.snowfinSegmentCoordinator.presentation != nil {
                 containerState.isPlaybackOverlayMenuDismissalGuarded = true
                 let consumed = manager.snowfinSegmentCoordinator.handleMenuBack()
-                if manager.snowfinSegmentCoordinator.presentation == nil {
+                if consumed, manager.snowfinSegmentCoordinator.presentation == nil {
                     containerState.isPresentingOverlay = true
                 }
                 releasePlaybackOverlayMenuDismissalGuard()

@@ -37,8 +37,6 @@ struct VideoPlayer: View {
     @State
     private var shouldSuppressStopDismissal = false
     #if os(tvOS)
-    @State
-    private var isNextEpisodeTransitionPresented = false
     #endif
 
     // TODO: move behavior to `PlaybackProgress`?
@@ -66,18 +64,15 @@ struct VideoPlayer: View {
                 .eraseToAnyView()
         } playbackControls: {
             PlaybackControls()
-        }
-        #if os(tvOS)
-        .scaleEffect(isNextEpisodeTransitionPresented ? 0.72 : 1)
-        .opacity(isNextEpisodeTransitionPresented ? 0.5 : 1)
-        .animation(.easeInOut(duration: 0.3), value: isNextEpisodeTransitionPresented)
-        #endif
-        .overlay {
+        } segmentOverlay: {
             #if os(tvOS)
             SnowfinPlaybackSegmentOverlay(
                 coordinator: manager.snowfinSegmentCoordinator,
                 containerState: containerState
             )
+            .eraseToAnyView()
+            #else
+            EmptyView().eraseToAnyView()
             #endif
         }
         .onAppear {
@@ -96,9 +91,8 @@ struct VideoPlayer: View {
         .onChange(of: containerState.isPlaybackOverlayMenuDismissalGuarded) { _, _ in
             updateCurrentPresentationDismissibility()
         }
-        .onReceive(manager.snowfinSegmentCoordinator.$presentation) { _ in
-            updateCurrentPresentationDismissibility()
-            isNextEpisodeTransitionPresented = manager.snowfinSegmentCoordinator.isNextEpisodeTransitionPresented
+        .onReceive(manager.snowfinSegmentCoordinator.$presentation) { presentation in
+            updateCurrentPresentationDismissibility(segmentOverlayIsPresented: presentation != nil)
         }
         #endif
         .prefersStatusBarHidden(!containerState.isPresentingOverlay)
@@ -171,10 +165,16 @@ struct VideoPlayer: View {
 
     #if os(tvOS)
     private func updateCurrentPresentationDismissibility() {
+        updateCurrentPresentationDismissibility(
+            segmentOverlayIsPresented: manager.snowfinSegmentCoordinator.presentation != nil
+        )
+    }
+
+    private func updateCurrentPresentationDismissibility(segmentOverlayIsPresented: Bool) {
         isCurrentPresentationDismissible.wrappedValue =
             !containerState.isPresentingPlaybackDropdown &&
             !containerState.isPresentingPlaybackEpisodes &&
-            manager.snowfinSegmentCoordinator.presentation == nil &&
+            !segmentOverlayIsPresented &&
             !containerState.isPlaybackOverlayMenuDismissalGuarded
     }
     #endif
