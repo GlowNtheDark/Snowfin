@@ -19,6 +19,14 @@ struct PlayButton: View {
     @ObservedObject
     var provider: ItemContentGroupProvider
 
+    @EnvironmentObject
+    private var focusCoordinator: FocusCoordinator
+
+    #if os(tvOS)
+    @FocusState
+    private var focusedMovieActionID: String?
+    #endif
+
     @Router
     private var router
 
@@ -54,7 +62,16 @@ struct PlayButton: View {
         )
     }
 
-    private func play(fromBeginning: Bool = false) {
+    #if os(tvOS)
+    private var isPlayFromBeginningActionEligible: Bool {
+        provider.item.type == .movie && provider.mediaPlayerItemProvider != nil
+    }
+    #endif
+
+    private func play(
+        fromBeginning: Bool = false,
+        originatingFocusID: String = ItemView.Component.play
+    ) {
         let mediaPlayerItemProvider = if fromBeginning {
             currentMediaPlayerItemProvider?.modifyingItem {
                 $0.userData?.playbackPositionTicks = 0
@@ -71,10 +88,34 @@ struct PlayButton: View {
         let queue: (any MediaPlayerQueue)? = mediaPlayerItemProvider.item.type == .episode ?
             EpisodeMediaPlayerQueue(episode: mediaPlayerItemProvider.item) : nil
 
+        let onPlayerDismiss: (() -> Void)?
+        #if os(tvOS)
+        if provider.item.type == .movie {
+            let targetID = originatingFocusID == ItemView.Component.playFromBeginning
+                && !isPlayFromBeginningActionEligible
+                ? ItemView.Component.play
+                : originatingFocusID
+            focusCoordinator.focus(targetID)
+
+            onPlayerDismiss = {
+                guard originatingFocusID == ItemView.Component.playFromBeginning,
+                      !isPlayFromBeginningActionEligible
+                else { return }
+
+                focusCoordinator.focus(ItemView.Component.play)
+            }
+        } else {
+            onPlayerDismiss = nil
+        }
+        #else
+        onPlayerDismiss = nil
+        #endif
+
         router.route(
             to: .videoPlayer(
                 provider: mediaPlayerItemProvider,
-                queue: queue
+                queue: queue,
+                onWillDismiss: onPlayerDismiss
             )
         )
     }
@@ -135,20 +176,20 @@ struct PlayButton: View {
         Button {
             play()
         } label: {
-            HStack {
-                Image(systemName: "play.fill")
-
-                VStack(spacing: 2) {
-                    Text(currentMediaPlayerItemProvider?.item.playButtonLabel ?? L10n.play)
-
-                    if let mediaSource {
-                        Marquee(mediaSource, speed: 40, delay: 3, fade: 5)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
+            Group {
+                #if os(tvOS)
+                if provider.item.type == .movie {
+                    Label(L10n.play, systemImage: "play.fill")
+                        .labelStyle(.iconOnly)
+                        .font(.title2)
+                        .accessibilityLabel(L10n.play)
+                } else {
+                    playButtonTextLabel
                 }
+                #else
+                playButtonTextLabel
+                #endif
             }
-            .font(UIDevice.isTV ? .title3 : .callout)
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .backport
@@ -177,7 +218,6 @@ struct PlayButton: View {
         .buttonBorderShape(.capsule)
         .buttonStyle(BasicHoverButtonStyle())
         #endif
-        .coordinatedFocus(ItemView.Component.play, consumesRequestOnAcquisition: true)
         .contextMenu {
             if currentMediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
                 Button(L10n.playFromBeginning, systemImage: "gobackward") {
@@ -188,13 +228,56 @@ struct PlayButton: View {
         .disabled(provider.mediaPlayerItemProvider == nil)
     }
 
+    @ViewBuilder
+    private var coordinatedPlayButton: some View {
+        #if os(tvOS)
+        if provider.item.type == .movie {
+            playButton.coordinatedFocus(
+                ItemView.Component.play,
+                selection: $focusedMovieActionID
+            )
+        } else {
+            playButton.coordinatedFocus(
+                ItemView.Component.play,
+                consumesRequestOnAcquisition: true
+            )
+        }
+        #else
+        playButton.coordinatedFocus(
+            ItemView.Component.play,
+            consumesRequestOnAcquisition: true
+        )
+        #endif
+    }
+
+    private var playButtonTextLabel: some View {
+        HStack {
+            Image(systemName: "play.fill")
+
+            VStack(spacing: 2) {
+                Text(currentMediaPlayerItemProvider?.item.playButtonLabel ?? L10n.play)
+
+                if let mediaSource {
+                    Marquee(mediaSource, speed: 40, delay: 3, fade: 5)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+            .font(UIDevice.isTV ? .title3 : .callout)
+        }
+    }
+
     #if os(tvOS)
     private var playFromBeginningButton: some View {
         Button {
-            play(fromBeginning: true)
+            play(
+                fromBeginning: true,
+                originatingFocusID: ItemView.Component.playFromBeginning
+            )
         } label: {
             Label(L10n.playFromBeginning, systemImage: "gobackward")
-                .font(.headline)
+                .labelStyle(.iconOnly)
+                .font(.title2)
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background {
@@ -202,15 +285,20 @@ struct PlayButton: View {
                         .fill(Color.white.opacity(0.1))
                 }
                 .contentShape(Rectangle())
+                .accessibilityLabel(L10n.playFromBeginning)
         }
         .buttonStyle(BasicHoverButtonStyle())
+        .coordinatedFocus(
+            ItemView.Component.playFromBeginning,
+            selection: $focusedMovieActionID
+        )
         .disabled(provider.mediaPlayerItemProvider == nil)
     }
     #endif
 
-    var body: some View {
+    private var actionRowContent: some View {
         HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
-            playButton
+            coordinatedPlayButton
 
             #if os(tvOS)
             if provider.item.type == .movie {
@@ -223,6 +311,27 @@ struct PlayButton: View {
             #endif
         }
         .frame(height: UIDevice.isTV ? 75 : 44)
+    }
+
+    @ViewBuilder
+    private var actionRow: some View {
+        #if os(tvOS)
+        if provider.item.type == .movie {
+            actionRowContent
+                .defaultFocus(
+                    $focusedMovieActionID,
+                    focusCoordinator.request ?? ItemView.Component.play
+                )
+        } else {
+            actionRowContent
+        }
+        #else
+        actionRowContent
+        #endif
+    }
+
+    var body: some View {
+        actionRow
     }
 }
 

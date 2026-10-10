@@ -52,18 +52,22 @@ extension NavigationRoute {
     @MainActor
     static func videoPlayer(
         provider: MediaPlayerItemProvider,
-        queue: (any MediaPlayerQueue)? = nil
+        queue: (any MediaPlayerQueue)? = nil,
+        onWillDismiss: (() -> Void)? = nil
     ) -> NavigationRoute {
         let manager = MediaPlayerManager(
             provider: provider,
             queue: queue
         )
 
-        return Self.videoPlayer(manager: manager)
+        return Self.videoPlayer(manager: manager, onWillDismiss: onWillDismiss)
     }
 
     @MainActor
-    static func videoPlayer(manager: MediaPlayerManager) -> NavigationRoute {
+    static func videoPlayer(
+        manager: MediaPlayerManager,
+        onWillDismiss: (() -> Void)? = nil
+    ) -> NavigationRoute {
 
         Container.shared.mediaPlayerManager.register {
             manager
@@ -74,7 +78,8 @@ extension NavigationRoute {
 
         return NavigationRoute(
             id: "videoPlayer",
-            style: .fullscreen
+            style: .fullscreen,
+            onWillDismiss: onWillDismiss
         ) {
             VideoPlayerViewShim(manager: manager)
         }

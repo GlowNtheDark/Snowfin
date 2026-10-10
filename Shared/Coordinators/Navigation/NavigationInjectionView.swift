@@ -57,6 +57,9 @@ struct NavigationInjectionView: View {
             set: { value in
                 guard isTabContentActive else { return }
                 guard value != nil || canDismiss else { return }
+                if value == nil {
+                    presentation.wrappedValue?.route.onWillDismiss?()
+                }
                 presentation.wrappedValue = value
             }
         )

@@ -17,6 +17,7 @@ struct ItemView: View {
     enum Component {
         static let header = "itemView-header"
         static let play = "itemView-play"
+        static let playFromBeginning = "itemView-play-from-beginning"
     }
 
     @Default(.Customization.itemViewType)

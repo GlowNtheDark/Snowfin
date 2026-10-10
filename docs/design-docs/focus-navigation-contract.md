@@ -106,7 +106,8 @@ behavior.
 | Movies / TV Shows / Media library | Root-tab repeat explicitly scrolls to top and requests first displayed item; ordinary entry/default is native and unverified | Nested folder/filter/detail routes dismiss one child at a time | Restore originating library item or invoking filter control when valid; otherwise same region's primary item. Exact route focus is not explicitly stored |
 | Search | Pending sidebar-entry request targets the app-owned Search field; without a pending request native initial focus is unverified | Dismiss result details/presentation before Search; keyboard Back behavior is platform-owned until verified | Prior result or field when valid; there is no explicit semantic result target. Fallback to Search field, then first result group only when `canSearch` |
 | Settings | Native first available Form/control; exact default is unverified | Native picker/menu first, then one Settings child route | Invoking row/control if still present, else first meaningful control in the parent form; platform restoration is unverified |
-| Movie / Show / Episode Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve same Details instance and prior focused control/shelf item where native focus can; exact target is not explicitly recorded. Fallback to Play |
+| Movie Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve the same Details instance and restore the exact originating Play or Play From Beginning action while it remains present and eligible; use Play only if that action no longer exists or is ineligible |
+| Show / Episode Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve same Details instance and prior focused control/shelf item where native focus can; exact target is not explicitly recorded. Fallback to Play |
 | Details child shelf / season selector | Preferred/current item or season when available; otherwise native focus candidate | Selecting a card can open another Details route or direct-play from artwork | Same item/season if still present; nearest item in that shelf; shelf's preferred/first item; then Play |
 | Library/menu/filter/modal child | Native menu/form default; app-owned child entry where provided | Dismiss only the top menu, picker, sheet, or dialog | Return to the exact presenting control when valid; otherwise nearest same-region control then region primary target. Exactness needs runtime confirmation for native menus/forms |
 | Player HUD | Hidden at player presentation; when shown for seekable content, the progress bar is the default focus. The Play/Pause status symbol is never a focus target. Live playback has no focusable transport when it has no seek bar | Back hides transient HUD; a later Back dismisses player | HUD appears with progress focused when seekable. Player exit returns to actual presenting route, not inferred origin |
@@ -294,23 +295,26 @@ controls, poster tiles, and episode-card actions.
 | Details episode shelf/card | Native to season selector or previous shelf based on geometry | Native to next shelf | Previous episode; artwork button is direct-play focus target and metadata button opens details | Next episode; shelf scrolls horizontally | Artwork starts playback directly; metadata/content action opens Episode Details | Dismiss child Episode Details/player first; otherwise dismiss current Details route |
 | Episode Details Play / Play From Beginning | Native among header actions and nearby content | Native into episode/related shelves | Native to adjacent action | Native to adjacent action | Play resumes available progress; Play From Beginning uses zero | If player is above, dismiss player to this same Episode Details instance; next Back returns through its parent hierarchy |
 
-**Observed.** Shared `ItemView` initializes a local coordinator at Play. It does not
-explicitly persist the exact nested header/shelf focus target. The season selector
-prefers a current/first season; changing it updates `SeriesEpisodeContentGroup` and
-debounces content switching. Episode shelf prefers current/first episode. Episode cards
-have two actions: artwork can directly play; metadata opens the item's Details route.
-Other arrow transitions are native spatial focus/scroll behavior.
+**Observed.** Shared `ItemView` initializes a local coordinator at Play. Movie Details
+records the originating playback action for player return; exact nested shelf focus
+targets are not explicitly persisted. The season selector prefers a current/first
+season; changing it updates `SeriesEpisodeContentGroup` and debounces content switching.
+Episode shelf prefers current/first episode. Episode cards have two actions: artwork can
+directly play; metadata opens the item's Details route. Other arrow transitions are
+native spatial focus/scroll behavior.
 
 **Contract.** Details → Player → Back must reveal the same Details route, with its
-meaningful focus context retained. A later Back returns through the existing hierarchy.
-Do not convert Home selection into a direct-player route. Restore the original Home tile
-only after Home becomes visible (see [navigation](../product-specs/navigation.md) and
-[Episode Details](../product-specs/episode-details.md)).
+meaningful focus context retained. For Movie Details, restore the exact originating Play
+or Play From Beginning action while it remains present and eligible; use Play only if
+the originating action no longer exists or is ineligible. A later Back returns through the existing
+hierarchy. Do not convert Home selection into a direct-player route. Restore the original
+Home tile only after Home becomes visible (see
+[navigation](../product-specs/navigation.md) and [Episode Details](../product-specs/episode-details.md)).
 
 **Deviation / runtime check.** Exact child-shelf focus restoration on Details after a
 nested route/player return is not represented by an explicit semantic target in the
 inspected `ItemView` path. Native restoration is plausible but not established; test
-movie/show/episode variants and virtualized shelves rather than claiming it.
+show/episode variants and virtualized shelves rather than claiming it.
 
 ## Modal, menu, and picker dismissal
 

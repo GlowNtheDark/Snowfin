@@ -28,6 +28,7 @@ struct NavigationRoute: Identifiable, Hashable {
     let id: String
 
     private let content: AnyView
+    let onWillDismiss: (() -> Void)?
     var transitionType: TransitionType
     var namespace: Namespace.ID?
 
@@ -47,9 +48,11 @@ struct NavigationRoute: Identifiable, Hashable {
     init(
         id: String,
         style: TransitionStyle = .push(.automatic),
+        onWillDismiss: (() -> Void)? = nil,
         @ViewBuilder content: () -> some View
     ) {
         self.id = id
+        self.onWillDismiss = onWillDismiss
         self.transitionType = .automatic(style)
         self.namespace = nil
         self.content = AnyView(content())
@@ -58,9 +61,11 @@ struct NavigationRoute: Identifiable, Hashable {
     init(
         id: String,
         withNamespace: @escaping (Namespace.ID) -> TransitionStyle,
+        onWillDismiss: (() -> Void)? = nil,
         @ViewBuilder content: () -> some View
     ) {
         self.id = id
+        self.onWillDismiss = onWillDismiss
         self.transitionType = .withNamespace(withNamespace)
         self.namespace = nil
         self.content = AnyView(content())
