@@ -20,6 +20,20 @@ extension VideoPlayer.PlaybackControls {
             manager.item.seriesName ?? manager.item.parentTitle ?? manager.item.displayTitle
         }
 
+        private var episodeTitle: String {
+            let fallbackTitle = manager.item.episodeLocator
+            let itemTitle = manager.item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard let itemTitle,
+                  !itemTitle.isEmpty,
+                  itemTitle != fallbackTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            else {
+                return fallbackTitle ?? manager.item.displayTitle
+            }
+
+            return itemTitle
+        }
+
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
                 if manager.item.type == .episode,
@@ -36,9 +50,9 @@ extension VideoPlayer.PlaybackControls {
                     .foregroundStyle(.white)
 
                 if manager.item.type == .episode,
-                   manager.item.displayTitle != title
+                   episodeTitle != title
                 {
-                    Text(manager.item.episodeLocator ?? manager.item.displayTitle)
+                    Text(episodeTitle)
                         .font(.title3)
                         .lineLimit(1)
                         .foregroundStyle(.white.opacity(0.88))
