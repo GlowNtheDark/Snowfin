@@ -34,6 +34,7 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
     private(set) var isMarkingSeriesUnwatched = false
 
     let id: String
+    let episodeRouteIntent: EpisodeRouteIntent?
 
     var item: BaseItemDto {
         #if os(tvOS)
@@ -74,15 +75,17 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         item.displayTitle
     }
 
-    init(item: BaseItemDto) {
+    init(item: BaseItemDto, episodeRouteIntent: EpisodeRouteIntent? = nil) {
         self.id = item.id ?? "Unknown"
         self.itemSnapshot = item
+        self.episodeRouteIntent = episodeRouteIntent
         super.init()
     }
 
-    init(id: String) {
+    init(id: String, episodeRouteIntent: EpisodeRouteIntent? = nil) {
         self.id = id
         self.itemSnapshot = .init(id: id)
+        self.episodeRouteIntent = episodeRouteIntent
         super.init()
     }
 
@@ -266,7 +269,10 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         case .season, .series:
             SeriesEpisodeContentGroup(
                 parent: item,
-                playButtonItem: mediaPlayerItemProvider?.item
+                playButtonItem: mediaPlayerItemProvider?.item,
+                episodeRouteIntent: episodeRouteIntent.flatMap {
+                    $0.seriesID == item.id ? $0 : nil
+                }
             )
         default:
             []

@@ -27,7 +27,7 @@ struct ItemView: View {
     private var contentSize: CGSize = .zero
 
     @StateObject
-    private var focusCoordinator = FocusCoordinator(initial: Component.play)
+    private var focusCoordinator: FocusCoordinator
     @StateObject
     private var provider: ItemContentGroupProvider
     @StateObject
@@ -36,6 +36,10 @@ struct ItemView: View {
     init(provider: ItemContentGroupProvider) {
         self._provider = StateObject(wrappedValue: provider)
         self._viewModel = StateObject(wrappedValue: ContentGroupViewModel(provider: provider))
+        self._focusCoordinator = StateObject(wrappedValue: FocusCoordinator(
+            initial: provider.episodeRouteIntent == nil ? Component.play : nil,
+            pendingInitialFocusTarget: provider.episodeRouteIntent?.focusTarget.coordinatorID
+        ))
     }
 
     private var isCompact: Bool {

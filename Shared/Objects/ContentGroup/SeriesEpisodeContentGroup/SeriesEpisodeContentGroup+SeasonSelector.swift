@@ -19,6 +19,7 @@ extension SeriesEpisodeContentGroup {
         var selection: PagingLibraryViewModel<EpisodeLibrary>.ID?
 
         let preferredSelection: PagingLibraryViewModel<EpisodeLibrary>.ID?
+        var isDisabled = false
 
         @FocusState
         private var focusedSeason: PagingLibraryViewModel<EpisodeLibrary>.ID?
@@ -53,6 +54,7 @@ extension SeriesEpisodeContentGroup {
                             .isSelected(isSelected)
                             .focused($focusedSeason, equals: season.id)
                             .accessibilityAddTraits(isSelected ? .isSelected : [])
+                            .disabled(isDisabled)
                         }
                     }
                     .edgePadding(.horizontal)

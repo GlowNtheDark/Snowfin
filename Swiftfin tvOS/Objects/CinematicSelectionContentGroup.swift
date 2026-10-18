@@ -56,7 +56,15 @@ struct CinematicSelectionContentGroup: ContentGroup, HomeCollectionInvalidatable
                 CinematicItemSelector(
                     items: viewModel.continueItems
                 ) { item in
-                    router.route(to: .item(item: item))
+                    router.route(to: .episode(
+                        item: item,
+                        origin: item.id.map {
+                            EpisodeRouteIntent.Origin(
+                                groupID: CinematicSelectionContentGroup.homeGroupID,
+                                itemID: $0
+                            )
+                        }
+                    ))
                 }
                 .padding(.top, -16)
             } header: {

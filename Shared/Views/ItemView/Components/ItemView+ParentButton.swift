@@ -12,6 +12,9 @@ extension ItemView {
 
     struct ParentButton: View {
 
+        @EnvironmentObject
+        private var focusCoordinator: FocusCoordinator
+
         @Router
         private var router
 
@@ -47,6 +50,15 @@ extension ItemView {
             .buttonBorderShape(.capsule)
             #endif
             .buttonStyle(.card)
+            #if os(tvOS)
+                .focusable(!isEpisodeRouteFocusPending)
+            #endif
         }
+
+        #if os(tvOS)
+        private var isEpisodeRouteFocusPending: Bool {
+            focusCoordinator.request?.hasPrefix("episode-artwork:") == true
+        }
+        #endif
     }
 }

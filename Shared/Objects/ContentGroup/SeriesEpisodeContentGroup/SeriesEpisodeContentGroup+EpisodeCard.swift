@@ -17,12 +17,26 @@ extension SeriesEpisodeContentGroup {
         private var itemStateStore
 
         let episode: BaseItemDto
+        var isEpisodeRoute = false
+        var artworkFocusTarget: EpisodeRouteIntent.FocusTarget?
+        var onArtworkFocusActionAppear: (() -> Void)?
 
         var body: some View {
             if let itemState = itemStateStore?.state(for: episode) {
-                EpisodeCardWithItemState(itemState: itemState, episode: episode)
+                EpisodeCardWithItemState(
+                    itemState: itemState,
+                    episode: episode,
+                    isEpisodeRoute: isEpisodeRoute,
+                    artworkFocusTarget: artworkFocusTarget,
+                    onArtworkFocusActionAppear: onArtworkFocusActionAppear
+                )
             } else {
-                EpisodeCardContent(episode: episode)
+                EpisodeCardContent(
+                    episode: episode,
+                    isEpisodeRoute: isEpisodeRoute,
+                    artworkFocusTarget: artworkFocusTarget,
+                    onArtworkFocusActionAppear: onArtworkFocusActionAppear
+                )
             }
         }
     }
@@ -33,9 +47,17 @@ extension SeriesEpisodeContentGroup {
         var itemState: ItemState
 
         let episode: BaseItemDto
+        let isEpisodeRoute: Bool
+        let artworkFocusTarget: EpisodeRouteIntent.FocusTarget?
+        let onArtworkFocusActionAppear: (() -> Void)?
 
         var body: some View {
-            EpisodeCardContent(episode: itemState.applying(to: episode))
+            EpisodeCardContent(
+                episode: itemState.applying(to: episode),
+                isEpisodeRoute: isEpisodeRoute,
+                artworkFocusTarget: artworkFocusTarget,
+                onArtworkFocusActionAppear: onArtworkFocusActionAppear
+            )
         }
     }
 
@@ -51,6 +73,9 @@ extension SeriesEpisodeContentGroup {
         private var router
 
         let episode: BaseItemDto
+        let isEpisodeRoute: Bool
+        let artworkFocusTarget: EpisodeRouteIntent.FocusTarget?
+        let onArtworkFocusActionAppear: (() -> Void)?
 
         /// Only Jellyfin's explicit user state selects the completed styling.
         private var isWatched: Bool {
@@ -105,6 +130,9 @@ extension SeriesEpisodeContentGroup {
                 header: episode.displayTitle,
                 subHeader: episode.episodeLocator ?? .emptyDash,
                 content: episodeContent,
+                artworkFocusTarget: artworkFocusTarget,
+                onArtworkFocusActionAppear: onArtworkFocusActionAppear,
+                isEpisodeRoute: isEpisodeRoute,
                 artworkAction: {
                     guard let provider = episode.getPlaybackItemProvider(userSession: nil) else {
                         return
@@ -184,6 +212,9 @@ extension SeriesEpisodeContentGroup {
         let header: String
         let subHeader: String
         let content: String
+        let artworkFocusTarget: EpisodeRouteIntent.FocusTarget?
+        let onArtworkFocusActionAppear: (() -> Void)?
+        let isEpisodeRoute: Bool
         let artworkAction: () -> Void
         let contentAction: () -> Void
         let contextMenuItem: BaseItemDto?
@@ -193,6 +224,9 @@ extension SeriesEpisodeContentGroup {
             header: String,
             subHeader: String,
             content: String,
+            artworkFocusTarget: EpisodeRouteIntent.FocusTarget? = nil,
+            onArtworkFocusActionAppear: (() -> Void)? = nil,
+            isEpisodeRoute: Bool = false,
             artworkAction: @escaping () -> Void,
             contentAction: @escaping () -> Void,
             contextMenuItem: BaseItemDto? = nil,
@@ -201,6 +235,9 @@ extension SeriesEpisodeContentGroup {
             self.header = header
             self.subHeader = subHeader
             self.content = content
+            self.artworkFocusTarget = artworkFocusTarget
+            self.onArtworkFocusActionAppear = onArtworkFocusActionAppear
+            self.isEpisodeRoute = isEpisodeRoute
             self.artworkAction = artworkAction
             self.contentAction = contentAction
             self.contextMenuItem = contextMenuItem
@@ -233,7 +270,23 @@ extension SeriesEpisodeContentGroup {
             #endif
                 .focused($focusedElement, equals: .artwork)
 
-            if let contextMenuItem {
+            if let artworkFocusTarget {
+                let focusedButton = button.coordinatedFocus(
+                    artworkFocusTarget.coordinatorID,
+                    consumesRequestOnAcquisition: true
+                )
+                .onAppear {
+                    onArtworkFocusActionAppear?()
+                }
+
+                if let contextMenuItem {
+                    focusedButton.posterContextMenu(for: contextMenuItem) {
+                        artwork
+                    }
+                } else {
+                    focusedButton
+                }
+            } else if let contextMenuItem {
                 button.posterContextMenu(for: contextMenuItem) {
                     artwork
                 }
@@ -267,7 +320,7 @@ extension SeriesEpisodeContentGroup {
             .focusSection()
             .defaultFocus(
                 $focusedElement,
-                .artwork,
+                isEpisodeRoute && artworkFocusTarget == nil ? nil : .artwork,
                 priority: .userInitiated
             )
         }

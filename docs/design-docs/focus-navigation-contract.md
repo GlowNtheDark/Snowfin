@@ -107,8 +107,8 @@ behavior.
 | Search | Pending sidebar-entry request targets the app-owned Search field; without a pending request native initial focus is unverified | Dismiss result details/presentation before Search; keyboard Back behavior is platform-owned until verified | Prior result or field when valid; there is no explicit semantic result target. Fallback to Search field, then first result group only when `canSearch` |
 | Settings | Native first available Form/control; exact default is unverified | Native picker/menu first, then one Settings child route | Invoking row/control if still present, else first meaningful control in the parent form; platform restoration is unverified |
 | Movie Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve the same Details instance and restore the exact originating Play or Play From Beginning action while it remains present and eligible; use Play only if that action no longer exists or is ineligible |
-| Show / Episode Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve same Details instance and prior focused control/shelf item where native focus can; exact target is not explicitly recorded. Fallback to Play |
-| Details child shelf / season selector | Preferred/current item or season when available; otherwise native focus candidate | Selecting a card can open another Details route or direct-play from artwork | Same item/season if still present; nearest item in that shelf; shelf's preferred/first item; then Play |
+| Show / Episode Details | Shared `ItemView` coordinator targets Play for ordinary entry. A tvOS Home episode route targets that episode's artwork after its season and card are ready | Dismiss player or nested route first, then this Details route | Preserve same Details instance and prior focused control/shelf item where native focus can; exact target is not explicitly recorded. Fallback to Play |
+| Details child shelf / season selector | Preferred/current item or season when available; otherwise native focus candidate. A tvOS Home episode route selects its intended season and targets that episode's artwork | Selecting a card can open another Details route or direct-play from artwork | Same item/season if still present; nearest item in that shelf; shelf's preferred/first item; then Play |
 | Library/menu/filter/modal child | Native menu/form default; app-owned child entry where provided | Dismiss only the top menu, picker, sheet, or dialog | Return to the exact presenting control when valid; otherwise nearest same-region control then region primary target. Exactness needs runtime confirmation for native menus/forms |
 | Player HUD | Hidden at player presentation; when shown for seekable content, the progress bar is the default focus. The Play/Pause status symbol is never a focus target. Live playback has no focusable transport when it has no seek bar | Back hides transient HUD; a later Back dismisses player | HUD appears with progress focused when seekable. Player exit returns to actual presenting route, not inferred origin |
 | Playback dropdown | Info section on open | Picker first, then dropdown; Back must not propagate from picker to player | Closing dropdown restores the HUD with progress as its default focus |
@@ -281,9 +281,10 @@ dismissal. `EditDeviceProfileView` has the notable unsaved-changes exit intercep
 
 ## Details screens and nested shelves
 
-Movie Details, Show Details, and Episode Details share `ItemView`. Its initial focus
-target is Play. The header includes metadata and item-specific actions; child content
-groups can include related media, season/episode shelves, and other configured groups.
+Movie Details, Show Details, and Episode Details share `ItemView`. Its ordinary initial
+focus target is Play. The header includes metadata and item-specific actions; child
+content groups can include related media, season/episode shelves, and other configured
+groups.
 Focusable controls include Play, version/source and item actions/menus, parent/season
 controls, poster tiles, and episode-card actions.
 
@@ -295,13 +296,14 @@ controls, poster tiles, and episode-card actions.
 | Details episode shelf/card | Native to season selector or previous shelf based on geometry | Native to next shelf | Previous episode; artwork button is direct-play focus target and metadata button opens details | Next episode; shelf scrolls horizontally | Artwork starts playback directly; metadata/content action opens Episode Details | Dismiss child Episode Details/player first; otherwise dismiss current Details route |
 | Episode Details Play / Play From Beginning | Native among header actions and nearby content | Native into episode/related shelves | Native to adjacent action | Native to adjacent action | Play resumes available progress; Play From Beginning uses zero | If player is above, dismiss player to this same Episode Details instance; next Back returns through its parent hierarchy |
 
-**Observed.** Shared `ItemView` initializes a local coordinator at Play. Movie Details
-records the originating playback action for player return; exact nested shelf focus
-targets are not explicitly persisted. The season selector prefers a current/first
-season; changing it updates `SeriesEpisodeContentGroup` and debounces content switching.
-Episode shelf prefers current/first episode. Episode cards have two actions: artwork can
-directly play; metadata opens the item's Details route. Other arrow transitions are
-native spatial focus/scroll behavior.
+**Observed.** Shared `ItemView` initializes a local coordinator at Play unless a tvOS
+Home episode route supplies an artwork target. Movie Details records the originating
+playback action for player return; exact nested shelf focus targets are not explicitly
+persisted. Without an incoming episode route, the season selector prefers a current/first
+season and the episode shelf prefers the current/first episode. Changing the season
+selector updates `SeriesEpisodeContentGroup` and debounces content switching. Episode
+cards have two actions: artwork can directly play; metadata opens the item's Details
+route. Other arrow transitions are native spatial focus/scroll behavior.
 
 **Contract.** Details → Player → Back must reveal the same Details route, with its
 meaningful focus context retained. For Movie Details, restore the exact originating Play
@@ -310,6 +312,17 @@ the originating action no longer exists or is ineligible. A later Back returns t
 hierarchy. Do not convert Home selection into a direct-player route. Restore the original
 Home tile only after Home becomes visible (see
 [navigation](../product-specs/navigation.md) and [Episode Details](../product-specs/episode-details.md)).
+
+For a normal tvOS Home episode selection, open the owning Show Details directly without
+an intermediate Episode Details route or starting playback. The route's season takes
+priority over the show's Next Up/resume season. Keep initial focus pending until the
+selected season's episode card is eligible, then focus the originating episode's artwork
+action. Do not focus Show Play, the season selector, or episode metadata first. If that
+episode is absent from the successfully loaded season, focus the first eligible episode
+there. If the requested season is unavailable, use a verified alternate season when
+possible, otherwise the first available season. If no playable episodes are available,
+use Show Details' stable entry target. This route-specific entry behavior leaves ordinary
+Show Details focus and existing player-to-Details/Home restoration requirements intact.
 
 **Deviation / runtime check.** Exact child-shelf focus restoration on Details after a
 nested route/player return is not represented by an explicit semantic target in the

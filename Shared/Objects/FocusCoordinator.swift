@@ -20,6 +20,12 @@ final class FocusCoordinator: ObservableObject {
     private(set) var lastFocusedIDs: Set<String> = []
     @Published
     private(set) var request: String?
+    @Published
+    private(set) var pendingInitialFocusTarget: String?
+
+    var hasPendingFocusRequest: Bool {
+        pendingInitialFocusTarget != nil || request != nil
+    }
 
     #if os(tvOS)
     struct HomeTile: Equatable {
@@ -549,14 +555,16 @@ final class FocusCoordinator: ObservableObject {
     }
     #endif
 
-    init(initial: String? = nil) {
+    init(initial: String? = nil, pendingInitialFocusTarget: String? = nil) {
         self.request = initial
+        self.pendingInitialFocusTarget = pendingInitialFocusTarget
     }
 
     func focus(_ id: String) {
         #if os(tvOS)
         invalidatePendingFocusRequests()
         #endif
+        pendingInitialFocusTarget = nil
         request = id
     }
 

@@ -371,3 +371,81 @@ The remediation changes are limited to `Shared/Views/VideoPlayer/VideoPlayer.swi
 Focused runtime checks on the requested Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator passed: Intro Back; countdown cancellation followed by separate overlay dismissal; HUD Back; Down dropdown Back; nested quality-picker Back; Up Episodes Back; regular player exit and return to the same Details route; Skip Intro activation; Play Next advancing one episode; and Keep Watching retaining the current episode. `The World Is Hot Enough` rendered on the episode HUD with `S10:E2` and `Futurama`, fitting on one line without overlap with the progress bar or timestamps. Movie playback still showed only `10 Cloverfield Lane` with the ordinary progress controls. One initial dropdown observation after Down was not reproducible on the immediate retrial and is not classified as a new bug.
 
 The signed simulator build/install completed successfully before these documentation-only updates; lint reported 17 existing violations and 0 serious findings. The temporary Credits / Outro test preference was restored to Show Next Episode; its saved countdown duration was restored to 10 seconds. Test seeking and Play Next exercised the existing progress/completion paths and may have changed Futurama episode resume/watched state on Jellyfin; server-side state was not queried or restored. No commit or push was made. The three pre-existing dirty navigation documents remain untouched.
+
+## 2026-10-11 tvOS Home episode route migration follow-up
+
+### R01 — Home episode route initially focuses the first episode
+
+- **Subsystem / severity / status:** Home episode entry initial focus; P1; **IMPLEMENTED — ACCEPTANCE INCOMPLETE**. Keep R01 open until the required regression matrix is green; do not mark PASS from the episode-target checks alone.
+- **Reproduction:** On Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator, select Futurama S10:E7 from Home Continue Watching.
+- **Expected:** Show Details opens with the route season selected and the originating playable episode's artwork initially focused. The route target stays pending while content loads; no Play, season-selector, first-episode, or delayed corrective focus is allowed.
+- **Source change:** The virtualized `CollectionHStack` now retains the route's target ID/index and artwork focus ID as state, reveals the target through its existing proxy as episode cells register, retries positioning on subsequent cell-appearance events while layout extent is still growing, and issues one focus request only after the target artwork action appears. Other initial controls/cards remain unavailable while that request is pending. Ordinary Details entry keeps its existing Play target. The authoritative focus/navigation contract was not edited.
+- **Runtime matrix — Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator only:**
+
+  | Scenario | Result | Evidence |
+  | --- | --- | --- |
+  | A. Futurama S10:E7 from Continue Watching | **PASS** | Season 10 was selected; Episode 7 artwork acquired initial focus without an Episode 1 focus event. |
+  | B. NCIS S1:E10 from Continue Watching | **PASS** | During loading, focus stayed pending; the target was revealed at its loaded index and Episode 10 artwork acquired focus. |
+  | C. Select focused artwork once | **PASS** | Player identified NCIS S1:E10, “Left for Dead.” |
+  | D. Route season differs from default | **PASS** | Futurama opened to Season 10 rather than its default Season 1. |
+  | E. Ordinary Show Details initial Play focus | **UNVERIFIED** | Not exercised in this run. |
+  | F. Episode shelf Left/Right after route focus | **FAIL** | From focused NCIS Episode 10, one Right press landed on Episode 14; one Left returned to Episode 10. No wrap was observed, but sequential-next focus did not match the contract. |
+  | G. Home/sidebar, Movie Details, and player Back paths | **FAIL / PARTIAL** | Player Back returned to the same NCIS Details instance with Episode 10 focused; the next Back returned Home. Right from the Home sidebar acquired Futurama. In the Home vertical reversal check, Down from Futurama selected Frozen II, but Up landed on Dancing with the Stars instead of Futurama. Movie Details focus was unverified. |
+  | H. Focus while content loads | **PASS** | Loading placeholders and early episode-cell appearances kept the target pending; only the registered route artwork target received the single initial request. |
+
+- **Acceptance status:** The R01 target-focus behavior passed for both exact routes, playback, cross-season selection, and loading. The complete runtime matrix did not pass because F failed and G exposed a Home vertical-reversal failure; E and Movie Details focus remain unverified. Do not mark R01 PASS until these acceptance results are resolved or explicitly re-scoped.
+- **Scope / evidence boundary:** No source tests were added or run. The signed in-place simulator build/install is requested separately as implementation verification; it does not change the matrix above. No physical Apple TV was used.
+- **Next action:** Continue with the authorized 2026-10-16 focused follow-up below. Keep R01 open while the Home reversal result remains inconsistent and until the remaining focus-eligibility check is verified.
+
+### 2026-10-16 authorized directional follow-up
+
+- **Verified episode-shelf root cause:** Route entry temporarily disabled every episode card other than the requested target while its focus request was pending. In the virtualized `CollectionHStack`, this changed the eligible candidate set during initial focus acquisition. Simulator A/B reproduced the effect: with the gate, focused NCIS S1:E10 followed by one Right landed on E14 while E11–E13 were visible; without the gate, Right landed on E11. The collection's semantic target ID was correct at entry, and the ordinary Show Details shelf moved one episode per press.
+- **Correction:** Removed the route-only `.disabled` gate, keeping all loaded episode cards focusable throughout. The collection now gives default focus to the semantic route target; non-target episode cards on that route do not nominate their artwork as a default-focus candidate. The target artwork retains its own default and explicit readiness-driven focus request. This keeps normal spatial navigation and CollectionHStack virtualization intact without corrective presses or timers.
+- **Home regression diagnosis:** The previously recorded Futurama Down/Up failure was not reproduced on the current same-origin rerun: after returning from Futurama S10:E7, Down selected the nearest visible movie tile (Practical Magic 2) and Up restored Futurama. A separate Neagley → Resident Evil → Neagley Down/Up path also passed. The earlier failure remains valid evidence and is not reclassified as PASS. The Home vertical recognizer/decision implementation is unchanged in the working-tree diff; the migration's FocusCoordinator change adds pending initial route focus state. No localized causal link to the route migration is confirmed. The compared Home runs had different visible shelf offsets/membership, so the original failing geometry still needs an exact repeat.
+- **Runtime matrix — Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator only:**
+
+  | Scenario | Result | Evidence |
+  | --- | --- | --- |
+  | 1. NCIS S1:E10 initial focus | **PASS** | Season 1 selected; Episode 10 “Left for Dead” artwork focused on the settled route frame. |
+  | 2. NCIS E10 Right → E11 | **PASS** | One Right selected Episode 11 “Eye Spy.” |
+  | 3. NCIS E11 Left → E10 | **PASS** | One Left returned to Episode 10. |
+  | 4. Repeated horizontal navigation | **PASS** | E10 → E11 → E12 and reverse to E11/E10, with no skipped card. E10 → Left reached E9. |
+  | 5. First/last episode boundaries | **PASS** | At E1, Left retained E1. Advancing through the season reached E23; Right retained E23. No wrap observed. |
+  | 6. Futurama S10:E7 initial focus | **PASS** | Season 10 selected and Episode 7 “Murderoni” artwork focused. |
+  | 7. Futurama adjacent-card navigation | **PASS** | E7 Right → E8 “Crab Splatter”; Left returned to E7. |
+  | 8. Ordinary Show Details initial focus | **PASS** | The Secret Lives of Mormon Wives opened with Play as the initial focus; this path has no episode route intent. |
+  | 9. Home Down/Up exact restoration | **UNVERIFIED** | Current Futurama same-origin and separate Neagley reversal paths passed, but the earlier Futurama → Frozen II → Dancing with the Stars failure was not reproduced with matching row offset/membership. Keep that failure open. |
+  | 10. Movie Details initial focus | **PASS** | Practical Magic 2 opened with Play focused. |
+  | 11. Artwork Select starts intended episode | **PASS** | NCIS S1:E10 artwork Select opened playback showing S1:E10, “Left for Dead.” |
+  | 12. No delayed focus jump / hidden-control focus | **UNVERIFIED** | Captured loading frames showed no wrong episode artwork acquiring visible focus before E10; the hidden/inactive-control focus sweep was not run. |
+
+- **Player Back layering:** From playback, the first Back hid the HUD; the next Back returned to NCIS Details with Episode 10 focused. This matches the existing layer order.
+- **Contract compliance:** The authoritative focus/navigation contract remains read-only and unchanged by this follow-up. Sequential Left/Right and non-wrapping episode boundaries passed on the requested simulator. Home exact reversal remains unresolved; no contract behavior was weakened.
+- **Build and hygiene:** `Scripts/build-install-tvos-simulator.sh` completed with signed in-place install and exit code 0. Lint reported 17 existing violations and 0 serious findings. `git diff --check` passed after the final documentation edit.
+- **Acceptance status:** R01 and Pass 1 remain open. The NCIS directional regression is corrected and the route/Futurama checks pass. Home reversal remains an inconsistent runtime result, and hidden/inactive focus eligibility remains unverified. Re-run the original Home failure with the same shelf membership/offset before claiming completion.
+
+### 2026-10-18 Pass 1 final acceptance
+
+This final simulator run supersedes the open R01 status recorded above. R01 is **PASS**; the earlier Home Down/Up report remains a separate **UNVERIFIED** case because its original membership and offsets could not be recreated.
+
+- **Runtime device:** Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator. No physical Apple TV was used.
+- **Episode-route matrix:**
+
+  | Scenario | Result | Evidence |
+  | --- | --- | --- |
+  | NCIS S1:E10 initial focus and season | **PASS** | Season 1 was selected; E10 “Left for Dead” artwork held the visible focus outline after the route settled. |
+  | NCIS Right → E11, Left → E10 | **PASS** | Each single press moved exactly one card and returned to E10. |
+  | Futurama S10:E7 initial focus and season | **PASS** | Season 10 was selected; E7 “Murderoni” artwork held the visible focus outline after the route settled. |
+  | Futurama Right → E8, Left → E7 | **PASS** | Each single press moved exactly one card and returned to E7. |
+  | Artwork Select playback | **PASS** | NCIS artwork opened S1:E10 “Left for Dead”; Futurama artwork opened S10:E7 “Murderoni.” |
+  | Player Back to originating Details episode | **PASS** | Back first hid the player HUD; the next Back returned to the same Details route with the originating E10 or E7 artwork focused. |
+  | Sequential movement and episode bounds | **PASS** | Current adjacent-card checks passed. The 2026-10-16 targeted run also advanced NCIS E10→E11→E12 and back, and verified Left at E1 and Right at E23 retained the boundary card. |
+  | Ordinary Show Details initial focus | **PASS** | The Secret Lives of Mormon Wives opened through its ordinary Home tile with Play as the initial target. |
+  | Movie Details initial focus | **PASS** | The Love Hypothesis opened with Play as the initial target. |
+  | One press, one movement; no corrective jump | **PASS** | The NCIS and Futurama directional presses produced one adjacent-card transition each. Route focus appeared on the registered target; no other card focus outline or subsequent correction was observed. |
+
+- **Route-entry lifecycle audit:** `ItemView` seeds the route artwork target as pending. While that request is pending, Play and the other action-row controls are non-focusable. The episode collection defaults to the episode section; non-target route cards do not nominate artwork as a default target. It reveals the requested index through `CollectionHStackProxy`, then requests focus only after the target card and artwork action register. A virtualized card that has not registered is not in the mounted focus candidate set and cannot receive the route request. The route-only `.disabled` gate on neighboring cards remains removed, so eligible neighboring episodes stay focusable. The visible loading frame showed placeholders without another episode focus outline; the settled frame showed only the requested artwork. No timer, synthetic remote press, or corrective second focus request is used. This verifies the route-entry focus lifecycle and neighboring-card eligibility without changing normal Details behavior.
+- **Home Down/Up investigation:** The original `Futurama → Frozen II → Dancing with the Stars` result was **not reproduced**. On this run, the available Continue row contained NCIS, Haunted Hotel, A Dog’s Purpose, Insidious, Dancing with the Stars, Practical Magic 2, The Secret Lives of Mormon Wives, Marshals, and Futurama. Futurama was at the right edge (approximate visible center x=1285 px); in Recently Added Movies, Frozen II was at approx. x=1150 px and Circle at x=1280 px. Down therefore selected Circle, the nearest visible center, and Up restored Futurama. The historical row membership/offset that made Frozen II the Down target was unavailable, so the original case remains **UNVERIFIED**. No Home focus code changed and no causal relationship to R01 was established. Separate return checks restored NCIS and The Secret Lives of Mormon Wives to their originating Home tiles after Details dismissal.
+- **Contract compliance:** The authoritative `focus-navigation-contract.md` remains unchanged in this task. Exact route artwork focus, eligible neighbors, one-step directional movement, bounded episode edges, one-layer player Back, ordinary Show Details Play focus, Movie Details Play focus, and Home origin restoration all retain the documented behavior. The independent historical Home geometry case remains open outside R01.
+- **Build and hygiene:** No source changed in this task, so no build/install was run. The existing signed simulator app from the focused implementation pass was used. `git diff --check` passed after this documentation update. No commit or push was made.
+- **Acceptance status:** **R01 PASS. Pass 1 PASS.** The un-reproduced Home Down/Up geometry case remains tracked separately as **UNVERIFIED** and does not keep R01 open.

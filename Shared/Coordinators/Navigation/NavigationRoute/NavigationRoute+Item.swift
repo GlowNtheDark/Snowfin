@@ -9,6 +9,62 @@
 import JellyfinAPI
 import SwiftUI
 
+struct EpisodeRouteIntent: Hashable {
+
+    struct Origin: Hashable {
+        let groupID: String
+        let itemID: String
+    }
+
+    enum FocusTarget: Hashable {
+        case episodeArtwork(itemID: String)
+
+        var itemID: String {
+            switch self {
+            case let .episodeArtwork(itemID):
+                itemID
+            }
+        }
+
+        var coordinatorID: String {
+            switch self {
+            case let .episodeArtwork(itemID):
+                "episode-artwork:\(itemID)"
+            }
+        }
+    }
+
+    let episodeID: String
+    let seriesID: String
+    let seasonID: String?
+    let focusTarget: FocusTarget
+    let origin: Origin?
+
+    init?(item: BaseItemDto, origin: Origin? = nil) {
+        guard item.type == .episode,
+              let episodeID = item.id, !episodeID.isEmpty,
+              let seriesID = item.seriesID, !seriesID.isEmpty
+        else { return nil }
+
+        self.init(
+            episodeID: episodeID,
+            seriesID: seriesID,
+            seasonID: item.seasonID,
+            origin: origin
+        )
+    }
+
+    init?(episodeID: String, seriesID: String, seasonID: String?, origin: Origin? = nil) {
+        guard !episodeID.isEmpty, !seriesID.isEmpty else { return nil }
+
+        self.episodeID = episodeID
+        self.seriesID = seriesID
+        self.seasonID = seasonID
+        self.focusTarget = .episodeArtwork(itemID: episodeID)
+        self.origin = origin
+    }
+}
+
 extension NavigationRoute {
 
     // MARK: - Item Editing
@@ -160,6 +216,39 @@ extension NavigationRoute {
             ItemView(provider: provider)
         }
     }
+
+    @MainActor
+    static func episode(
+        item: BaseItemDto,
+        origin: EpisodeRouteIntent.Origin? = nil
+    ) -> NavigationRoute {
+        #if os(tvOS)
+        guard let intent = EpisodeRouteIntent(item: item, origin: origin) else {
+            return .item(item: item)
+        }
+
+        return .episode(intent: intent)
+        #else
+        .item(item: item)
+        #endif
+    }
+
+    #if os(tvOS)
+    @MainActor
+    static func episode(intent: EpisodeRouteIntent) -> NavigationRoute {
+        let provider = ItemContentGroupProvider(
+            id: intent.seriesID,
+            episodeRouteIntent: intent
+        )
+
+        return NavigationRoute(
+            id: "item-\(intent.seriesID)",
+            withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) }
+        ) {
+            ItemView(provider: provider)
+        }
+    }
+    #endif
 
     @MainActor
     static func item(id: String) -> NavigationRoute {

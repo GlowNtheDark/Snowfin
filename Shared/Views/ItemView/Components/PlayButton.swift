@@ -66,6 +66,16 @@ struct PlayButton: View {
     private var isPlayFromBeginningActionEligible: Bool {
         provider.item.type == .movie && provider.mediaPlayerItemProvider != nil
     }
+
+    private var isEpisodeArtworkFocusPending: Bool {
+        provider.episodeRouteIntent != nil
+            && (focusCoordinator.pendingInitialFocusTarget != nil
+                || focusCoordinator.request?.hasPrefix("episode-artwork:") == true)
+    }
+
+    private var isEpisodeRouteFocusPending: Bool {
+        provider.episodeRouteIntent != nil && focusCoordinator.hasPendingFocusRequest
+    }
     #endif
 
     private func play(
@@ -161,8 +171,11 @@ struct PlayButton: View {
             .font(.title3)
             .fontWeight(.semibold)
             .menuStyle(.button)
-            .labelStyle(.iconOnly)
-            .buttonStyle(BasicHoverButtonStyle())
+            #if os(tvOS)
+                .focusable(!isEpisodeRouteFocusPending)
+            #endif
+                .labelStyle(.iconOnly)
+                .buttonStyle(BasicHoverButtonStyle())
             #if !os(tvOS)
                 .aspectRatio(1, contentMode: .fit)
             #else
@@ -226,6 +239,9 @@ struct PlayButton: View {
             }
         }
         .disabled(provider.mediaPlayerItemProvider == nil)
+        #if os(tvOS)
+            .focusable(!isEpisodeArtworkFocusPending)
+        #endif
     }
 
     @ViewBuilder

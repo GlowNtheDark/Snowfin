@@ -18,20 +18,23 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
     let parentID: String?
     let isSeriesDetails: Bool
     let playButtonItem: BaseItemDto?
+    let episodeRouteIntent: EpisodeRouteIntent?
     let viewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
 
     var _shouldBeResolved: Bool {
-        viewModel.elements.isNotEmpty
+        viewModel.elements.isNotEmpty || episodeRouteIntent != nil
     }
 
     init(
         parent: BaseItemDto,
-        playButtonItem: BaseItemDto? = nil
+        playButtonItem: BaseItemDto? = nil,
+        episodeRouteIntent: EpisodeRouteIntent? = nil
     ) {
         self.id = "\(parent.id ?? "parent")-episode-selector"
         self.parentID = parent.id
         self.isSeriesDetails = parent.type == .series
         self.playButtonItem = playButtonItem
+        self.episodeRouteIntent = episodeRouteIntent
         self.viewModel = .init(library: SeasonViewModelLibrary(parent: parent), pageSize: 100)
     }
 
@@ -40,7 +43,8 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
             viewModel: viewModel,
             parentID: parentID,
             isSeriesDetails: isSeriesDetails,
-            playButtonItem: playButtonItem
+            playButtonItem: playButtonItem,
+            episodeRouteIntent: episodeRouteIntent
         )
     }
 
@@ -52,9 +56,19 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
         let parentID: String?
         let isSeriesDetails: Bool
         let playButtonItem: BaseItemDto?
+        let episodeRouteIntent: EpisodeRouteIntent?
+
+        @EnvironmentObject
+        private var focusCoordinator: FocusCoordinator
 
         @State
         private var selection: PagingLibraryViewModel<EpisodeLibrary>.ID?
+        @State
+        private var didResolveEpisodeRouteSeason = false
+        @State
+        private var isResolvingEpisodeRouteSeason = false
+        @State
+        private var didResolveInitialEpisodeRouteFocus = false
 
         private var selectedSeasonViewModel: PagingLibraryViewModel<EpisodeLibrary>? {
             viewModel.elements.first { $0.id == selection }
@@ -64,8 +78,16 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
             SeasonSelector(
                 seasons: Array(viewModel.elements),
                 selection: $selection,
-                preferredSelection: selection ?? preferredSeasonSelection()
+                preferredSelection: episodeRouteIntent == nil
+                    ? selection ?? preferredSeasonSelection()
+                    : selection,
+                isDisabled: isEpisodeArtworkFocusPending
             )
+        }
+
+        private var isEpisodeArtworkFocusPending: Bool {
+            guard episodeRouteIntent != nil else { return false }
+            return focusCoordinator.hasPendingFocusRequest
         }
 
         private func preferredSeasonSelection() -> PagingLibraryViewModel<EpisodeLibrary>.ID? {
@@ -79,8 +101,70 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
         }
 
         private func selectPreferredSeasonIfNeeded() {
+            if episodeRouteIntent != nil {
+                resolveEpisodeRouteSeasonIfNeeded()
+                return
+            }
+
             if selection == nil || !viewModel.elements.contains(where: { $0.id == selection }) {
                 selection = preferredSeasonSelection()
+            }
+        }
+
+        private func resolveEpisodeRouteSeasonIfNeeded() {
+            guard let episodeRouteIntent,
+                  viewModel.state == .content,
+                  !didResolveEpisodeRouteSeason,
+                  !isResolvingEpisodeRouteSeason
+            else { return }
+
+            if let intendedSeasonID = episodeRouteIntent.seasonID,
+               viewModel.elements.contains(where: { $0.id == intendedSeasonID })
+            {
+                didResolveEpisodeRouteSeason = true
+                selection = intendedSeasonID
+                return
+            }
+
+            guard viewModel.elements.isNotEmpty else {
+                didResolveEpisodeRouteSeason = true
+                focusCoordinator.focus(ItemView.Component.play)
+                return
+            }
+
+            let userSessionID = viewModel.userSession?.id
+            isResolvingEpisodeRouteSeason = true
+            Task { @MainActor in
+                let verifiedSeasonID = await verifiedEpisodeSeasonID(for: episodeRouteIntent)
+                guard viewModel.userSession?.id == userSessionID else {
+                    isResolvingEpisodeRouteSeason = false
+                    return
+                }
+
+                isResolvingEpisodeRouteSeason = false
+                didResolveEpisodeRouteSeason = true
+                selection = viewModel.elements.first(where: { $0.id == verifiedSeasonID })?.id
+                    ?? viewModel.elements.first?.id
+
+                if selection == nil {
+                    focusCoordinator.focus(ItemView.Component.play)
+                }
+            }
+        }
+
+        private func verifiedEpisodeSeasonID(for intent: EpisodeRouteIntent) async -> String? {
+            guard let userSession = viewModel.userSession else { return nil }
+
+            do {
+                let episode = try await BaseItemDto(id: intent.episodeID).getFullItem(userSession: userSession)
+                guard viewModel.userSession?.id == userSession.id,
+                      episode.id == intent.episodeID,
+                      episode.type == .episode,
+                      episode.seriesID == intent.seriesID
+                else { return nil }
+                return episode.seasonID
+            } catch {
+                return nil
             }
         }
 
@@ -156,14 +240,22 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
                 if let selectedSeasonViewModel {
                     SeasonEpisodesView(
                         seasonViewModel: selectedSeasonViewModel,
-                        focusSeasonSelector: isSeriesDetails,
-                        playButtonItem: playButtonItem
+                        focusSeasonSelector: isSeriesDetails && episodeRouteIntent == nil,
+                        playButtonItem: playButtonItem,
+                        episodeRouteIntent: episodeRouteIntent,
+                        didResolveInitialEpisodeRouteFocus: $didResolveInitialEpisodeRouteFocus
                     ) {
                         seasonSelectorView
                     }
+                } else if episodeRouteIntent != nil,
+                          viewModel.state == .content,
+                          viewModel.elements.isEmpty
+                {
+                    EmptyView()
                 } else {
                     LoadingEpisodesView(
-                        focusSeasonSelector: isSeriesDetails
+                        focusSeasonSelector: isSeriesDetails && episodeRouteIntent == nil,
+                        isEpisodeRoute: episodeRouteIntent != nil
                     ) {
                         seasonSelectorView
                     }
@@ -173,10 +265,14 @@ struct SeriesEpisodeContentGroup: ContentGroup, Identifiable {
                 selectPreferredSeasonIfNeeded()
                 refreshSelectedSeasonIfNeeded()
             }
-            .onChange(of: viewModel.elements.count) {
+            .onChange(of: viewModel.elements.count) { _, _ in
                 selectPreferredSeasonIfNeeded()
             }
-            .onChange(of: selection) {
+            .onChange(of: viewModel.state == .content) { _, isLoaded in
+                guard isLoaded else { return }
+                selectPreferredSeasonIfNeeded()
+            }
+            .onChange(of: selection) { _, _ in
                 refreshSelectedSeasonIfNeeded()
             }
             #if os(tvOS)

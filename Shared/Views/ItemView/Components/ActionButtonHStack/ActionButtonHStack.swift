@@ -22,8 +22,15 @@ extension ItemView {
         private var enabledTrailers: TrailerSelection
 
         #if os(tvOS)
+        @EnvironmentObject
+        private var focusCoordinator: FocusCoordinator
+
         @State
         private var markUnwatchedError: Error?
+
+        private var hasPendingEpisodeRouteFocus: Bool {
+            provider.episodeRouteIntent != nil && focusCoordinator.hasPendingFocusRequest
+        }
         #endif
 
         private var hasTrailers: Bool {
@@ -150,6 +157,7 @@ extension ItemView {
                     .frame(width: 520, height: 75)
                     .labelStyle(.titleAndIcon)
                     .disabled(provider.isMarkingSeriesUnwatched)
+                    .focusable(!hasPendingEpisodeRouteFocus)
                     .accessibilityIdentifier("show-details-mark-unwatched")
                 }
                 #endif
@@ -172,6 +180,8 @@ extension ItemView {
                     }
                     #if !os(tvOS)
                     .foregroundStyle(.primary, .secondary)
+                    #else
+                    .focusable(!hasPendingEpisodeRouteFocus)
                     #endif
                 }
 
@@ -193,6 +203,8 @@ extension ItemView {
                     }
                     #if !os(tvOS)
                     .foregroundStyle(.primary, .secondary)
+                    #else
+                    .focusable(!hasPendingEpisodeRouteFocus)
                     #endif
                     .isSelected(isFavorited)
                 }
@@ -211,6 +223,7 @@ extension ItemView {
                             foregroundColor: .primary
                         )
                     }
+                    .focusable(!hasPendingEpisodeRouteFocus)
                 }
 
                 // MARK: tvOS Options
@@ -228,6 +241,7 @@ extension ItemView {
                     }
                     .frame(width: 60)
                     .foregroundStyle(.primary, .secondary)
+                    .focusable(!hasPendingEpisodeRouteFocus)
                 }
                 #endif
             }

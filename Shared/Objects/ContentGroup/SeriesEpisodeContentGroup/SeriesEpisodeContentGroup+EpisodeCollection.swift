@@ -39,24 +39,28 @@ extension SeriesEpisodeContentGroup {
     struct LoadingEpisodesView<Header: View>: View {
 
         let focusSeasonSelector: Bool
+        let isEpisodeRoute: Bool
         let header: Header
 
         init(
             focusSeasonSelector: Bool,
+            isEpisodeRoute: Bool = false,
             @ViewBuilder header: () -> Header
         ) {
             self.focusSeasonSelector = focusSeasonSelector
+            self.isEpisodeRoute = isEpisodeRoute
             self.header = header()
         }
 
         var body: some View {
             EpisodeCollectionLayout(
                 elements: EpisodeElement.loadingElements,
-                preferredElementID: EpisodeElement.loadingElements.first?.id,
-                focusSeasonSelector: focusSeasonSelector
+                preferredElementID: isEpisodeRoute ? nil : EpisodeElement.loadingElements.first?.id,
+                focusSeasonSelector: focusSeasonSelector,
+                isEpisodeRoute: isEpisodeRoute
             ) {
                 header
-            } content: { element in
+            } content: { element, _ in
                 EpisodeElementCard(element: element, refresh: {})
             }
             .scrollDisabled(true)
@@ -70,17 +74,29 @@ extension SeriesEpisodeContentGroup {
 
         let focusSeasonSelector: Bool
         let playButtonItem: BaseItemDto?
+        let episodeRouteIntent: EpisodeRouteIntent?
+
+        @Binding
+        var didResolveInitialEpisodeRouteFocus: Bool
+
+        @EnvironmentObject
+        private var focusCoordinator: FocusCoordinator
+
         let header: Header
 
         init(
             seasonViewModel: PagingLibraryViewModel<EpisodeLibrary>,
             focusSeasonSelector: Bool,
             playButtonItem: BaseItemDto?,
+            episodeRouteIntent: EpisodeRouteIntent?,
+            didResolveInitialEpisodeRouteFocus: Binding<Bool>,
             @ViewBuilder header: () -> Header
         ) {
             self.seasonViewModel = seasonViewModel
             self.focusSeasonSelector = focusSeasonSelector
             self.playButtonItem = playButtonItem
+            self.episodeRouteIntent = episodeRouteIntent
+            self._didResolveInitialEpisodeRouteFocus = didResolveInitialEpisodeRouteFocus
             self.header = header()
         }
 
@@ -100,6 +116,14 @@ extension SeriesEpisodeContentGroup {
         }
 
         private var preferredElementID: EpisodeElement.ID? {
+            if let episodeRouteIntent {
+                guard seasonViewModel.state == .content else { return nil }
+
+                let playableEpisodes = seasonViewModel.elements.filter(\.isPlayable)
+                return playableEpisodes.first(where: { $0.id == episodeRouteIntent.episodeID })?.id
+                    ?? playableEpisodes.first?.id
+            }
+
             if let playButtonItemID = playButtonItem?.id,
                elements.contains(where: { $0.id == playButtonItemID })
             {
@@ -109,19 +133,66 @@ extension SeriesEpisodeContentGroup {
             return elements.first?.id
         }
 
+        private var preferredElementIndex: Int? {
+            guard let preferredElementID else { return nil }
+            return elements.firstIndex(where: { $0.id == preferredElementID })
+        }
+
+        private var initialArtworkFocusTarget: EpisodeRouteIntent.FocusTarget? {
+            guard let episodeRouteIntent,
+                  seasonViewModel.state == .content
+            else { return nil }
+
+            let targetEpisode = seasonViewModel.elements.first(where: {
+                $0.id == episodeRouteIntent.episodeID && $0.isPlayable
+            }) ?? seasonViewModel.elements.first(where: \.isPlayable)
+
+            guard let targetEpisode, let id = targetEpisode.id else { return nil }
+            return .episodeArtwork(itemID: id)
+        }
+
+        private func resolveInitialEpisodeRouteFocusIfNeeded() {
+            guard episodeRouteIntent != nil,
+                  !didResolveInitialEpisodeRouteFocus,
+                  seasonViewModel.state == .content || seasonViewModel.state == .error
+            else { return }
+
+            didResolveInitialEpisodeRouteFocus = true
+
+            guard initialArtworkFocusTarget != nil else {
+                focusCoordinator.focus(ItemView.Component.play)
+                return
+            }
+        }
+
         var body: some View {
             EpisodeCollectionLayout(
                 elements: elements,
                 preferredElementID: preferredElementID,
-                focusSeasonSelector: focusSeasonSelector
+                episodeRouteTargetIndex: preferredElementIndex,
+                episodeRouteArtworkFocusID: initialArtworkFocusTarget?.coordinatorID,
+                focusSeasonSelector: focusSeasonSelector,
+                isEpisodeRoute: episodeRouteIntent != nil
             ) {
                 header
-            } content: { element in
-                EpisodeElementCard(element: element) {
+            } content: { element, onArtworkFocusActionAppear in
+                EpisodeElementCard(
+                    element: element,
+                    isEpisodeRoute: episodeRouteIntent != nil,
+                    artworkFocusTarget: initialArtworkFocusTarget,
+                    onArtworkFocusActionAppear: onArtworkFocusActionAppear
+                ) {
                     seasonViewModel.refresh()
                 }
             }
             .scrollDisabled(seasonViewModel.state != .content)
+            .onAppear {
+                resolveInitialEpisodeRouteFocusIfNeeded()
+            }
+            .onChange(of: seasonViewModel.state == .content || seasonViewModel.state == .error) { _, isLoaded in
+                guard isLoaded else { return }
+                resolveInitialEpisodeRouteFocusIfNeeded()
+            }
         }
     }
 
@@ -136,25 +207,53 @@ extension SeriesEpisodeContentGroup {
         private var focusedSection: FocusedSection?
         @FocusState
         private var focusedElement: EpisodeElement.ID?
+        @StateObject
+        private var collectionProxy = CollectionHStackProxy()
+        @State
+        private var revealedEpisodeRouteTargetID: EpisodeElement.ID?
+        @State
+        private var episodeRouteTargetElementID: EpisodeElement.ID?
+        @State
+        private var episodeRouteTargetIndex: Int?
+        @State
+        private var episodeRouteArtworkFocusID: String?
+        @State
+        private var registeredEpisodeRouteArtworkActionID: EpisodeElement.ID?
+        @State
+        private var hasRegisteredEpisodeElements = false
+        @EnvironmentObject
+        private var focusCoordinator: FocusCoordinator
 
         let elements: [EpisodeElement]
         let preferredElementID: EpisodeElement.ID?
+        let initialEpisodeRouteTargetIndex: Int?
+        let initialEpisodeRouteArtworkFocusID: String?
         let focusSeasonSelector: Bool
+        let isEpisodeRoute: Bool
         let header: Header
-        let content: (EpisodeElement) -> Content
+        let content: (EpisodeElement, @escaping () -> Void) -> Content
 
         init(
             elements: [EpisodeElement],
             preferredElementID: EpisodeElement.ID?,
+            episodeRouteTargetIndex: Int? = nil,
+            episodeRouteArtworkFocusID: String? = nil,
             focusSeasonSelector: Bool = false,
+            isEpisodeRoute: Bool = false,
             @ViewBuilder header: () -> Header,
-            @ViewBuilder content: @escaping (EpisodeElement) -> Content
+            @ViewBuilder content: @escaping (EpisodeElement, @escaping () -> Void) -> Content
         ) {
             self.elements = elements
             self.preferredElementID = preferredElementID
+            self.initialEpisodeRouteTargetIndex = episodeRouteTargetIndex
+            self.initialEpisodeRouteArtworkFocusID = episodeRouteArtworkFocusID
             self.focusSeasonSelector = focusSeasonSelector
+            self.isEpisodeRoute = isEpisodeRoute
             self.header = header()
             self.content = content
+            self._episodeRouteTargetElementID = State(initialValue: isEpisodeRoute ? preferredElementID : nil)
+            self._episodeRouteTargetIndex = State(initialValue: isEpisodeRoute ? episodeRouteTargetIndex : nil)
+            self._episodeRouteArtworkFocusID = State(initialValue: isEpisodeRoute ? episodeRouteArtworkFocusID : nil)
         }
 
         private static var layout: CollectionHStackLayout {
@@ -190,10 +289,56 @@ extension SeriesEpisodeContentGroup {
 
         private var defaultFocusedSection: FocusedSection {
             #if os(tvOS)
-            focusSeasonSelector ? .seasons : .episodes
+            isEpisodeRoute ? .episodes : (focusSeasonSelector ? .seasons : .episodes)
             #else
             .episodes
             #endif
+        }
+
+        private var isEpisodeRouteFocusPending: Bool {
+            isEpisodeRoute && focusCoordinator.hasPendingFocusRequest
+        }
+
+        private var focusedEpisodeElementID: EpisodeElement.ID? {
+            isEpisodeRoute ? episodeRouteTargetElementID : preferredElementID
+        }
+
+        private func revealEpisodeRouteTargetIfNeeded() {
+            guard isEpisodeRouteFocusPending,
+                  focusCoordinator.request == nil,
+                  hasRegisteredEpisodeElements,
+                  let targetID = episodeRouteTargetElementID,
+                  let targetIndex = episodeRouteTargetIndex,
+                  episodeRouteArtworkFocusID != nil
+            else { return }
+
+            collectionProxy.scrollTo(index: targetIndex, animated: false)
+            revealedEpisodeRouteTargetID = targetID
+            requestInitialEpisodeArtworkFocusIfReady()
+        }
+
+        private func requestInitialEpisodeArtworkFocusIfReady() {
+            guard isEpisodeRouteFocusPending,
+                  registeredEpisodeRouteArtworkActionID == episodeRouteTargetElementID,
+                  revealedEpisodeRouteTargetID == episodeRouteTargetElementID,
+                  let artworkFocusID = episodeRouteArtworkFocusID,
+                  focusCoordinator.request == nil
+            else { return }
+
+            focusCoordinator.focus(artworkFocusID)
+        }
+
+        private func episodeCollectionElementDidAppear(_ element: EpisodeElement) {
+            guard case .episode = element else { return }
+            hasRegisteredEpisodeElements = true
+            revealEpisodeRouteTargetIfNeeded()
+        }
+
+        private func episodeRouteArtworkActionDidAppear(for element: EpisodeElement) {
+            guard isEpisodeRoute else { return }
+
+            registeredEpisodeRouteArtworkActionID = element.id
+            revealEpisodeRouteTargetIfNeeded()
         }
 
         var body: some View {
@@ -202,9 +347,15 @@ extension SeriesEpisodeContentGroup {
                     uniqueElements: elements,
                     layout: Self.layout
                 ) { element in
-                    content(element)
-                        .focused($focusedElement, equals: element.id)
+                    content(element) {
+                        episodeRouteArtworkActionDidAppear(for: element)
+                    }
+                    .onAppear {
+                        episodeCollectionElementDidAppear(element)
+                    }
+                    .focused($focusedElement, equals: element.id)
                 }
+                .proxy(collectionProxy)
                 .clipsToBounds(false)
                 .insets(horizontal: EdgeInsets.edgePadding)
                 .itemSpacing(Self.itemSpacing)
@@ -213,7 +364,7 @@ extension SeriesEpisodeContentGroup {
                 .focused($focusedSection, equals: .episodes)
                 .defaultFocus(
                     $focusedElement,
-                    preferredElementID,
+                    isEpisodeRoute ? focusedEpisodeElementID : preferredElementID,
                     priority: .userInitiated
                 )
             } header: {
@@ -229,12 +380,26 @@ extension SeriesEpisodeContentGroup {
             )
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.seasons)
+            .onChange(of: preferredElementID) { _, targetID in
+                guard isEpisodeRoute else { return }
+                episodeRouteTargetElementID = targetID
+                episodeRouteTargetIndex = initialEpisodeRouteTargetIndex
+                revealedEpisodeRouteTargetID = nil
+                revealEpisodeRouteTargetIfNeeded()
+            }
+            .onChange(of: initialEpisodeRouteArtworkFocusID) { _, focusID in
+                episodeRouteArtworkFocusID = focusID
+                revealEpisodeRouteTargetIfNeeded()
+            }
         }
     }
 
     private struct EpisodeElementCard: View {
 
         let element: EpisodeElement
+        var isEpisodeRoute = false
+        var artworkFocusTarget: EpisodeRouteIntent.FocusTarget?
+        var onArtworkFocusActionAppear: (() -> Void)?
         let refresh: () -> Void
 
         @ViewBuilder
@@ -250,7 +415,16 @@ extension SeriesEpisodeContentGroup {
                 )
                 .disabled(true)
             case let .episode(episode):
-                EpisodeCard(episode: episode)
+                EpisodeCard(
+                    episode: episode,
+                    isEpisodeRoute: isEpisodeRoute,
+                    artworkFocusTarget: artworkFocusTarget?.itemID == episode.id
+                        ? artworkFocusTarget
+                        : nil,
+                    onArtworkFocusActionAppear: artworkFocusTarget?.itemID == episode.id
+                        ? onArtworkFocusActionAppear
+                        : nil
+                )
             case let .error(error):
                 EpisodeStateCard(
                     title: L10n.error,
