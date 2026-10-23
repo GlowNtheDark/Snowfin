@@ -12,8 +12,19 @@ import SwiftUI
 struct EpisodeRouteIntent: Hashable {
 
     struct Origin: Hashable {
-        let groupID: String
+        enum Source: Hashable {
+            case home(groupID: String)
+            case search(query: String, groupID: String)
+            case library(tabID: String, libraryID: String, originIndex: Int?)
+        }
+
+        let source: Source
         let itemID: String
+
+        var searchFocusTargetID: String? {
+            guard case let .search(_, groupID) = source else { return nil }
+            return "search-result:\(groupID.utf8.count):\(groupID):\(itemID)"
+        }
     }
 
     enum FocusTarget: Hashable {
@@ -63,6 +74,41 @@ struct EpisodeRouteIntent: Hashable {
         self.focusTarget = .episodeArtwork(itemID: episodeID)
         self.origin = origin
     }
+}
+
+struct EpisodeRouteOriginContext {
+
+    enum Source {
+        case search(query: String)
+        case library(tabID: String, libraryID: String)
+    }
+
+    let source: Source
+    let focusCoordinator: FocusCoordinator?
+    let libraryIndexForItemID: ((String) -> Int?)?
+
+    func origin(groupID: String, itemID: String) -> EpisodeRouteIntent.Origin {
+        let source: EpisodeRouteIntent.Origin.Source = switch self.source {
+        case let .search(query):
+            .search(query: query, groupID: groupID)
+        case let .library(tabID, libraryID):
+            .library(
+                tabID: tabID,
+                libraryID: libraryID,
+                originIndex: libraryIndexForItemID?(itemID)
+            )
+        }
+
+        return EpisodeRouteIntent.Origin(source: source, itemID: itemID)
+    }
+}
+
+extension EnvironmentValues {
+    @Entry
+    var episodeRouteOriginContext: EpisodeRouteOriginContext? = nil
+
+    @Entry
+    var episodeRouteTabID: String? = nil
 }
 
 extension NavigationRoute {
@@ -243,7 +289,8 @@ extension NavigationRoute {
 
         return NavigationRoute(
             id: "item-\(intent.seriesID)",
-            withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) }
+            withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) },
+            episodeRouteOrigin: intent.origin
         ) {
             ItemView(provider: provider)
         }

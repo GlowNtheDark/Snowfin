@@ -26,6 +26,7 @@ struct NavigationRoute: Identifiable, Hashable {
     }
 
     let id: String
+    let episodeRouteOrigin: EpisodeRouteIntent.Origin?
 
     private let content: AnyView
     let onWillDismiss: (() -> Void)?
@@ -48,10 +49,12 @@ struct NavigationRoute: Identifiable, Hashable {
     init(
         id: String,
         style: TransitionStyle = .push(.automatic),
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil,
         onWillDismiss: (() -> Void)? = nil,
         @ViewBuilder content: () -> some View
     ) {
         self.id = id
+        self.episodeRouteOrigin = episodeRouteOrigin
         self.onWillDismiss = onWillDismiss
         self.transitionType = .automatic(style)
         self.namespace = nil
@@ -61,10 +64,12 @@ struct NavigationRoute: Identifiable, Hashable {
     init(
         id: String,
         withNamespace: @escaping (Namespace.ID) -> TransitionStyle,
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil,
         onWillDismiss: (() -> Void)? = nil,
         @ViewBuilder content: () -> some View
     ) {
         self.id = id
+        self.episodeRouteOrigin = episodeRouteOrigin
         self.onWillDismiss = onWillDismiss
         self.transitionType = .withNamespace(withNamespace)
         self.namespace = nil

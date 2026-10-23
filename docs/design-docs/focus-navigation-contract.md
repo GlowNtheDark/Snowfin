@@ -65,8 +65,8 @@ These are normative requirements for future focus/navigation work:
    then move focus again to repair it.
 7. **Hidden or inactive controls cannot participate in focus.** This includes controls
    under hidden overlays, inactive retained tabs, dismissed pickers, and background
-   routes. Inactive retained TV Shows is excluded from input, accessibility, hit
-   testing, focus callbacks, and route presentation.
+   routes. Inactive retained Search, TV Shows, and Movies are excluded from input,
+   accessibility, hit testing, focus callbacks, and route presentation.
 8. **No arbitrary delays or queue hops as focus fixes.** A delay used by content/data
    debouncing is not a focus contract. Focus requests should be tied to target
    registration, visibility, and layout readiness.
@@ -103,12 +103,12 @@ behavior.
 | Sidebar | Currently selected tab button when the rail is entered; exact initial startup rail target is unverified | Left/Right/Select handoff activates or leaves the rail per sidebar state; Back does not skip an active child route | Return to active tab content. Search requests its app-owned field; repeat root-tab entry requests first displayed item. Home should restore its remembered tile or specified fallback |
 | Home | Remembered semantic tile when returning; otherwise the ready initial Home candidate/first available row target | Item selection pushes/presents details; player/dismissal returns through actual route; Back at root follows platform/app policy | Exact originating `(groupID,itemID)`; if missing use Continue same nonempty series, nearest tile in original row, then first tile in ordered rows. Sidebar return uses last active Home tile, nearest tile in that row, then first row |
 | Home shelf/tile | Existing focus if retained; otherwise parent Home target or native focus candidate | Details route or the tile's explicit action | Same tile if valid; nearest sibling in same row; first valid tile in that row; then Home fallback |
-| Movies / TV Shows / Media library | Root-tab repeat explicitly scrolls to top and requests first displayed item; ordinary entry/default is native and unverified | Nested folder/filter/detail routes dismiss one child at a time | Restore originating library item or invoking filter control when valid; otherwise same region's primary item. Exact route focus is not explicitly stored |
-| Search | Pending sidebar-entry request targets the app-owned Search field; without a pending request native initial focus is unverified | Dismiss result details/presentation before Search; keyboard Back behavior is platform-owned until verified | Prior result or field when valid; there is no explicit semantic result target. Fallback to Search field, then first result group only when `canSearch` |
+| Movies / TV Shows / Media library | Root-tab repeat explicitly scrolls to top and requests first displayed item; ordinary entry/default is native and unverified | Nested folder/filter/detail routes dismiss one child at a time | Show Details dismissal restores the exact originating item in the same tab/library when available; otherwise nearest valid item by saved collection index (lower index wins a tie), then the library's first item. Preserve scroll when visible; reveal only when offscreen |
+| Search | Pending sidebar-entry request targets the app-owned Search field; without a pending request native initial focus is unverified | Dismiss result details/presentation before Search; keyboard Back behavior is platform-owned until verified | Show Details dismissal restores the exact result by query, group, and item identity when still valid; otherwise the Search field. Preserve query, result membership, and scroll position |
 | Settings | Native first available Form/control; exact default is unverified | Native picker/menu first, then one Settings child route | Invoking row/control if still present, else first meaningful control in the parent form; platform restoration is unverified |
 | Movie Details | Shared `ItemView` coordinator targets Play | Dismiss player or nested route first, then this Details route | Preserve the same Details instance and restore the exact originating Play or Play From Beginning action while it remains present and eligible; use Play only if that action no longer exists or is ineligible |
-| Show / Episode Details | Shared `ItemView` coordinator targets Play for ordinary entry. A tvOS Home episode route targets that episode's artwork after its season and card are ready | Dismiss player or nested route first, then this Details route | Preserve same Details instance and prior focused control/shelf item where native focus can; exact target is not explicitly recorded. Fallback to Play |
-| Details child shelf / season selector | Preferred/current item or season when available; otherwise native focus candidate. A tvOS Home episode route selects its intended season and targets that episode's artwork | Selecting a card can open another Details route or direct-play from artwork | Same item/season if still present; nearest item in that shelf; shelf's preferred/first item; then Play |
+| Show / Episode Details | Shared `ItemView` coordinator targets Play for ordinary entry. A tvOS episode route from Home, Search, or a library targets that episode's artwork after its season and card are ready | Dismiss player or nested route first, then this Details route | Preserve the same Details instance and restore the originally routed episode artwork after Player Back, even if Up Episodes changes the playing item. Dismissing Details restores the actual Home, Search, or library origin |
+| Details child shelf / season selector | Preferred/current item or season when available; a tvOS episode route from Home, Search, or a library selects its intended season and targets that episode's artwork | Selecting a card can open another Details route or direct-play from artwork | Same item/season if still present; nearest item in that shelf; shelf's preferred/first item; then Play |
 | Library/menu/filter/modal child | Native menu/form default; app-owned child entry where provided | Dismiss only the top menu, picker, sheet, or dialog | Return to the exact presenting control when valid; otherwise nearest same-region control then region primary target. Exactness needs runtime confirmation for native menus/forms |
 | Player HUD | Hidden at player presentation; when shown for seekable content, the progress bar is the default focus. The Play/Pause status symbol is never a focus target. Live playback has no focusable transport when it has no seek bar | Back hides transient HUD; a later Back dismisses player | HUD appears with progress focused when seekable. Player exit returns to actual presenting route, not inferred origin |
 | Playback dropdown | Info section on open | Picker first, then dropdown; Back must not propagate from picker to player | Closing dropdown restores the HUD with progress as its default focus |
@@ -157,11 +157,13 @@ unresolved; do not describe either first target as the intended one.
 
 ### Tab lifetime
 
-TV Shows remains mounted during a signed-in tvOS session to preserve paging, filter,
-grid, letter, and focus state. Its inactive view is transparent, disabled, excluded
-from hit testing/accessibility, and guarded against focus/route callbacks. Other tabs
-use selected-only mounting. An inactive retained tab must never steal focus or receive
-the current press. See [navigation contract](../product-specs/navigation.md#tv-shows-tab-lifetime).
+Search, TV Shows, and Movies remain mounted during a signed-in tvOS session. Search
+preserves its query, results, and scroll position across tab previews; the library tabs
+preserve paging, filter, grid, letter, and focus state. Their inactive views are
+transparent, disabled, excluded from hit testing/accessibility, and guarded against
+focus/route callbacks. Other tabs use selected-only mounting. An inactive retained tab
+must never steal focus or receive the current press. See the
+[navigation contract](../product-specs/navigation.md#search-tv-shows-and-movies-tab-lifetime).
 
 ## Home and shelves
 
@@ -211,7 +213,7 @@ route owner decides whether selection opens another library level or item detail
 
 | Current focus/region | Up | Down | Left | Right | Select | Back |
 | --- | --- | --- | --- | --- | --- | --- |
-| Library grid item | Native spatial move to item above or header/letter region when eligible; exact boundary needs runtime confirmation | Native spatial move to item below or next content region; exact boundary needs runtime confirmation | Previous grid item; first-column boundary is native/runtime-dependent | Next grid item; last-column boundary is native/runtime-dependent | Open folder/library route or item details according to item type | Dismiss nested route/filter first; at library root use navigation/sidebar exit behavior |
+| Library grid item | Native spatial move to item above or header/letter region when eligible; exact boundary needs runtime confirmation | Native spatial move to item below or next content region; exact boundary needs runtime confirmation | Previous grid item; first-column boundary is native/runtime-dependent | Next grid item; last-column boundary is native/runtime-dependent | Open folder/library route or item details according to item type; resolvable episodes route to owning Show Details | Dismiss nested route/filter first; after episode Details dismissal restore the exact item in its original tab/library, otherwise nearest valid item by saved collection index (lower index wins a tie), then first item in that library |
 | Filter/sort/menu control | Native focus in its menu/form | Native focus in its menu/form | Native focus within current control group | Native focus within current control group | Open/choose filter or sort route/value | Dismiss innermost menu/form and restore originating library control when valid |
 | Letter picker | Native movement to content/header; exact edge needs runtime confirmation | Native movement to grid; exact edge needs runtime confirmation | Previous letter; at boundary native exit | Next letter; at boundary native exit | Scroll library to selected letter; it is not itself an item filter | Dismiss/exit picker according to its presentation; exact path needs runtime confirmation |
 | Empty state | No content target unless an explicit action is shown | No content target unless an explicit action is shown | Native focus among empty-state actions | Native focus among empty-state actions | Activate visible recovery/action | Dismiss route or return toward sidebar |
@@ -222,7 +224,10 @@ or deterministic initial item default in the inspected path. Reselecting a root 
 scrolls to top then requests the first displayed item. Letter selection scrolls and
 reacquires target focus. Filter/sort uses route/sheet ownership; tvOS navigation-bar
 close controls can be no-ops while Back dismisses the route. The exact target restored
-from a nested filter/sort route is not stored explicitly.
+from a nested filter/sort route is not stored explicitly. Episode selection carries
+semantic item identity separately from the original collection index. On Details
+dismissal, it restores the exact item when present, keeps the current offset if visible,
+and reveals an offscreen target through the existing grid scroll owner.
 
 **Runtime check.** Verify initial grid acquisition, grid-to-header/letter boundaries,
 letter-to-grid return, and focus after filter/sort dismissal on Apple TV. Do not infer
@@ -237,15 +242,17 @@ items. Search on tvOS does not use the iOS `.searchable` focus behavior.
 | --- | --- | --- | --- | --- | --- | --- |
 | Search field | Native focus within search/keyboard region | If searchable results are visible, explicitly focus the first result group; otherwise focus the first keyboard key | Native focus to key/search controls | Native focus to key/search controls | Begin editing / activate field and keyboard | Navigation owner dismisses one Search child route/presentation; at Search root, return to its parent |
 | Keyboard key | Native focus among keys; edge behavior is native | If searchable results are visible, explicitly focus the first result group; otherwise focus the Search field | Previous key; Delete/Clear/Space are explicit keys | Next key; native edge behavior | Insert character, space, delete, or clear | Dismiss Search child route before Search; Search has no separate platform keyboard layer on tvOS |
-| Search result item | Native focus in result groups | Native focus in result groups | Previous result; native group boundary | Next result; native group boundary | Open the result's item/details route | Dismiss result child route before Search; restore the prior result when still valid, otherwise the Search field |
+| Search result item | Native focus in result groups | Native focus in result groups | Previous result; native group boundary | Next result; native group boundary | Open the result's item/details route; resolvable episodes route to owning Show Details | Dismiss result child route before Search; restore an episode route's exact originating result by query, group, and item identity, otherwise the Search field |
 | Empty, invalid, loading, error, or no-results content | No content target | No content target; Down from the field or keyboard retains the current input target until results are visible | Search input/key region | Search input/key region | No content activation unless a visible recovery action exists | Dismiss Search child route before Search; root Back returns to the parent |
 
 **Contract.** Search entry from the sidebar explicitly requests the app-owned field.
 Down from the field or a keyboard key enters results only when a searchable result
 group is present. Otherwise field Down focuses the first keyboard key and keyboard
 Down focuses the Search field. Empty, invalid, loading, error, and no-results states
-are informational; focus remains in the input region. Returning from a result child
-restores its result when it remains valid, otherwise the field.
+are informational; focus remains in the input region. Returning from an episode Details
+child restores the exact originating result when the saved query, group, and item remain
+valid, or the Search field as fallback; query, results, and scroll position remain
+owned by Search while the child route is presented.
 Back dismisses one child route at a time; Search root Back returns to its parent.
 
 **Observed.** `TVSearchFocusCoordinator` carries a pending entry request from sidebar

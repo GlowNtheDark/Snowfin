@@ -137,7 +137,8 @@ extension TabItem {
         TabItem(
             id: "search",
             title: L10n.search,
-            systemImage: "magnifyingglass"
+            systemImage: "magnifyingglass",
+            keepsContentAlive: UIDevice.isTV
         ) {
             SearchView()
                 .if(UIDevice.isTV) { view in

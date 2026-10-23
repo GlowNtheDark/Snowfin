@@ -18,8 +18,18 @@ artwork starts playback. Opening Show Details does not start playback. If the re
 season is unavailable, use a verified alternate season when possible and otherwise the
 first available season. If the episode is absent from the loaded season, focus its first
 eligible episode; if the show has no playable episodes, use Show Details' stable entry
-target. Other tvOS episode entry points and unresolved ownership retain their existing
-Episode Details routes until migrated.
+target. Other tvOS episode entry points outside this migration keep their existing
+routes, and selections whose owner cannot be resolved retain their existing fallback
+routing. A resolvable episode selected from Search or a library opens the owning Show
+Details with its season selected and its artwork focused; Select on that artwork starts
+playback. Search retains its query, result-group identity, result membership, and scroll
+position while Details is presented. Dismissing Details restores the exact Search result
+when it remains available, or the Search field when the query, group, or item is no
+longer valid. Libraries retain tab, library, item, and collection position; dismissal
+restores the exact item when available, otherwise the nearest item in the same library
+by its original index (lower index wins a tie), then that library's first item. Keep the
+current scroll position when the target is already visible and reveal it only when it is
+offscreen.
 
 Preserve genuine direct-play-from-Home flows: those return directly to Home.
 Determine the actual playback origin rather than assuming every player came from Home.
@@ -31,11 +41,13 @@ Other navigation should likewise return through the screen that launched it.
 See [Episode Details](episode-details.md), [focus restoration](focus-restoration.md),
 and [navigation implementation](../design-docs/navigation-stack.md).
 
-## TV Shows tab lifetime
+## Search, TV Shows, and Movies tab lifetime
 
-Within a signed-in tvOS session, TV Shows preloads and retains its content and
-browsing state across tab changes. Refreshes preserve the last loaded collection
-until its replacement is available, including a genuinely empty replacement.
-Inactive TV Shows must not take focus, accept input, appear in accessibility, or
-present routes. Right/Select retains the existing explicit entry-to-first-item
-behavior. See the [tab lifetime implementation](../design-docs/navigation-stack.md#retained-tv-shows-tab).
+Within a signed-in tvOS session, Search, TV Shows, and Movies preload and retain their
+content across tab changes. Search keeps its query, result groups, and scroll position,
+and re-entry targets its Search field. TV Shows and Movies retain their browsing state.
+Refreshes preserve the last loaded collection until its replacement is available,
+including a genuinely empty replacement. Inactive retained tabs must not take focus, accept input, appear in
+accessibility, or present routes. Right/Select enters Search at its field or a library
+at its first item. See the
+[tab lifetime implementation](../design-docs/navigation-stack.md#retained-search-tv-shows-and-movies-tabs).

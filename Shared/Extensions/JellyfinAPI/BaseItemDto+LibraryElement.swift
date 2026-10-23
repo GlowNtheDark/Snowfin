@@ -16,6 +16,31 @@ private let baseItemListPortraitWidth: CGFloat = 60
 
 extension BaseItemDto: LibraryElement {
 
+    @MainActor
+    func routeFromLibrarySelection(
+        router: Router.Wrapper,
+        in namespace: Namespace.ID,
+        episodeRouteOriginContext: EpisodeRouteOriginContext?
+    ) {
+        #if os(tvOS)
+        if type == .episode,
+           let episodeRouteOriginContext,
+           let id
+        {
+            router.route(
+                to: .episode(
+                    item: self,
+                    origin: episodeRouteOriginContext.origin(groupID: "", itemID: id)
+                ),
+                in: namespace
+            )
+            return
+        }
+        #endif
+
+        libraryDidSelectElement(router: router, in: namespace)
+    }
+
     var supportedLibraryStyleOptions: LibraryStyleOptions {
         switch type {
         case .collectionFolder, .folder, .userView:
@@ -67,6 +92,9 @@ private struct BaseItemDtoLibraryGridElement: View {
     @Router
     private var router
 
+    @Environment(\.episodeRouteOriginContext)
+    private var episodeRouteOriginContext
+
     let item: BaseItemDto
     let libraryStyle: LibraryStyle
 
@@ -81,7 +109,11 @@ private struct BaseItemDtoLibraryGridElement: View {
                 item: item,
                 displayType: resolvedLibraryStyle.posterDisplayType
             ) { updatedItem, namespace in
-                updatedItem.libraryDidSelectElement(router: router, in: namespace)
+                updatedItem.routeFromLibrarySelection(
+                    router: router,
+                    in: namespace,
+                    episodeRouteOriginContext: episodeRouteOriginContext
+                )
             }
         } else {
             poster(for: item)
@@ -93,7 +125,11 @@ private struct BaseItemDtoLibraryGridElement: View {
             item: item,
             displayType: resolvedLibraryStyle.posterDisplayType
         ) { namespace in
-            item.libraryDidSelectElement(router: router, in: namespace)
+            item.routeFromLibrarySelection(
+                router: router,
+                in: namespace,
+                episodeRouteOriginContext: episodeRouteOriginContext
+            )
         }
     }
 }
@@ -106,11 +142,19 @@ struct ItemStatePoster: View {
     let item: BaseItemDto
     let displayType: PosterDisplayType
     var size: PosterDisplayType.Size = .small
+    var routeFocusCoordinator: FocusCoordinator?
+    var routeFocusTargetID: String?
     let action: (BaseItemDto, Namespace.ID) -> Void
 
     var body: some View {
         let updatedItem = itemState.applying(to: item)
-        PosterButton(item: updatedItem, displayType: displayType, size: size) { namespace in
+        PosterButton(
+            item: updatedItem,
+            displayType: displayType,
+            size: size,
+            routeFocusCoordinator: routeFocusCoordinator,
+            routeFocusTargetID: routeFocusTargetID
+        ) { namespace in
             action(updatedItem, namespace)
         }
     }
@@ -123,6 +167,9 @@ private struct BaseItemDtoLibraryListElement: View {
 
     @Router
     private var router
+
+    @Environment(\.episodeRouteOriginContext)
+    private var episodeRouteOriginContext
 
     let item: BaseItemDto
     let libraryStyle: LibraryStyle
@@ -159,7 +206,11 @@ private struct BaseItemDtoLibraryListElement: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } action: {
-            item.libraryDidSelectElement(router: router, in: namespace)
+            item.routeFromLibrarySelection(
+                router: router,
+                in: namespace,
+                episodeRouteOriginContext: episodeRouteOriginContext
+            )
         }
         .matchedTransitionSource(id: "item", in: namespace)
         #if os(tvOS)

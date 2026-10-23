@@ -34,6 +34,15 @@ struct SearchView: View {
     @EnvironmentObject
     private var searchFocus: TVSearchFocusCoordinator
 
+    @Environment(\.isTabContentFocusable)
+    private var isTabContentFocusable
+
+    @Environment(\.tabContentFocusHandoffAcquired)
+    private var tabContentFocusHandoffAcquired
+
+    @EnvironmentObject
+    private var navigationCoordinator: NavigationCoordinator
+
     @Injected(\.currentUserSession)
     private var currentUserSession: UserSession?
 
@@ -47,6 +56,11 @@ struct SearchView: View {
 
     @State
     private var searchQuery = ""
+
+    #if os(tvOS)
+    @State
+    private var pendingEpisodeOrigin: EpisodeRouteIntent.Origin?
+    #endif
 
     @StateObject
     private var focusCoordinator: FocusCoordinator = .init()
@@ -122,6 +136,34 @@ struct SearchView: View {
         } else {
             focusedSearchTarget = .field
         }
+    }
+
+    private func searchEpisodeOriginChanged(_ origin: EpisodeRouteIntent.Origin?) {
+        guard let origin else {
+            guard let pendingEpisodeOrigin else { return }
+            self.pendingEpisodeOrigin = nil
+            restoreSearchEpisodeOrigin(pendingEpisodeOrigin)
+            return
+        }
+
+        guard case .search = origin.source else { return }
+        pendingEpisodeOrigin = origin
+    }
+
+    private func restoreSearchEpisodeOrigin(_ origin: EpisodeRouteIntent.Origin) {
+        guard case let .search(query, groupID) = origin.source,
+              query == (viewModel.filterViewModel.currentFilters.query ?? ""),
+              let group = viewModel.itemContentGroupViewModel.groups.first(where: { $0.id == groupID }) as? PosterGroup<ItemLibrary>,
+              group.viewModel.elements.contains(where: { $0.id == origin.itemID }),
+              let targetID = origin.searchFocusTargetID
+        else {
+            focusedSearchTarget = .field
+            return
+        }
+
+        searchFocus.cancelEntry()
+        focusedSearchTarget = nil
+        focusCoordinator.focus(targetID)
     }
 
     private func beginEditing() {
@@ -243,6 +285,16 @@ struct SearchView: View {
                 groups: viewModel.itemContentGroupViewModel.groups
             )
             .edgePadding(.vertical)
+            #if os(tvOS)
+                .environment(
+                    \.episodeRouteOriginContext,
+                    EpisodeRouteOriginContext(
+                        source: .search(query: viewModel.filterViewModel.currentFilters.query ?? ""),
+                        focusCoordinator: focusCoordinator,
+                        libraryIndexForItemID: nil
+                    )
+                )
+            #endif
         }
         .scrollIndicators(.hidden)
         .focusSection()
@@ -298,7 +350,7 @@ struct SearchView: View {
             .onAppear {
                 if searchFocus.hasPendingEntry {
                     fulfillSearchEntry()
-                } else {
+                } else if isTabContentFocusable, pendingEpisodeOrigin == nil {
                     restoreSearchFocus()
                 }
             }
@@ -312,9 +364,15 @@ struct SearchView: View {
                 guard isRoot else { return }
                 restoreSearchFocus()
             }
+            .onChange(of: navigationCoordinator.presentedSheet?.route.episodeRouteOrigin) { _, origin in
+                searchEpisodeOriginChanged(origin)
+            }
             .onChange(of: focusedSearchTarget) {
                 if focusedSearchTarget != nil {
                     searchFocus.cancelEntry()
+                    if isTabContentFocusable {
+                        tabContentFocusHandoffAcquired()
+                    }
                 }
             }
         #else

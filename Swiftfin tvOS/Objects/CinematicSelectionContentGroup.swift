@@ -60,7 +60,7 @@ struct CinematicSelectionContentGroup: ContentGroup, HomeCollectionInvalidatable
                         item: item,
                         origin: item.id.map {
                             EpisodeRouteIntent.Origin(
-                                groupID: CinematicSelectionContentGroup.homeGroupID,
+                                source: .home(groupID: CinematicSelectionContentGroup.homeGroupID),
                                 itemID: $0
                             )
                         }

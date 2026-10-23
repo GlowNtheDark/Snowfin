@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import JellyfinAPI
 import SwiftUI
 
 struct PosterHStackLibrarySection<Library: PagingLibrary>: View
@@ -25,6 +26,9 @@ struct PosterHStackLibrarySection<Library: PagingLibrary>: View
 
     @Router
     private var router
+
+    @Environment(\.episodeRouteOriginContext)
+    private var episodeRouteOriginContext
 
     #if os(tvOS)
     @Environment(\.suppressesHomeDefaultFocus)
@@ -92,8 +96,29 @@ struct PosterHStackLibrarySection<Library: PagingLibrary>: View
             PosterHStack(
                 elements: viewModel.elements.elements,
                 displayType: group.posterDisplayType,
-                size: group.posterSize
+                size: group.posterSize,
+                episodeRouteOriginContext: episodeRouteOriginContext,
+                routeFocusGroupID: group.id
             ) { element, namespace in
+                #if os(tvOS)
+                if let item = element as? BaseItemDto,
+                   item.type == .episode,
+                   let itemID = item.id,
+                   let episodeRouteOriginContext
+                {
+                    router.route(
+                        to: .episode(
+                            item: item,
+                            origin: episodeRouteOriginContext.origin(
+                                groupID: group.id,
+                                itemID: itemID
+                            )
+                        ),
+                        in: namespace
+                    )
+                    return
+                }
+                #endif
                 element.libraryDidSelectElement(router: router, in: namespace)
             }
             .withViewContext(.isThumb)

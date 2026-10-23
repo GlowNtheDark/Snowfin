@@ -28,4 +28,10 @@ extension EnvironmentValues {
 
     @Entry
     var tabItemSelected: TabCoordinator.TabItemSelectedPublisher = .init()
+
+    @Entry
+    var isTabContentFocusable: Bool = true
+
+    @Entry
+    var tabContentFocusHandoffAcquired: () -> Void = {}
 }

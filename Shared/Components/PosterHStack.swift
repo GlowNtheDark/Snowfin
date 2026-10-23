@@ -104,7 +104,25 @@ struct PosterHStack<
     let elements: Data
     let displayType: PosterDisplayType
     let size: PosterDisplayType.Size
+    let episodeRouteOriginContext: EpisodeRouteOriginContext?
+    let routeFocusGroupID: String?
     let action: (Data.Element, Namespace.ID) -> Void
+
+    init(
+        elements: Data,
+        displayType: PosterDisplayType,
+        size: PosterDisplayType.Size,
+        episodeRouteOriginContext: EpisodeRouteOriginContext? = nil,
+        routeFocusGroupID: String? = nil,
+        action: @escaping (Data.Element, Namespace.ID) -> Void
+    ) {
+        self.elements = elements
+        self.displayType = displayType
+        self.size = size
+        self.episodeRouteOriginContext = episodeRouteOriginContext
+        self.routeFocusGroupID = routeFocusGroupID
+        self.action = action
+    }
 
     #if os(tvOS)
     private var homeTiles: [FocusCoordinator.HomeTile] {
@@ -211,6 +229,18 @@ struct PosterHStack<
 
     @ViewBuilder
     private func posterButton(for item: Data.Element) -> some View {
+        let focusTargetID: String? = {
+            guard let episodeRouteOriginContext,
+                  let routeFocusGroupID,
+                  let itemID = (item as? BaseItemDto)?.id
+            else { return nil }
+
+            return episodeRouteOriginContext.origin(
+                groupID: routeFocusGroupID,
+                itemID: itemID
+            ).searchFocusTargetID
+        }()
+
         #if os(tvOS)
         if let baseItem = item as? BaseItemDto,
            let itemState = environment.itemStateStore?.state(for: baseItem)
@@ -219,23 +249,30 @@ struct PosterHStack<
                 itemState: itemState,
                 item: baseItem,
                 displayType: displayType,
-                size: size
+                size: size,
+                routeFocusCoordinator: episodeRouteOriginContext?.focusCoordinator,
+                routeFocusTargetID: focusTargetID
             ) { updatedItem, namespace in
                 action((updatedItem as? Data.Element) ?? item, namespace)
             }
         } else {
-            standardPosterButton(for: item)
+            standardPosterButton(for: item, focusTargetID: focusTargetID)
         }
         #else
-        standardPosterButton(for: item)
+        standardPosterButton(for: item, focusTargetID: focusTargetID)
         #endif
     }
 
-    private func standardPosterButton(for item: Data.Element) -> some View {
+    private func standardPosterButton(
+        for item: Data.Element,
+        focusTargetID: String?
+    ) -> some View {
         PosterButton(
             item: item,
             displayType: displayType,
-            size: size
+            size: size,
+            routeFocusCoordinator: episodeRouteOriginContext?.focusCoordinator,
+            routeFocusTargetID: focusTargetID
         ) { namespace in
             action(item, namespace)
         }

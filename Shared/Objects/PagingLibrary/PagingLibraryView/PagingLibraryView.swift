@@ -9,6 +9,7 @@
 import CollectionVGrid
 import Defaults
 import FactoryKit
+import JellyfinAPI
 import SwiftUI
 
 struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: LibraryElement {
@@ -50,6 +51,18 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     @FocusState
     private var focusedElementID: Element.ID?
+
+    @EnvironmentObject
+    private var navigationCoordinator: NavigationCoordinator
+
+    @Environment(\.tabContentFocusHandoffAcquired)
+    private var tabContentFocusHandoffAcquired
+
+    @Environment(\.episodeRouteTabID)
+    private var episodeRouteTabID
+
+    @State
+    private var pendingEpisodeRouteOrigin: EpisodeRouteIntent.Origin?
 
     @State
     private var savedFocusedElementID: Element.ID?
@@ -94,6 +107,19 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     private var storedLibraryStyleBinding: Binding<LibraryStyle> {
         rememberIndividualLibraryStyle ? $parentLibraryStyle : $defaultLibraryStyle
+    }
+
+    private var episodeRouteOriginContext: EpisodeRouteOriginContext? {
+        guard let episodeRouteTabID else { return nil }
+        return EpisodeRouteOriginContext(
+            source: .library(tabID: episodeRouteTabID, libraryID: viewModel.id),
+            focusCoordinator: nil,
+            libraryIndexForItemID: { itemID in
+                viewModel.displayedElements.firstIndex { element in
+                    (element as? BaseItemDto)?.id == itemID
+                }
+            }
+        )
     }
 
     init(
@@ -143,6 +169,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 }
             }
             .proxy(gridProxy)
+            .environment(\.episodeRouteOriginContext, episodeRouteOriginContext)
             #if os(tvOS)
                 .background {
                     CollectionVGridLocator(coordinator: gridScrollCoordinator)
@@ -256,6 +283,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             }
         }
         #if os(tvOS)
+        .onChange(of: navigationCoordinator.presentedSheet?.route.episodeRouteOrigin) { _, origin in
+            episodeRouteOriginChanged(origin)
+        }
         .onReceive(Notifications[.itemUserDataDidChange].publisher.receive(on: DispatchQueue.main)) { update in
             guard observesItemState,
                   !viewModel.automaticallyRefreshes,
@@ -287,6 +317,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             .onChange(of: focusedElementID) { _, elementID in
                 if let elementID {
                     savedFocusedElementID = elementID
+                    if isTabContentActive {
+                        tabContentFocusHandoffAcquired()
+                    }
                 }
             }
             .onChange(of: viewModel.elements) {
@@ -333,6 +366,56 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     }
 
     #if os(tvOS)
+    private func episodeRouteOriginChanged(_ origin: EpisodeRouteIntent.Origin?) {
+        guard let origin else {
+            guard let pendingEpisodeRouteOrigin else { return }
+            self.pendingEpisodeRouteOrigin = nil
+            restoreEpisodeRouteOrigin(pendingEpisodeRouteOrigin)
+            return
+        }
+
+        guard case let .library(tabID, libraryID, _) = origin.source,
+              tabID == episodeRouteTabID,
+              libraryID == viewModel.id
+        else { return }
+
+        pendingEpisodeRouteOrigin = origin
+    }
+
+    private func restoreEpisodeRouteOrigin(_ origin: EpisodeRouteIntent.Origin) {
+        guard case let .library(tabID, libraryID, originIndex) = origin.source,
+              tabID == episodeRouteTabID,
+              libraryID == viewModel.id
+        else { return }
+
+        let elements = Array(viewModel.displayedElements)
+        let exactIndex = elements.firstIndex { element in
+            (element as? BaseItemDto)?.id == origin.itemID
+        }
+        let fallbackIndex = originIndex.flatMap { preferredIndex in
+            elements.indices.min { lhs, rhs in
+                let leftDistance = abs(lhs - preferredIndex)
+                let rightDistance = abs(rhs - preferredIndex)
+                return leftDistance == rightDistance ? lhs < rhs : leftDistance < rightDistance
+            }
+        }
+        guard let index = exactIndex ?? fallbackIndex ?? elements.indices.first else {
+            focusedElementID = nil
+            return
+        }
+
+        let elementID = elements[index].id
+        guard !gridScrollCoordinator.isItemVisible(at: index) else {
+            focusedElementID = elementID
+            return
+        }
+
+        gridScrollCoordinator.scrollToItem(at: index) {
+            guard isTabContentActive else { return }
+            focusedElementID = elementID
+        }
+    }
+
     private func restoreLetterPositionIfNeeded() {
         guard isTabContentActive, isLetterRestorePending,
               let letter = viewModel.letterScrollTarget,
@@ -389,6 +472,17 @@ private final class CollectionVGridScrollCoordinator: ObservableObject {
 
     private var pendingIndex: Int?
     private var pendingFocus: (() -> Void)?
+
+    func isItemVisible(at index: Int) -> Bool {
+        guard let collectionView,
+              collectionView.window != nil,
+              index >= 0
+        else { return false }
+
+        return collectionView.indexPathsForVisibleItems.contains(
+            IndexPath(item: index, section: 0)
+        )
+    }
 
     func scrollToItem(at index: Int, onScrolled: (() -> Void)? = nil) {
         pendingIndex = index

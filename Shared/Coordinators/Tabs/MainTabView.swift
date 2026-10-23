@@ -32,6 +32,9 @@ struct MainTabView: View {
     private var isSidebarHandoffInProgress = false
 
     @State
+    private var pendingSidebarFocusHandoffTabID: String?
+
+    @State
     private var previewedSidebarTabID: String?
 
     @State
@@ -152,7 +155,12 @@ struct MainTabView: View {
             homePlaybackCoordinator?.cancelSidebarHomeReturn()
         }
         let restoresHomeTile = isHome && homePlaybackCoordinator?.isRestoringSidebarHomeFocus == true
-        isSidebarHandoffInProgress = restoresHomeTile
+        let entersRootContent = tab.coordinator.path.isEmpty
+        let requiresFocusHandoff = restoresHomeTile || (
+            entersRootContent && (tab.item.id == TabItem.search.id || tab.item.keepsContentAlive)
+        )
+        isSidebarHandoffInProgress = requiresFocusHandoff
+        pendingSidebarFocusHandoffTabID = requiresFocusHandoff ? tab.item.id : nil
         previewedSidebarTabID = tab.item.id
         if tabCoordinator.selectedTabID != tab.item.id {
             tabCoordinator.selectedTabID = tab.item.id
@@ -163,7 +171,10 @@ struct MainTabView: View {
         }
 
         if tab.item.id == TabItem.search.id, tab.coordinator.path.isEmpty {
-            searchFocus.requestEntry()
+            DispatchQueue.main.async {
+                guard displayedTabID == tab.item.id else { return }
+                searchFocus.requestEntry()
+            }
             return
         }
 
@@ -222,6 +233,13 @@ struct MainTabView: View {
                 }
                 .environmentObject(tabCoordinator)
                 .environment(\.tabItemSelected, tab.publisher)
+                .environment(\.episodeRouteTabID, tab.item.id)
+                .environment(\.isTabContentFocusable, isActive && !isSidebarExpanded)
+                .environment(\.tabContentFocusHandoffAcquired) {
+                    guard pendingSidebarFocusHandoffTabID == tab.item.id else { return }
+                    pendingSidebarFocusHandoffTabID = nil
+                    isSidebarHandoffInProgress = false
+                }
                 .id(tab.item.id)
                 .environment(\.isTabContentActive, tab.item.keepsContentAlive ? Binding(
                     get: { tab.item.id == displayedTabID },
@@ -303,7 +321,10 @@ struct MainTabView: View {
             guard direction == .right else { return }
             activateSidebarTab(tab)
         }
-        .prefersDefaultFocus(!isAwaitingLaunchContentFocus && isSelected, in: sidebarFocusNamespace)
+        .prefersDefaultFocus(
+            !isAwaitingLaunchContentFocus && isSelected && !isSidebarHandoffInProgress,
+            in: sidebarFocusNamespace
+        )
         // While content owns focus, admit only the active destination into the
         // collapsed rail's focus search. Once it acquires focus and expands the
         // rail, every item becomes eligible for normal sidebar navigation.
@@ -422,7 +443,10 @@ struct MainTabView: View {
             homePlaybackCoordinator?.$isRestoringSidebarHomeFocus.eraseToAnyPublisher() ??
                 Just(false).eraseToAnyPublisher()
         ) { restoring in
-            if !restoring {
+            if !restoring,
+               pendingSidebarFocusHandoffTabID == tabCoordinator.tabs.first?.item.id
+            {
+                pendingSidebarFocusHandoffTabID = nil
                 isSidebarHandoffInProgress = false
             }
         }

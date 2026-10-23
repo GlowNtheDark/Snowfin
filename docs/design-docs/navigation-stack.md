@@ -39,19 +39,34 @@ changes to the Home focus coordinator; it does not need to flatten navigation.
 These observations target the Home → item details → player shape. Deeper nested
 item presentations need explicit tracing if a future task changes that flow.
 
+For tvOS episode selections from Home, Search, and libraries, `EpisodeRouteIntent`
+keeps the selected episode and owning series/season identity. The resulting Details
+`NavigationRoute` also retains the origin identity for the parent route owner. Search
+records query, result group, and item identity; `SearchView` restores the exact result
+through its existing `FocusCoordinator`, falling back to the Search field if the query
+or result is no longer valid. A library records tab, library, item identity, and the
+original collection index separately. `PagingLibraryView` restores the exact item when
+available, otherwise the nearest valid item in that library (lower index on a tie) or
+its first item. A visible target does not move the existing offset; an offscreen target
+uses the library grid's existing scroll coordinator. Player Back dismisses only the
+player to the same Details coordinator; the saved Search/library origin is restored
+only after Details itself is dismissed.
+
 See [focus system](focus-system.md) for restoration gating and
 [playback lifecycle](playback-lifecycle.md) for player teardown.
 
-## Retained TV Shows tab
+## Retained Search, TV Shows, and Movies tabs
 
-The tvOS host keeps TV Shows mounted from signed-in tab creation until that tab
-hierarchy ends. Its existing `PagingLibraryView` owns the single paging model,
-filter model (through `ItemLibrary`), and grid/letter/focus state. Other tabs keep
-their selected-only mounting policy. Sidebar previews and Right/Select entry events
-retain their existing meaning; Right/Select still scrolls to and focuses the first item.
+The tvOS host keeps Search, TV Shows, and Movies mounted from signed-in tab creation
+until their tab hierarchy ends. Search retains its query, results, and scroll position
+across sidebar previews and re-enters through its Search field. Each library's existing
+`PagingLibraryView` owns one paging model, filter model (through `ItemLibrary`), and
+grid/letter/focus state. Other tabs keep their selected-only mounting policy. Sidebar
+previews and Right/Select entry events retain their existing meaning; Right/Select
+still focuses the Search field or the library's first item.
 
-Inactive TV Shows is transparent, disabled, excluded from hit testing and
-accessibility, and guarded against grid focus/entry callbacks. An environment binding
-reads current tab activity even in delayed callbacks. `NavigationInjectionView`
+Inactive Search, TV Shows, and Movies are transparent, disabled, excluded from hit
+testing and accessibility, and guarded against focus/entry callbacks. An environment
+binding reads current tab activity even in delayed callbacks. `NavigationInjectionView`
 exposes nil presentation bindings while inactive and ignores dismissal writes then,
 preserving the underlying coordinator routes for reactivation.

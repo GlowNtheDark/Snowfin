@@ -50,17 +50,23 @@ struct PosterButton<Item: Poster>: View {
     let item: Item
     let displayType: PosterDisplayType
     let size: PosterDisplayType.Size
+    let routeFocusCoordinator: FocusCoordinator?
+    let routeFocusTargetID: String?
     let action: (Namespace.ID) -> Void
 
     init(
         item: Item,
         displayType: PosterDisplayType,
         size: PosterDisplayType.Size = .small,
+        routeFocusCoordinator: FocusCoordinator? = nil,
+        routeFocusTargetID: String? = nil,
         action: @escaping (Namespace.ID) -> Void
     ) {
         self.item = item
         self.displayType = displayType
         self.size = size
+        self.routeFocusCoordinator = routeFocusCoordinator
+        self.routeFocusTargetID = routeFocusTargetID
         self.action = action
     }
 
@@ -180,6 +186,11 @@ struct PosterButton<Item: Poster>: View {
             .buttonStyle(SnowfinPosterButtonStyle())
             .buttonBorderShape(.roundedRectangle(radius: 0))
             .focused($isFocused)
+            .modifier(CoordinatedPosterFocusModifier(
+                coordinator: routeFocusCoordinator,
+                targetID: routeFocusTargetID,
+                focused: $isFocused
+            ))
             .focusedValue(\.focusedPoster, AnyPoster(item))
             .onChange(of: isFocused) { _, focused in
                 guard focused, launchFocusFirstPoster == AnyPoster(item) else { return }
@@ -237,6 +248,40 @@ struct PosterButton<Item: Poster>: View {
             }
     }
 }
+
+#if os(tvOS)
+private struct CoordinatedPosterFocusModifier: ViewModifier {
+
+    let coordinator: FocusCoordinator?
+    let targetID: String?
+    let focused: FocusState<Bool>.Binding
+
+    private func apply(_ request: String?) {
+        guard let coordinator,
+              let targetID,
+              request == targetID
+        else { return }
+
+        focused.wrappedValue = true
+        coordinator.clearRequest()
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let coordinator, let targetID {
+            content
+                .onAppear {
+                    apply(coordinator.request)
+                }
+                .onReceive(coordinator.$request) { request in
+                    apply(request)
+                }
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 #if os(tvOS)
 /// Uses the poster's existing Boolean focus binding only for explicit restoration.
