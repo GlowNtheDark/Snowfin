@@ -108,7 +108,7 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
                 resolveHomeReturn()
             }
             .onChange(of: focusCoordinator.homeReturnTarget) { _, tile in
-                if let tile {
+                if let tile, !focusCoordinator.isHomeTileVisible(tile) {
                     proxy.scrollTo(tile.groupID, anchor: .center)
                 }
             }

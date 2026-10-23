@@ -441,6 +441,19 @@ final class FocusCoordinator: ObservableObject {
         }
     }
 
+    func isHomeTileVisible(_ tile: HomeTile) -> Bool {
+        guard let probe = homeTileProbes[tile.target]?.view,
+              probe.homeTile == tile,
+              let window = probe.window,
+              homeFocusCandidate(tile, in: window) != nil,
+              let verticalScrollView = homeVerticalScrollView(ancestorOf: probe)
+        else { return false }
+
+        let tileFrame = probe.convert(probe.bounds, to: window)
+        let visibleViewport = verticalScrollView.convert(verticalScrollView.bounds, to: window)
+        return tileFrame.intersects(visibleViewport)
+    }
+
     // CollectionHStack virtualizes its cells. Reveal the resolved index before
     // waiting for that tile's normal UIKit/SwiftUI readiness callback.
     func registerHomeRowScroller(groupID: String, from view: UIView) {
@@ -449,8 +462,16 @@ final class FocusCoordinator: ObservableObject {
             if let collection = current as? UICollectionView {
                 rowScrollers[groupID] = { [weak collection] index in
                     guard let collection, collection.numberOfSections > 0,
-                          index < collection.numberOfItems(inSection: 0) else { return false }
-                    collection.scrollToItem(at: IndexPath(item: index, section: 0), at: .centeredHorizontally, animated: false)
+                          index >= 0,
+                          index < collection.numberOfItems(inSection: 0)
+                    else { return false }
+                    let indexPath = IndexPath(item: index, section: 0)
+                    guard !collection.indexPathsForVisibleItems.contains(indexPath) else { return true }
+                    collection.scrollToItem(
+                        at: indexPath,
+                        at: .centeredHorizontally,
+                        animated: false
+                    )
                     return true
                 }
                 revealHomeTile()
