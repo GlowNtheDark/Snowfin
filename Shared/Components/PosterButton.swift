@@ -7,9 +7,13 @@
 //
 
 import Defaults
+import JellyfinAPI
 import SwiftUI
 
 struct PosterButton<Item: Poster>: View {
+
+    @Environment(\.episodeRouteOrigin)
+    private var inheritedEpisodeRouteOrigin
 
     @Environment(\.posterConfiguration)
     private var posterConfiguration
@@ -52,6 +56,7 @@ struct PosterButton<Item: Poster>: View {
     let size: PosterDisplayType.Size
     let routeFocusCoordinator: FocusCoordinator?
     let routeFocusTargetID: String?
+    let routeEpisodeOrigin: EpisodeRouteIntent.Origin?
     let action: (Namespace.ID) -> Void
 
     init(
@@ -60,6 +65,7 @@ struct PosterButton<Item: Poster>: View {
         size: PosterDisplayType.Size = .small,
         routeFocusCoordinator: FocusCoordinator? = nil,
         routeFocusTargetID: String? = nil,
+        routeEpisodeOrigin: EpisodeRouteIntent.Origin? = nil,
         action: @escaping (Namespace.ID) -> Void
     ) {
         self.item = item
@@ -67,6 +73,7 @@ struct PosterButton<Item: Poster>: View {
         self.size = size
         self.routeFocusCoordinator = routeFocusCoordinator
         self.routeFocusTargetID = routeFocusTargetID
+        self.routeEpisodeOrigin = routeEpisodeOrigin
         self.action = action
     }
 
@@ -94,7 +101,36 @@ struct PosterButton<Item: Poster>: View {
         }
         return homeFocusGroup == "recently-added-movies" ? 1.06 : 1
     }
+
     #endif
+
+    private var contextMenuEpisodeOrigin: EpisodeRouteIntent.Origin? {
+        guard let baseItem = item as? BaseItemDto,
+              baseItem.type == .episode,
+              let itemID = baseItem.id
+        else { return nil }
+
+        if let routeEpisodeOrigin, routeEpisodeOrigin.itemID == itemID {
+            return routeEpisodeOrigin
+        }
+
+        if let inheritedEpisodeRouteOrigin,
+           inheritedEpisodeRouteOrigin.itemID == itemID
+        {
+            return inheritedEpisodeRouteOrigin
+        }
+
+        #if os(tvOS)
+        if let homeFocusTile {
+            return EpisodeRouteIntent.Origin(
+                source: .home(groupID: homeFocusTile.groupID),
+                itemID: itemID
+            )
+        }
+        #endif
+
+        return nil
+    }
 
     @ViewBuilder
     private func posterImage(overlay: some View) -> some View {
@@ -242,10 +278,14 @@ struct PosterButton<Item: Poster>: View {
         #else
             .buttonStyle(.borderless)
         #endif
-            .posterContextMenu(for: item) {
-                contextMenuPreview
-                    .withViewContext(viewContext)
-            }
+        #if os(tvOS)
+        .environment(\.homeTileCoordinator, homeTileCoordinator)
+        .environment(\.homeFocusTile, homeFocusTile)
+        #endif
+        .posterContextMenu(for: item, episodeRouteOrigin: contextMenuEpisodeOrigin) {
+            contextMenuPreview
+                .withViewContext(viewContext)
+        }
     }
 }
 

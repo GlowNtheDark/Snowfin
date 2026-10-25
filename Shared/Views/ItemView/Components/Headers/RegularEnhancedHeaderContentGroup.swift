@@ -82,7 +82,12 @@ extension ItemView {
                     VStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 5) {
                         VStack(alignment: .leading) {
                             if let parentID = provider.item.parentRootID, let parentTitle = provider.item.parentTitle {
-                                ParentButton(title: parentTitle, id: parentID)
+                                ParentButton(
+                                    title: parentTitle,
+                                    id: parentID,
+                                    episodeRouteItem: provider.item.type == .episode ? provider.item : nil,
+                                    episodeRouteOrigin: provider.episodeRouteOrigin
+                                )
                             }
 
                             logo

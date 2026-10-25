@@ -35,6 +35,7 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
     let id: String
     let episodeRouteIntent: EpisodeRouteIntent?
+    let episodeRouteOrigin: EpisodeRouteIntent.Origin?
 
     var item: BaseItemDto {
         #if os(tvOS)
@@ -75,17 +76,27 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
         item.displayTitle
     }
 
-    init(item: BaseItemDto, episodeRouteIntent: EpisodeRouteIntent? = nil) {
+    init(
+        item: BaseItemDto,
+        episodeRouteIntent: EpisodeRouteIntent? = nil,
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil
+    ) {
         self.id = item.id ?? "Unknown"
         self.itemSnapshot = item
         self.episodeRouteIntent = episodeRouteIntent
+        self.episodeRouteOrigin = episodeRouteIntent?.origin ?? episodeRouteOrigin
         super.init()
     }
 
-    init(id: String, episodeRouteIntent: EpisodeRouteIntent? = nil) {
+    init(
+        id: String,
+        episodeRouteIntent: EpisodeRouteIntent? = nil,
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil
+    ) {
         self.id = id
         self.itemSnapshot = .init(id: id)
         self.episodeRouteIntent = episodeRouteIntent
+        self.episodeRouteOrigin = episodeRouteIntent?.origin ?? episodeRouteOrigin
         super.init()
     }
 

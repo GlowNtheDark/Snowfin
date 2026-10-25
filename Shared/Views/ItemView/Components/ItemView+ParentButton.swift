@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import JellyfinAPI
 import SwiftUI
 
 extension ItemView {
@@ -20,9 +21,20 @@ extension ItemView {
 
         let title: String
         let id: String
+        var episodeRouteItem: BaseItemDto?
+        var episodeRouteOrigin: EpisodeRouteIntent.Origin?
 
         var body: some View {
             Button {
+                #if os(tvOS)
+                if let episodeRouteItem {
+                    router.route(to: .resolvedEpisode(
+                        item: episodeRouteItem,
+                        origin: episodeRouteOrigin
+                    ))
+                    return
+                }
+                #endif
                 router.route(to: .item(id: id))
             } label: {
                 Label {

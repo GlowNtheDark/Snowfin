@@ -266,6 +266,16 @@ private struct BaseItemDtoPosterContextMenu: View {
     @Router
     private var router
 
+    @Environment(\.episodeRouteOrigin)
+    private var episodeRouteOrigin
+
+    #if os(tvOS)
+    @Environment(\.homeTileCoordinator)
+    private var homeTileCoordinator
+    @Environment(\.homeFocusTile)
+    private var homeFocusTile
+    #endif
+
     @State
     private var item: BaseItemDto
 
@@ -284,13 +294,24 @@ private struct BaseItemDtoPosterContextMenu: View {
     var body: some View {
         if let itemID = item.id {
             Button(L10n.goToItem, systemImage: "info.circle") {
-                router.route(to: .item(id: itemID))
+                #if os(tvOS)
+                selectHomeTileForEpisodeRoute()
+                #endif
+                router.route(to: .item(
+                    id: itemID,
+                    episodeRouteOrigin: item.type == .episode ? episodeRouteOrigin : nil
+                ))
             }
         }
 
         if item.type == .episode, let seriesID = item.seriesID {
             Button(L10n.goToSeries, systemImage: "tv") {
+                #if os(tvOS)
+                selectHomeTileForEpisodeRoute()
+                router.route(to: .resolvedEpisode(item: item, origin: episodeRouteOrigin))
+                #else
                 router.route(to: .item(id: seriesID))
+                #endif
             }
         }
 
@@ -310,6 +331,13 @@ private struct BaseItemDtoPosterContextMenu: View {
             }
         }
     }
+
+    #if os(tvOS)
+    private func selectHomeTileForEpisodeRoute() {
+        guard item.type == .episode, let homeFocusTile else { return }
+        homeTileCoordinator?.selectHomeTile(homeFocusTile)
+    }
+    #endif
 
     @MainActor
     private func toggleIsPlayed() async {

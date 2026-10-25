@@ -36,7 +36,12 @@ extension ItemView {
             private var title: some View {
                 VStack(alignment: .leading, spacing: 5) {
                     if let parentID = provider.item.parentRootID, let parentTitle = provider.item.parentTitle {
-                        ParentButton(title: parentTitle, id: parentID)
+                        ParentButton(
+                            title: parentTitle,
+                            id: parentID,
+                            episodeRouteItem: provider.item.type == .episode ? provider.item : nil,
+                            episodeRouteOrigin: provider.episodeRouteOrigin
+                        )
                     }
 
                     Text(provider.item.displayTitle)

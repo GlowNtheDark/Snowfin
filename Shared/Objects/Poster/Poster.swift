@@ -186,13 +186,19 @@ extension View {
     @ViewBuilder
     func posterContextMenu<Item: Poster>(
         for item: Item,
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil,
         @ViewBuilder preview: @escaping () -> some View
     ) -> some View {
         if Item.ContextMenuBody.self == EmptyView.self {
             self
         } else {
             contextMenu {
-                item.posterContextMenu
+                if let episodeRouteOrigin {
+                    item.posterContextMenu
+                        .environment(\.episodeRouteOrigin, episodeRouteOrigin)
+                } else {
+                    item.posterContextMenu
+                }
             } preview: {
                 preview()
             }

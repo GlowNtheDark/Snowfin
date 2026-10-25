@@ -149,6 +149,7 @@ struct ItemView: View {
         }
         #endif
         .environmentObject(focusCoordinator)
+            .environment(\.episodeRouteOrigin, provider.episodeRouteOrigin)
         #if os(tvOS)
             .environment(\.itemStateStore, provider.userSession?.itemStateStore)
             .toolbarVisibility(.hidden, for: .navigationBar)

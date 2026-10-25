@@ -16,3 +16,10 @@ must not require reconstructing the navigation stack. Episode Details uses the s
 item-details implementation rather than a dedicated episode screen type; mechanics
 are in [state management](../design-docs/state-management.md) and
 [playback lifecycle](../design-docs/playback-lifecycle.md).
+
+On tvOS, when the parent button is used for a verified episode with a resolvable owning
+series, it opens that Show Details route with the originating episode artwork focused.
+This does not start playback. If the owner cannot be verified, retain the existing
+error fallback. Episode-card metadata actions remain a deliberate way to open Episode
+Details and are not converted to Show Details routing. Deep links without a parent route
+do not invent a focus-restoration origin; see the [navigation contract](navigation.md).

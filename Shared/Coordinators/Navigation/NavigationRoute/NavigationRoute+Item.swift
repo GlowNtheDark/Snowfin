@@ -9,6 +9,11 @@
 import JellyfinAPI
 import SwiftUI
 
+#if os(tvOS)
+import FactoryKit
+import Get
+#endif
+
 struct EpisodeRouteIntent: Hashable {
 
     struct Origin: Hashable {
@@ -109,6 +114,9 @@ extension EnvironmentValues {
 
     @Entry
     var episodeRouteTabID: String? = nil
+
+    @Entry
+    var episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil
 }
 
 extension NavigationRoute {
@@ -295,10 +303,50 @@ extension NavigationRoute {
             ItemView(provider: provider)
         }
     }
+
+    @MainActor
+    static func resolvedEpisode(
+        item: BaseItemDto,
+        origin: EpisodeRouteIntent.Origin? = nil
+    ) -> NavigationRoute {
+        let id = item.seriesID ?? item.id ?? "Unknown"
+
+        return NavigationRoute(
+            id: "item-\(id)",
+            withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) },
+            episodeRouteOrigin: origin
+        ) {
+            if let episodeID = item.id, !episodeID.isEmpty {
+                EpisodeIDRouteResolutionView(
+                    itemID: episodeID,
+                    origin: origin,
+                    fallbackToEpisodeDetails: false
+                )
+            } else {
+                ErrorView(error: ErrorMessage(L10n.unknownError))
+            }
+        }
+    }
     #endif
 
     @MainActor
-    static func item(id: String) -> NavigationRoute {
+    static func item(
+        id: String,
+        episodeRouteOrigin: EpisodeRouteIntent.Origin? = nil
+    ) -> NavigationRoute {
+        #if os(tvOS)
+        return NavigationRoute(
+            id: "item-\(id)",
+            withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) },
+            episodeRouteOrigin: episodeRouteOrigin
+        ) {
+            EpisodeIDRouteResolutionView(
+                itemID: id,
+                origin: episodeRouteOrigin,
+                fallbackToEpisodeDetails: true
+            )
+        }
+        #else
         let provider = ItemContentGroupProvider(id: id)
 
         return NavigationRoute(
@@ -307,6 +355,7 @@ extension NavigationRoute {
         ) {
             ItemView(provider: provider)
         }
+        #endif
     }
 
     #if os(iOS)
@@ -384,3 +433,119 @@ extension NavigationRoute {
         }
     }
 }
+
+#if os(tvOS)
+private struct EpisodeIDRouteResolutionView: View {
+
+    private enum Resolution {
+        case loading
+        case item(BaseItemDto)
+        case episode(series: BaseItemDto, intent: EpisodeRouteIntent)
+        case error(any Error)
+    }
+
+    @Injected(\.currentUserSession)
+    private var currentUserSession: UserSession?
+
+    @State
+    private var resolution: Resolution = .loading
+
+    let itemID: String
+    let origin: EpisodeRouteIntent.Origin?
+    let fallbackToEpisodeDetails: Bool
+
+    var body: some View {
+        Group {
+            switch resolution {
+            case .loading:
+                ProgressView()
+            case let .item(item):
+                ItemView(provider: ItemContentGroupProvider(
+                    item: item,
+                    episodeRouteOrigin: item.type == .episode ? origin : nil
+                ))
+            case let .episode(series, intent):
+                ItemView(provider: ItemContentGroupProvider(
+                    item: series,
+                    episodeRouteIntent: intent
+                ))
+            case let .error(error):
+                ErrorView(error: error)
+            }
+        }
+        .task(id: itemID) {
+            await resolve()
+        }
+    }
+
+    @MainActor
+    private func resolve() async {
+        guard let userSession = currentUserSession else {
+            resolution = .error(ErrorMessage(L10n.unknownError))
+            return
+        }
+
+        do {
+            let item = try await BaseItemDto(id: itemID).getFullItem(userSession: userSession)
+            guard currentUserSession?.id == userSession.id else {
+                resolution = .error(ErrorMessage(L10n.unknownError))
+                return
+            }
+            guard item.id == itemID else {
+                resolution = .error(ErrorMessage(L10n.unknownError))
+                return
+            }
+
+            guard item.type == .episode else {
+                if fallbackToEpisodeDetails {
+                    resolution = .item(item)
+                } else {
+                    resolution = .error(ErrorMessage(L10n.unknownError))
+                }
+                return
+            }
+
+            guard let seriesID = item.seriesID, !seriesID.isEmpty,
+                  let intent = EpisodeRouteIntent(item: item, origin: origin)
+            else {
+                showEpisodeDetailsOrError(item)
+                return
+            }
+
+            do {
+                let series = try await BaseItemDto(id: seriesID).getFullItem(userSession: userSession)
+                guard currentUserSession?.id == userSession.id else {
+                    resolution = .error(ErrorMessage(L10n.unknownError))
+                    return
+                }
+                guard series.id == seriesID,
+                      series.type == .series,
+                      item.seriesID == series.id
+                else {
+                    showEpisodeDetailsOrError(item)
+                    return
+                }
+
+                resolution = .episode(series: series, intent: intent)
+            } catch is CancellationError {
+                return
+            } catch {
+                showEpisodeDetailsOrError(item, error: error)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            resolution = .error(error)
+        }
+    }
+
+    @MainActor
+    private func showEpisodeDetailsOrError(_ item: BaseItemDto, error: (any Error)? = nil) {
+        if fallbackToEpisodeDetails {
+            resolution = .item(item)
+        } else {
+            resolution = .error(error ?? ErrorMessage(L10n.unknownError))
+        }
+    }
+}
+#endif

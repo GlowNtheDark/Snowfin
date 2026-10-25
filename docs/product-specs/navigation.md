@@ -18,10 +18,21 @@ artwork starts playback. Opening Show Details does not start playback. If the re
 season is unavailable, use a verified alternate season when possible and otherwise the
 first available season. If the episode is absent from the loaded season, focus its first
 eligible episode; if the show has no playable episodes, use Show Details' stable entry
-target. Other tvOS episode entry points outside this migration keep their existing
-routes, and selections whose owner cannot be resolved retain their existing fallback
-routing. A resolvable episode selected from Search or a library opens the owning Show
-Details with its season selected and its artwork focused; Select on that artwork starts
+target. For tvOS ID-only item routes, including deep links and socket `displayContent`,
+the app fetches and verifies the requested item before routing. A verified episode with
+a verified owning series opens that Show Details route with its season selected and its
+artwork focused; Select on that artwork starts playback. Poster context-menu Go to Item
+and Go to Series, and the Episode Details parent button, use the same verified episode
+route when the owner is available. Opening Show Details does not start playback. If an
+ID-only episode's owner cannot be resolved, Go to Item retains Episode Details as its
+supported fallback; Go to Series and the parent button retain their existing error
+fallback. Do not guess ownership or add an intermediate route. Deep links and socket
+routes without an originating parent do not acquire a synthetic Home or Search focus
+target. Intentional episode metadata actions continue to open Episode Details. iOS
+episode item-ID routing is unchanged.
+
+A resolvable episode selected from Search or a library opens the owning Show Details
+with its season selected and its artwork focused; Select on that artwork starts
 playback. Search retains its query, result-group identity, result membership, and scroll
 position while Details is presented. Dismissing Details restores the exact Search result
 when it remains available, or the Search field when the query, group, or item is no

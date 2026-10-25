@@ -331,10 +331,27 @@ possible, otherwise the first available season. If no playable episodes are avai
 use Show Details' stable entry target. This route-specific entry behavior leaves ordinary
 Show Details focus and existing player-to-Details/Home restoration requirements intact.
 
+The same episode-intent Show Details entry applies to tvOS ID-only item routes,
+including deep links, socket `displayContent`, poster context-menu Go to Item / Go to
+Series, and the Episode Details parent button, when the episode and its owning series
+are verified. Select the originating episode's artwork after its selected season and
+card are eligible; opening Details never starts playback. When an ID-only episode is
+verified but its owner cannot be resolved, Go to Item retains the supported Episode
+Details fallback, while Go to Series and the parent button retain their existing error
+fallback. Do not infer ownership from route shape or add an intermediate screen. A
+Search or library origin is retained when supplied by that surface; deep links and
+socket routes without a parent do not invent a Home or Search focus target. Episode
+metadata actions that intentionally open Episode Details remain unchanged. iOS keeps
+its existing item-ID route behavior.
+
 **Deviation / runtime check.** Exact child-shelf focus restoration on Details after a
 nested route/player return is not represented by an explicit semantic target in the
 inspected `ItemView` path. Native restoration is plausible but not established; test
-show/episode variants and virtualized shelves rather than claiming it.
+show/episode variants and virtualized shelves rather than claiming it. The 2026-10-23
+simulator run verified Search Go to Item and context-menu Go to Series episode focus,
+playback, and return. The Episode Details parent control's focus/activation, deep-link
+and socket dispatch triggers, and unresolved-owner/missing-result fallback remain
+runtime-unverified; see the [bug burndown](../exec-plans/bug-burndown.md#2026-10-23-pass-3-id-only-and-context-menu-episode-routes).
 
 ## Modal, menu, and picker dismissal
 

@@ -102,12 +102,22 @@ private struct BaseItemDtoLibraryGridElement: View {
         item.resolvedLibraryStyle(libraryStyle)
     }
 
+    private var episodeRouteOrigin: EpisodeRouteIntent.Origin? {
+        guard item.type == .episode,
+              let itemID = item.id,
+              let episodeRouteOriginContext
+        else { return nil }
+
+        return episodeRouteOriginContext.origin(groupID: "", itemID: itemID)
+    }
+
     var body: some View {
         if let itemState = itemStateStore?.state(for: item) {
             ItemStatePoster(
                 itemState: itemState,
                 item: item,
-                displayType: resolvedLibraryStyle.posterDisplayType
+                displayType: resolvedLibraryStyle.posterDisplayType,
+                routeEpisodeOrigin: episodeRouteOrigin
             ) { updatedItem, namespace in
                 updatedItem.routeFromLibrarySelection(
                     router: router,
@@ -123,7 +133,8 @@ private struct BaseItemDtoLibraryGridElement: View {
     private func poster(for item: BaseItemDto) -> some View {
         PosterButton(
             item: item,
-            displayType: resolvedLibraryStyle.posterDisplayType
+            displayType: resolvedLibraryStyle.posterDisplayType,
+            routeEpisodeOrigin: episodeRouteOrigin
         ) { namespace in
             item.routeFromLibrarySelection(
                 router: router,
@@ -144,6 +155,7 @@ struct ItemStatePoster: View {
     var size: PosterDisplayType.Size = .small
     var routeFocusCoordinator: FocusCoordinator?
     var routeFocusTargetID: String?
+    var routeEpisodeOrigin: EpisodeRouteIntent.Origin?
     let action: (BaseItemDto, Namespace.ID) -> Void
 
     var body: some View {
@@ -153,7 +165,8 @@ struct ItemStatePoster: View {
             displayType: displayType,
             size: size,
             routeFocusCoordinator: routeFocusCoordinator,
-            routeFocusTargetID: routeFocusTargetID
+            routeFocusTargetID: routeFocusTargetID,
+            routeEpisodeOrigin: routeEpisodeOrigin
         ) { namespace in
             action(updatedItem, namespace)
         }
