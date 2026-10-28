@@ -1,0 +1,12 @@
+name = "screen_worker_luna_fallback"
+description = "Fallback implementation worker used only when GPT-6.1 Terra cannot be selected."
+model = "gpt-6-luna"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Implement the same bounded Screen tasks as screen_worker only after the lead confirms
+that GPT-6.1 Terra could not be selected. Keep the change focused, read the relevant
+repository instructions and product contract, preserve tvOS behavior, and avoid
+unrelated edits or routine Xcode builds. Review the diff, run `git diff --check`, and
+return the changed files, checks, and any runtime verification limits. Make sure the
+lead reports that GPT-6 Luna handled the task as a Terra fallback.
+"""

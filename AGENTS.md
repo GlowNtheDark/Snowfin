@@ -122,17 +122,43 @@ For runtime work, physical Apple TV behavior is authoritative. See
 
 ## Model roles and delegation
 
-Use GPT-6 Luna as the default lead and orchestrator for normal implementation,
-everyday debugging, repo exploration, file tracing, triage, small localized edits,
-and scoped subtasks. Escalate to GPT-6 Sol for work needing more judgment or
-complexity. Use GPT-6 Astra for the hardest root causes, architecture or
-cross-cutting changes, and stubborn regressions. Use it as lead or as an
-independent second opinion when that can change the decision.
+Use GPT-6 Luna (`gpt-6-luna`) as Screen's default lead and orchestrator. The lead
+plans and delegates, maintains project context, integrates and reviews returned
+changes, and decides whether escalation is warranted. The lead may handle small
+changes directly; delegate implementation when doing so is more efficient.
 
-Keep one lead and at most one subagent. Delegate only independent, bounded work that
-materially improves the result or saves time; the lead integrates and reviews the work.
-Do not add model or reasoning recommendations to normal task prompts; use project
-defaults and this guide unless the user explicitly asks otherwise.
+Project-scoped agent definitions live in `.codex/agents/`:
+
+- `screen_worker` uses GPT-6.1 Terra (`gpt-6.1-terra`) at medium reasoning for
+  Swift/SwiftUI implementation, UI changes, refactors, routine bug fixes, semantic
+  themes and tokens, sidebar animations, and visual adjustments. Keep changes
+  focused and return changed files plus verification results to the lead.
+- `screen_explorer` uses GPT-6 Luna at low reasoning for repository searches,
+  call-chain tracing, quick diagnostics, and lightweight investigation. It does
+  not edit files.
+- `screen_escalation_sol` uses GPT-6.1 Sol for difficult architecture decisions,
+  persistent lifecycle bugs, complex playback or focus issues, and targeted
+  follow-up when a normal implementation pass is stuck.
+- `screen_escalation_astra` uses GPT-6 Astra for the hardest root causes and
+  cross-cutting decisions. Escalation is deliberate, not automatic; pass the
+  concrete failure and prior findings rather than restarting the whole task.
+- `screen_worker_luna_fallback` uses GPT-6 Luna at medium reasoning only when
+  Codex cannot select Terra. State that fallback clearly; never report the Luna
+  fallback as a Terra run.
+
+Use one implementation worker by default. A second concurrent subagent is allowed
+only for genuinely independent, bounded work that does not overlap the worker's
+edits. Keep delegated prompts concise and scoped. Before delegating and in the final
+report, identify the agent role and model that actually handled the work; distinguish
+the configured model from the model actually invoked if selection could not be
+verified. The lead integrates and reviews all returned changes.
+
+Do not add model or reasoning recommendations to normal task prompts; use these
+project defaults unless the user explicitly asks otherwise. Preserve the two-pass
+limit for stubborn non-crashing UI bugs and all Screen focus, navigation, playback,
+and presentation behavior. Follow [QUALITY.md](docs/QUALITY.md): no automatic Xcode
+builds for routine changes, review the diff, and run `git diff --check`. Jamie
+performs physical Apple TV runtime verification when needed.
 
 ## Completion
 
