@@ -103,10 +103,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .onExitCommand {
-            guard isAppFontMenuPresented else { return }
-            dismissAppFontMenu()
-        }
         .onChange(of: sidebarHandoffFocusTarget) { _, target in
             guard target != nil, isTabContentFocusable else { return }
             tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
