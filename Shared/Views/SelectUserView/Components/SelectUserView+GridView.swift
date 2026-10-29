@@ -59,7 +59,7 @@ extension SelectUserView {
             }
             .isSelected(selectedUsers.contains(item.user))
             #if os(tvOS)
-                .focused(focusTarget, equals: .user(id: item.user.id))
+            .focused(focusTarget, equals: .user(id: item.user.id))
             #endif
         }
 
@@ -88,7 +88,7 @@ extension SelectUserView {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scrollIfLargerThanContainer(axes: .horizontal)
             #if os(tvOS)
-                .scrollClipDisabled()
+            .scrollClipDisabled()
             #endif
         }
     }

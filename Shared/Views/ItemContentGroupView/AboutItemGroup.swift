@@ -72,14 +72,14 @@ struct AboutItemGroup: ContentGroup {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .backport
                     #if os(tvOS)
-                        .glassEffect(in: .rect)
+                    .glassEffect(in: .rect)
                     #else
-                        .glassEffect(
-                            in: .rect(
-                                cornerRadius: 20,
-                                style: .continuous
-                            )
+                    .glassEffect(
+                        in: .rect(
+                            cornerRadius: 20,
+                            style: .continuous
                         )
+                    )
                     #endif
                 }
                 .foregroundStyle(.primary, .secondary)
@@ -208,10 +208,10 @@ struct AboutItemGroup: ContentGroup {
                 .scrollIndicators(.hidden)
                 .scrollClipDisabled()
                 #if os(tvOS)
-                    .withViewContext(.isOverComplexContent)
+                .withViewContext(.isOverComplexContent)
                 #endif
-                    .frame(height: cardHeight)
-                    .frame(maxWidth: .infinity)
+                .frame(height: cardHeight)
+                .frame(maxWidth: .infinity)
             } header: {
                 Text(L10n.about)
                     .font(.title2)

@@ -66,6 +66,11 @@ extension SeriesEpisodeContentGroup {
         @Environment(\.posterConfiguration)
         private var posterConfiguration
 
+        #if os(tvOS)
+        @Environment(\.screenTheme)
+        private var screenTheme
+        #endif
+
         @Namespace
         private var namespace
 
@@ -90,14 +95,16 @@ extension SeriesEpisodeContentGroup {
                     title: nil,
                     progress: 1,
                     posterDisplayType: .landscape,
-                    isCompleted: true
+                    isCompleted: true,
+                    semanticPalette: screenTheme
                 )
             } else if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
                     progress: episode.progressPercentage ?? 0,
                     posterDisplayType: .landscape,
-                    isCompleted: false
+                    isCompleted: false,
+                    semanticPalette: screenTheme
                 )
             }
             #else
@@ -134,14 +141,34 @@ extension SeriesEpisodeContentGroup {
                 onArtworkFocusActionAppear: onArtworkFocusActionAppear,
                 isEpisodeRoute: isEpisodeRoute,
                 artworkAction: {
+                    let playbackDiagnosticID: String?
+                    #if DEBUG
+                    playbackDiagnosticID = String(UUID().uuidString.prefix(8))
+                    MediaPlayerManager.logEpisodePlayback(
+                        playbackDiagnosticID,
+                        event: "artwork-activation episodeID=\(episode.id ?? "unknown") detailsCoordinator=\(router.router.navigationCoordinator?.debugDiagnosticID ?? "unknown")"
+                    )
+                    #else
+                    playbackDiagnosticID = nil
+                    #endif
+
                     guard let provider = episode.getPlaybackItemProvider(userSession: nil) else {
+                        #if DEBUG
+                        MediaPlayerManager.logEpisodePlayback(
+                            playbackDiagnosticID,
+                            event: "provider-unavailable episodeID=\(episode.id ?? "unknown")"
+                        )
+                        #endif
                         return
                     }
 
                     router.route(
                         to: .videoPlayer(
                             provider: provider,
-                            queue: EpisodeMediaPlayerQueue(episode: episode)
+                            queue: EpisodeMediaPlayerQueue(
+                                episode: episode,
+                                playbackDiagnosticID: playbackDiagnosticID
+                            )
                         )
                     )
                 },
@@ -209,6 +236,11 @@ extension SeriesEpisodeContentGroup {
         @FocusState
         private var focusedElement: FocusedElement?
 
+        #if os(tvOS)
+        @Environment(\.screenTheme)
+        private var screenTheme
+        #endif
+
         let header: String
         let subHeader: String
         let content: String
@@ -248,27 +280,27 @@ extension SeriesEpisodeContentGroup {
         private var artworkButton: some View {
             let button = Button(action: artworkAction) {
                 artwork
-                #if os(tvOS)
-                .overlay {
-                    Rectangle()
-                        .stroke(
-                            Color.snowfinIceBlue.opacity(focusedElement == .artwork ? 0.9 : 0),
-                            lineWidth: 3
+                    #if os(tvOS)
+                        .overlay {
+                            Rectangle()
+                                .stroke(
+                                    focusedElement == .artwork ? screenTheme.focus.keylineOnSurface.swiftUIColor : .clear,
+                                    lineWidth: 3
+                                )
+                        }
+                        .shadow(
+                            color: focusedElement == .artwork ? screenTheme.focus.glow.swiftUIColor.opacity(0.38) : .clear,
+                            radius: focusedElement == .artwork ? 22 : 0
                         )
-                }
-                .shadow(
-                    color: focusedElement == .artwork ? Color.snowfinIceBlue.opacity(0.38) : .clear,
-                    radius: focusedElement == .artwork ? 22 : 0
-                )
-                .animation(.easeOut(duration: 0.16), value: focusedElement)
-                #endif
+                        .animation(.easeOut(duration: 0.16), value: focusedElement)
+                    #endif
             }
             .foregroundStyle(.primary, .secondary)
             .buttonStyle(.card)
             #if os(tvOS)
-                .buttonBorderShape(.roundedRectangle(radius: 0))
+            .buttonBorderShape(.roundedRectangle(radius: 0))
             #endif
-                .focused($focusedElement, equals: .artwork)
+            .focused($focusedElement, equals: .artwork)
 
             if let artworkFocusTarget {
                 let focusedButton = button.coordinatedFocus(
@@ -308,14 +340,14 @@ extension SeriesEpisodeContentGroup {
                 }
                 .foregroundStyle(.primary, .secondary)
                 #if os(tvOS)
-                    .buttonStyle(
-                        EpisodeContentButtonStyle(
-                            showsMaterial: focusedElement != nil,
-                            isFocused: focusedElement == .content
-                        )
+                .buttonStyle(
+                    EpisodeContentButtonStyle(
+                        showsMaterial: focusedElement != nil,
+                        isFocused: focusedElement == .content
                     )
+                )
                 #endif
-                    .focused($focusedElement, equals: .content)
+                .focused($focusedElement, equals: .content)
             }
             .focusSection()
             .defaultFocus(
@@ -357,6 +389,9 @@ extension SeriesEpisodeContentGroup {
     #if os(tvOS)
     private struct EpisodeContentButtonStyle: ButtonStyle {
 
+        @Environment(\.screenTheme)
+        private var screenTheme
+
         let showsMaterial: Bool
         let isFocused: Bool
 
@@ -377,7 +412,7 @@ extension SeriesEpisodeContentGroup {
                 .overlay {
                     Rectangle()
                         .stroke(
-                            Color.snowfinIceBlue.opacity(isFocused ? 0.85 : 0),
+                            isFocused ? screenTheme.focus.keylineOnSurface.swiftUIColor : .clear,
                             lineWidth: 3
                         )
                 }
@@ -386,7 +421,7 @@ extension SeriesEpisodeContentGroup {
                 .brightness(isFocused ? 0.04 : 0)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .shadow(
-                    color: isFocused ? Color.snowfinIceBlue.opacity(0.3) : .clear,
+                    color: isFocused ? screenTheme.focus.glow.swiftUIColor.opacity(0.3) : .clear,
                     radius: isFocused ? 20 : 0
                 )
                 .animation(.easeInOut(duration: 0.2), value: showsMaterial)

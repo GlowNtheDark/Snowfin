@@ -23,15 +23,15 @@ extension VideoPlayer.PlaybackControls {
 
         @Default(.VideoPlayer.Overlay.chapterSlider)
         private var chapterSlider
-        @Default(.accentColor)
-        private var accentColor
-
         @EnvironmentObject
         private var containerState: VideoPlayerContainerState
         @EnvironmentObject
         private var manager: MediaPlayerManager
         @EnvironmentObject
         private var scrubbedSecondsBox: PublishedBox<Duration>
+
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         @FocusState.Binding
         private var isFocused: Bool
@@ -103,12 +103,12 @@ extension VideoPlayer.PlaybackControls {
             Text(L10n.live)
                 .font(UIDevice.isTV ? .caption : .subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(accentColor.overlayColor)
+                .foregroundStyle(screenTheme.status.information.swiftUIColor)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
                 .background {
                     Rectangle()
-                        .fill(accentColor)
+                        .fill(screenTheme.surfaces.canvas.swiftUIColor)
                 }
         }
 

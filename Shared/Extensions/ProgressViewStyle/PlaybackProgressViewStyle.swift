@@ -28,14 +28,14 @@ struct PlaybackProgressViewStyle: ProgressViewStyle {
         let normalizedProgress = progress.isFinite ? clamp(progress, min: 0, max: 1) : 0
 
         Rectangle()
-        #if !os(tvOS)
-            .cornerRadius(
-                cornerStyle == .round ? height / 2 : 0,
-                corners: [.topLeft, .bottomLeft]
-            )
-        #endif
-            .frame(width: width * normalizedProgress + height)
-                .offset(x: -height)
+            #if !os(tvOS)
+                .cornerRadius(
+                    cornerStyle == .round ? height / 2 : 0,
+                    corners: [.topLeft, .bottomLeft]
+                )
+            #endif
+                .frame(width: width * normalizedProgress + height)
+            .offset(x: -height)
     }
 
     func makeBody(configuration: Configuration) -> some View {

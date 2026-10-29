@@ -13,6 +13,23 @@ extension TabCoordinator {
     typealias TabItemSelectedPublisher = LegacyEventPublisher<TabCoordinator.SelectedEvent>
 }
 
+@MainActor
+final class TabContentFocusHandoff: ObservableObject {
+
+    @Published
+    private(set) var pendingTabID: String?
+
+    func begin(tabID: String?) {
+        guard pendingTabID != tabID else { return }
+        pendingTabID = tabID
+    }
+
+    func complete(tabID: String?) {
+        guard let tabID, pendingTabID == tabID else { return }
+        pendingTabID = nil
+    }
+}
+
 @propertyWrapper
 struct TabItemSelected: DynamicProperty {
 
@@ -31,7 +48,4 @@ extension EnvironmentValues {
 
     @Entry
     var isTabContentFocusable: Bool = true
-
-    @Entry
-    var tabContentFocusHandoffAcquired: () -> Void = {}
 }

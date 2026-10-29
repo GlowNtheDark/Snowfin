@@ -151,7 +151,6 @@ extension ItemView {
             }
             .errorMessage($error)
             .menuStyle(.button)
-            .buttonStyle(BasicHoverButtonStyle())
         }
     }
 }

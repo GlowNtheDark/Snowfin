@@ -127,24 +127,24 @@ extension VideoPlayer {
 
             var body: some View {
                 player
-                #if os(iOS)
-                .overlay(Color.black.opacity(shouldPresentDimOverlay ? 0.5 : 0.0))
-                #endif
-                .overlay {
-                    Group {
-                        if presentedSupplementStyle == .expanded {
-                            Color.black.opacity(0.8)
-                        } else {
-                            EasedGradient(
-                                colors: [.clear, .black],
-                                startPoint: .center,
-                                endPoint: .bottom
-                            )
+                    #if os(iOS)
+                        .overlay(Color.black.opacity(shouldPresentDimOverlay ? 0.5 : 0.0))
+                    #endif
+                    .overlay {
+                        Group {
+                            if presentedSupplementStyle == .expanded {
+                                Color.black.opacity(0.8)
+                            } else {
+                                EasedGradient(
+                                    colors: [.clear, .black],
+                                    startPoint: .center,
+                                    endPoint: .bottom
+                                )
+                            }
                         }
+                        .isVisible(shouldPresentDimOverlay)
                     }
-                    .isVisible(shouldPresentDimOverlay)
-                }
-                .allowsHitTesting(false)
+                    .allowsHitTesting(false)
             }
         }
 
@@ -179,51 +179,51 @@ extension VideoPlayer {
                 }
                 #if os(iOS)
                 .environment(
-                    \.longPressAction,
-                    .init(
-                        action: {
-                            containerState.containerView?.handleLongPressGesture(
-                                location: $0,
-                                unitPoint: $1,
-                                state: $2
-                            )
-                        }
+                        \.longPressAction,
+                        .init(
+                            action: {
+                                containerState.containerView?.handleLongPressGesture(
+                                    location: $0,
+                                    unitPoint: $1,
+                                    state: $2
+                                )
+                            }
+                        )
                     )
-                )
-                .environment(
-                    \.panAction,
-                    .init(
-                        action: {
-                            containerState.containerView?.handlePanGesture(
-                                translation: $0,
-                                velocity: $1,
-                                location: $2,
-                                unitPoint: $3,
-                                state: $4
-                            )
-                        }
+                    .environment(
+                        \.panAction,
+                        .init(
+                            action: {
+                                containerState.containerView?.handlePanGesture(
+                                    translation: $0,
+                                    velocity: $1,
+                                    location: $2,
+                                    unitPoint: $3,
+                                    state: $4
+                                )
+                            }
+                        )
                     )
-                )
-                .environment(
-                    \.pinchAction,
-                    .init(
-                        action: {
-                            containerState.containerView?.handlePinchGesture(scale: $0, velocity: $1, state: $2)
-                        }
+                    .environment(
+                        \.pinchAction,
+                        .init(
+                            action: {
+                                containerState.containerView?.handlePinchGesture(scale: $0, velocity: $1, state: $2)
+                            }
+                        )
                     )
-                )
-                .environment(
-                    \.tapGestureAction,
-                    .init(
-                        action: {
-                            containerState.containerView?.handleTapGesture(
-                                location: $0,
-                                unitPoint: $1,
-                                count: $2
-                            )
-                        }
+                    .environment(
+                        \.tapGestureAction,
+                        .init(
+                            action: {
+                                containerState.containerView?.handleTapGesture(
+                                    location: $0,
+                                    unitPoint: $1,
+                                    count: $2
+                                )
+                            }
+                        )
                     )
-                )
                 #endif
             }
         }
@@ -420,8 +420,6 @@ extension VideoPlayer {
         #if os(tvOS)
         let onPressEvent = OnPressEvent()
         private var lastTouchPokeTime: CFTimeInterval = 0
-        private var didClosePlaybackDropdownAtMenuPressBegan = false
-        private var didHandleSegmentBackAtMenuPressBegan = false
         #endif
 
         init(
@@ -778,6 +776,12 @@ extension VideoPlayer {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] isPresenting in
                     guard let self else { return }
+                    #if DEBUG
+                    EpisodePlaybackDiagnostics.logEpisodesBack(
+                        self.manager.episodePlaybackDiagnosticID,
+                        event: "episodes-state-published isPresentingPlaybackEpisodes=\(isPresenting)"
+                    )
+                    #endif
                     let isAnotherPlaybackSurfacePresented = isPresenting || self.containerState.isPresentingPlaybackDropdown
                     self.supplementContainerView.isHidden = isAnotherPlaybackSurfacePresented
                     self.supplementContainerView.isUserInteractionEnabled =
@@ -958,10 +962,26 @@ extension VideoPlayer {
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
 
+            #if DEBUG
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "player-view-will-disappear managerState=\(String(describing: manager.state))"
+            )
+            EpisodePlaybackDiagnostics.logEpisodesBack(
+                manager.episodePlaybackDiagnosticID,
+                event: "player-view-will-disappear episodes=\(containerState.isPresentingPlaybackEpisodes)"
+            )
+            #endif
             guard manager.state != .stopped else { return }
 
             onPresentationWillStopPlayback()
             Task { @MainActor in
+                #if DEBUG
+                EpisodePlaybackDiagnostics.log(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "presentation-disappearance-stop-request"
+                )
+                #endif
                 manager.stop()
             }
         }
@@ -1007,12 +1027,12 @@ extension VideoPlayer {
                 case .playPause, .select:
                     continue
                 case .menu:
-                    if containerState.closePlaybackDropdownForMenuPress() {
-                        didClosePlaybackDropdownAtMenuPressBegan = true
-                    } else if manager.snowfinSegmentCoordinator.presentation != nil {
-                        didHandleSegmentBackAtMenuPressBegan = true
-                        handleMenuEnded()
-                    }
+                    #if DEBUG
+                    EpisodePlaybackDiagnostics.logEpisodesBack(
+                        manager.episodePlaybackDiagnosticID,
+                        event: "menu-pressesBegan episodes=\(containerState.isPresentingPlaybackEpisodes) dropdown=\(containerState.isPresentingPlaybackDropdown) segment=\(manager.snowfinSegmentCoordinator.presentation != nil)"
+                    )
+                    #endif
                     continue
                 default:
                     let defaultAction: () -> Void = { [weak self] in
@@ -1040,14 +1060,13 @@ extension VideoPlayer {
                 case .select:
                     handleSelectEnded(press, event: event)
                 case .menu:
-                    if didClosePlaybackDropdownAtMenuPressBegan {
-                        didClosePlaybackDropdownAtMenuPressBegan = false
-                        releasePlaybackOverlayMenuDismissalGuard()
-                    } else if didHandleSegmentBackAtMenuPressBegan {
-                        didHandleSegmentBackAtMenuPressBegan = false
-                    } else {
-                        handleMenuEnded()
-                    }
+                    #if DEBUG
+                    EpisodePlaybackDiagnostics.logEpisodesBack(
+                        manager.episodePlaybackDiagnosticID,
+                        event: "menu-pressesEnded episodes=\(containerState.isPresentingPlaybackEpisodes)"
+                    )
+                    #endif
+                    continue
                 default:
                     let defaultAction: () -> Void = { [weak self] in
                         guard let self else { return }
@@ -1142,10 +1161,32 @@ extension VideoPlayer {
         }
 
         func handleMenuEnded() {
+            #if DEBUG
+            EpisodePlaybackDiagnostics.logEpisodesBack(
+                manager.episodePlaybackDiagnosticID,
+                event: "handleMenuEnded-enter episodes=\(containerState.isPresentingPlaybackEpisodes) dropdown=\(containerState.isPresentingPlaybackDropdown) segment=\(manager.snowfinSegmentCoordinator.presentation != nil) scrubbing=\(containerState.isScrubbing) supplement=\(containerState.isPresentingSupplement) hud=\(containerState.isPresentingOverlay)"
+            )
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "back-press dropdown=\(containerState.isPresentingPlaybackDropdown) episodes=\(containerState.isPresentingPlaybackEpisodes) segment=\(manager.snowfinSegmentCoordinator.presentation != nil) scrubbing=\(containerState.isScrubbing) supplement=\(containerState.isPresentingSupplement) hud=\(containerState.isPresentingOverlay)"
+            )
+            #endif
             if containerState.closePlaybackDropdownForMenuPress() {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch close-dropdown"
+                )
+                #endif
                 releasePlaybackOverlayMenuDismissalGuard()
                 return
             } else if containerState.isPresentingPlaybackEpisodes {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch close-episodes"
+                )
+                #endif
                 containerState.isPlaybackOverlayMenuDismissalGuarded = true
                 containerState.isPresentingPlaybackEpisodes = false
                 containerState.isProgressBarFocused = false
@@ -1153,6 +1194,12 @@ extension VideoPlayer {
                 releasePlaybackOverlayMenuDismissalGuard()
                 return
             } else if manager.snowfinSegmentCoordinator.presentation != nil {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch segment-back"
+                )
+                #endif
                 containerState.isPlaybackOverlayMenuDismissalGuarded = true
                 let consumed = manager.snowfinSegmentCoordinator.handleMenuBack()
                 if consumed, manager.snowfinSegmentCoordinator.presentation == nil {
@@ -1161,18 +1208,50 @@ extension VideoPlayer {
                 releasePlaybackOverlayMenuDismissalGuard()
                 return
             } else if containerState.isScrubbing {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch cancel-scrub"
+                )
+                #endif
                 containerState.cancelScrub()
                 containerState.timer.poke()
             } else if containerState.isPresentingSupplement {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch close-supplement"
+                )
+                #endif
                 containerState.selectedSupplement = nil
                 presentSupplementContainer(false)
                 containerState.isProgressBarFocused = true
                 containerState.timer.poke()
             } else if containerState.isPresentingOverlay {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(manager.episodePlaybackDiagnosticID, event: "handleMenuEnded-branch hide-hud")
+                #endif
                 containerState.isPresentingOverlay = false
             } else if Defaults[.confirmClose] {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "handleMenuEnded-branch show-close-confirmation"
+                )
+                EpisodePlaybackDiagnostics.log(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "back-close-confirmation-presented"
+                )
+                #endif
                 containerState.isPresentingCloseConfirmation = true
             } else {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(manager.episodePlaybackDiagnosticID, event: "handleMenuEnded-branch stop-player")
+                EpisodePlaybackDiagnostics.log(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "back-stop-request"
+                )
+                #endif
                 manager.stop()
             }
         }

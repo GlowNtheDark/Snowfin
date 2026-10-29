@@ -13,6 +13,8 @@ struct BackportGlass {
     fileprivate struct SelectionAppearance {
 
         let foregroundColor: Color
+        let disabledTint: Color?
+        let disabledForegroundColor: Color?
     }
 
     static let regular = BackportGlass(isVisible: true)
@@ -54,12 +56,16 @@ struct BackportGlass {
 
     func selection(
         tint: Color?,
-        foregroundColor: Color
+        foregroundColor: Color,
+        disabledTint: Color? = nil,
+        disabledForegroundColor: Color? = nil
     ) -> Self {
         var copy = self
         copy.tint = tint
         copy.selectionAppearance = SelectionAppearance(
-            foregroundColor: foregroundColor
+            foregroundColor: foregroundColor,
+            disabledTint: disabledTint,
+            disabledForegroundColor: disabledForegroundColor
         )
         return copy
     }
@@ -105,21 +111,27 @@ struct BackportGlassEffectModifier<BackgroundShape: Shape>: ViewModifier {
     }
 
     private var resolvedTint: Color? {
-        guard glass.selectionAppearance != nil else {
+        guard let selectionAppearance = glass.selectionAppearance else {
             return glass.tint
         }
 
-        return isEnabled ? glass.tint : subduedColor
+        return isEnabled ? glass.tint : selectionAppearance.disabledTint ?? subduedColor
     }
 
     private var resolvedForegroundStyle: AnyShapeStyle {
-        guard isEnabled,
-              let selectionAppearance = glass.selectionAppearance
-        else {
+        guard let selectionAppearance = glass.selectionAppearance else {
             return AnyShapeStyle(HierarchicalShapeStyle.primary)
         }
 
-        return AnyShapeStyle(selectionAppearance.foregroundColor)
+        if isEnabled {
+            return AnyShapeStyle(selectionAppearance.foregroundColor)
+        }
+
+        if let disabledForegroundColor = selectionAppearance.disabledForegroundColor {
+            return AnyShapeStyle(disabledForegroundColor)
+        }
+
+        return AnyShapeStyle(HierarchicalShapeStyle.primary)
     }
 
     @ViewBuilder

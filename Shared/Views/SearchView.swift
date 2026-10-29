@@ -37,8 +37,11 @@ struct SearchView: View {
     @Environment(\.isTabContentFocusable)
     private var isTabContentFocusable
 
-    @Environment(\.tabContentFocusHandoffAcquired)
-    private var tabContentFocusHandoffAcquired
+    @Environment(\.episodeRouteTabID)
+    private var episodeRouteTabID
+
+    @EnvironmentObject
+    private var tabContentFocusHandoff: TabContentFocusHandoff
 
     @EnvironmentObject
     private var navigationCoordinator: NavigationCoordinator
@@ -46,11 +49,11 @@ struct SearchView: View {
     @Injected(\.currentUserSession)
     private var currentUserSession: UserSession?
 
+    @Environment(\.screenTheme)
+    private var screenTheme
+
     @Router
     private var router
-
-    @Default(.accentColor)
-    private var accentColor
 
     #endif
 
@@ -79,7 +82,7 @@ struct SearchView: View {
                 }
                 #if os(tvOS)
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary)
                 #endif
             }
         }
@@ -180,7 +183,9 @@ struct SearchView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 14) {
+        let isFocused = focusedSearchTarget == .field
+
+        return HStack(spacing: 14) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
@@ -197,8 +202,14 @@ struct SearchView: View {
         .overlay {
             Rectangle()
                 .stroke(
-                    focusedSearchTarget == .field ? accentColor.opacity(0.9) : .white.opacity(0.16),
-                    lineWidth: focusedSearchTarget == .field ? 2 : 1
+                    isFocused ? screenTheme.focus.keylineOnSurface.swiftUIColor : .white.opacity(0.16),
+                    lineWidth: isFocused ? 2 : 1
+                )
+                .shadow(
+                    color: isFocused
+                        ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity * 0.5)
+                        : .clear,
+                    radius: isFocused ? screenTheme.focus.glowRadius * 0.5 : 0
                 )
         }
         .contentShape(Rectangle())
@@ -236,7 +247,9 @@ struct SearchView: View {
         label: String? = nil,
         systemImage: String? = nil
     ) -> some View {
-        Group {
+        let isFocused = focusedSearchTarget == .key(key)
+
+        return Group {
             if let systemImage {
                 Image(systemName: systemImage)
             } else {
@@ -249,8 +262,14 @@ struct SearchView: View {
         .overlay {
             Rectangle()
                 .stroke(
-                    focusedSearchTarget == .key(key) ? accentColor.opacity(0.9) : .white.opacity(0.12),
-                    lineWidth: focusedSearchTarget == .key(key) ? 2 : 1
+                    isFocused ? screenTheme.focus.keylineOnSurface.swiftUIColor : .white.opacity(0.12),
+                    lineWidth: isFocused ? 2 : 1
+                )
+                .shadow(
+                    color: isFocused
+                        ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity * 0.5)
+                        : .clear,
+                    radius: isFocused ? screenTheme.focus.glowRadius * 0.5 : 0
                 )
         }
         .contentShape(Rectangle())
@@ -286,14 +305,15 @@ struct SearchView: View {
             )
             .edgePadding(.vertical)
             #if os(tvOS)
-                .environment(
-                    \.episodeRouteOriginContext,
-                    EpisodeRouteOriginContext(
-                        source: .search(query: viewModel.filterViewModel.currentFilters.query ?? ""),
-                        focusCoordinator: focusCoordinator,
-                        libraryIndexForItemID: nil
-                    )
+            .withViewContext(.isSearchResults)
+            .environment(
+                \.episodeRouteOriginContext,
+                EpisodeRouteOriginContext(
+                    source: .search(query: viewModel.filterViewModel.currentFilters.query ?? ""),
+                    focusCoordinator: focusCoordinator,
+                    libraryIndexForItemID: nil
                 )
+            )
             #endif
         }
         .scrollIndicators(.hidden)
@@ -346,7 +366,7 @@ struct SearchView: View {
             .ignoresSafeArea(.keyboard)
             .navigationTitle(L10n.search)
             .toolbarTitleDisplayMode(.inline)
-        #if os(tvOS)
+            #if os(tvOS)
             .onAppear {
                 if searchFocus.hasPendingEntry {
                     fulfillSearchEntry()
@@ -371,30 +391,30 @@ struct SearchView: View {
                 if focusedSearchTarget != nil {
                     searchFocus.cancelEntry()
                     if isTabContentFocusable {
-                        tabContentFocusHandoffAcquired()
+                        tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
                     }
                 }
             }
-        #else
+            #else
             .searchFocused($isSearchFocused)
             .onReceive(tabItemSelected) { event in
                 if event.isRepeat, event.isRoot {
                     isSearchFocused = true
                 }
             }
-        #endif
+            #endif
             .onFirstAppear {
-                    viewModel.getSuggestions()
-                }
-                .onChange(of: searchQuery) {
-                    viewModel.search(query: searchQuery)
-                }
-                .environmentObject(focusCoordinator)
-        #if os(tvOS)
+                viewModel.getSuggestions()
+            }
+            .onChange(of: searchQuery) {
+                viewModel.search(query: searchQuery)
+            }
+            .environmentObject(focusCoordinator)
+            #if os(tvOS)
             .edgePadding(.top)
             .focusSection()
             .environment(\.itemStateStore, currentUserSession?.itemStateStore)
-        #else
+            #else
             .searchable(
                 text: $searchQuery,
                 prompt: L10n.search
@@ -403,6 +423,6 @@ struct SearchView: View {
                 viewModel: viewModel.filterViewModel,
                 types: enabledDrawerFilters
             )
-        #endif
+            #endif
     }
 }

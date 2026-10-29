@@ -85,9 +85,9 @@ extension VideoPlayer.PlaybackControls {
             .labelStyle(.iconOnly)
             .modifier(OverlayButtonStyleModifier(onPressed: onPressed))
             #if os(iOS)
-                .background {
-                    EmptyHitTestView()
-                }
+            .background {
+                EmptyHitTestView()
+            }
             #endif
         }
     }

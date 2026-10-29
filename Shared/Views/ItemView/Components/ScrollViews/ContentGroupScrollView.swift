@@ -18,6 +18,11 @@ extension ItemView {
         @EnvironmentObject
         private var focusCoordinator: FocusCoordinator
 
+        #if os(tvOS)
+        @Environment(\.screenTheme)
+        private var screenTheme
+        #endif
+
         @ObservedObject
         var provider: ItemContentGroupProvider
 
@@ -27,6 +32,12 @@ extension ItemView {
         private var isHeaderFocused: Bool {
             focusCoordinator.lastFocusedIDs.contains(Component.header)
         }
+
+        #if os(tvOS)
+        private var backdropBaseColor: Color {
+            provider.item.type == .movie ? screenTheme.surfaces.canvas.swiftUIColor : .snowfinDeepNavy
+        }
+        #endif
 
         private var backgroundImageItem: BaseItemDto {
             if provider.item.type == .person || provider.item.type == .musicArtist,
@@ -68,13 +79,13 @@ extension ItemView {
             #if os(tvOS)
             .overlay {
                 ZStack {
-                    Color.snowfinDeepNavy
+                    backdropBaseColor
                         .opacity(isHeaderFocused ? 0.18 : 0.46)
 
                     LinearGradient(
                         colors: [
-                            Color.snowfinDeepNavy.opacity(0.92),
-                            Color.snowfinDeepNavy.opacity(0.48),
+                            backdropBaseColor.opacity(0.92),
+                            backdropBaseColor.opacity(0.48),
                             .clear,
                         ],
                         startPoint: .leading,
@@ -84,8 +95,8 @@ extension ItemView {
                     LinearGradient(
                         colors: [
                             .clear,
-                            Color.snowfinDeepNavy.opacity(0.22),
-                            Color.snowfinDeepNavy.opacity(0.9),
+                            backdropBaseColor.opacity(0.22),
+                            backdropBaseColor.opacity(0.9),
                         ],
                         startPoint: .top,
                         endPoint: .bottom

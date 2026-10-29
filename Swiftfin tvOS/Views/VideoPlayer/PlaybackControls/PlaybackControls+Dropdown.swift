@@ -6,7 +6,6 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
 import JellyfinAPI
 import SwiftUI
 
@@ -52,6 +51,9 @@ extension VideoPlayer.PlaybackControls {
         private var containerState: VideoPlayerContainerState
         @EnvironmentObject
         private var manager: MediaPlayerManager
+
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         @FocusState
         private var focusedTarget: FocusTarget?
@@ -112,7 +114,7 @@ extension VideoPlayer.PlaybackControls {
                         .focusSection()
 
                         Rectangle()
-                            .fill(Color.white.opacity(0.16))
+                            .fill(screenTheme.actions.secondaryBoundary.swiftUIColor.opacity(0.72))
                             .frame(height: 1)
 
                         sectionContent
@@ -129,12 +131,12 @@ extension VideoPlayer.PlaybackControls {
                             .fill(.ultraThinMaterial)
                             .overlay {
                                 Rectangle()
-                                    .fill(Color.snowfinDeepNavy.opacity(0.78))
+                                    .fill(screenTheme.surfaces.canvas.swiftUIColor.opacity(0.78))
                             }
                     }
                     .overlay {
                         Rectangle()
-                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            .stroke(screenTheme.actions.secondaryBoundary.swiftUIColor.opacity(0.72), lineWidth: 1)
                     }
                     .shadow(color: .black.opacity(0.46), radius: 34, x: 0, y: 18)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -303,10 +305,10 @@ extension VideoPlayer.PlaybackControls {
             }
             .padding(28)
             .frame(maxWidth: .infinity, minHeight: 200, alignment: .topLeading)
-            .background(Color.black.opacity(0.24))
+            .background(screenTheme.surfaces.canvas.swiftUIColor.opacity(0.24))
             .overlay {
                 Rectangle()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(screenTheme.actions.secondaryBoundary.swiftUIColor.opacity(0.58), lineWidth: 1)
             }
         }
 
@@ -337,23 +339,42 @@ private struct DropdownSectionButtonStyle: ButtonStyle {
 
     @Environment(\.isFocused)
     private var isFocused
+    @Environment(\.screenTheme)
+    private var screenTheme
 
     let isSelected: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isSelected ? Color.black : Color.white)
+        let fillColor = isSelected
+            ? screenTheme.actions.primaryFill.swiftUIColor
+            : screenTheme.surfaces.elevatedHigh.swiftUIColor
+        let foregroundColor = isSelected
+            ? screenTheme.actions.primaryForeground.swiftUIColor
+            : screenTheme.foregrounds.primary.swiftUIColor
+        let keylineColor = isFocused
+            ? isSelected
+            ? screenTheme.focus.keylineOnPrimaryFill.swiftUIColor
+            : screenTheme.focus.keylineOnSurface.swiftUIColor
+            : isSelected
+            ? screenTheme.selection.indicator.swiftUIColor
+            : screenTheme.actions.secondaryBoundary.swiftUIColor
+
+        return configuration.label
+            .foregroundStyle(foregroundColor)
             .background {
                 Rectangle()
-                    .fill(isSelected ? Color.white : Color.white.opacity(0.08))
+                    .fill(fillColor)
                     .overlay {
                         Rectangle()
-                            .stroke(
-                                Color.white.opacity(isFocused ? 0.88 : (isSelected ? 0.45 : 0.14)),
-                                lineWidth: isFocused ? 3 : 1
-                            )
+                            .stroke(keylineColor, lineWidth: isFocused ? 3 : 1)
                     }
             }
+            .shadow(
+                color: isFocused
+                    ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity)
+                    : .clear,
+                radius: isFocused ? screenTheme.focus.glowRadius : 0
+            )
             .scaleEffect(configuration.isPressed ? 0.98 : (isFocused ? 1.025 : 1))
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)

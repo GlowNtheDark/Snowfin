@@ -109,15 +109,15 @@ private struct OverlayToastContent: View {
         .frame(minHeight: minHeight)
         .backport
         #if os(tvOS)
-            .glassEffect(
-                .regular.interactive(false),
-                in: .rect
-            )
+        .glassEffect(
+            .regular.interactive(false),
+            in: .rect
+        )
         #else
-            .glassEffect(
-                .regular.interactive(!UIDevice.isTV),
-                in: .capsule
-            )
+        .glassEffect(
+            .regular.interactive(!UIDevice.isTV),
+            in: .capsule
+        )
         #endif
     }
 

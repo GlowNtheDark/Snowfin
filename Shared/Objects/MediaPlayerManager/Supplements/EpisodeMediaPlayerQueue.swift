@@ -32,6 +32,7 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
 
     let displayTitle: String = L10n.episodes
     let id: String = "EpisodeMediaPlayerQueue"
+    let playbackDiagnosticID: String?
 
     @Published
     var nextItem: MediaPlayerItemProvider? = nil
@@ -51,7 +52,8 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
     private var currentAdjacentEpisodesTask: AnyCancellable?
     let seasonsViewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
 
-    init(episode: BaseItemDto) {
+    init(episode: BaseItemDto, playbackDiagnosticID: String? = nil) {
+        self.playbackDiagnosticID = playbackDiagnosticID
         self.seasonsViewModel = PagingLibraryViewModel(
             library: SeasonViewModelLibrary(
                 parent: BaseItemDto(id: episode.seriesID, name: episode.seriesName)

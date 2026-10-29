@@ -204,6 +204,9 @@ extension VLCMediaPlayerProxy {
                         case .playing:
                             manager.proxy?.isBuffering.value = false
                             manager.setPlaybackRequestStatus(status: .playing)
+                            #if DEBUG
+                            manager.logEpisodePlaybackStarted(backend: "VLC")
+                            #endif
 
                             let tracks = info.subtitleTracks.map { (index: $0.index, title: $0.title) }
                             manager.playbackItem?.getSubtitleIndexes(subtitleTracks: tracks)

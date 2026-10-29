@@ -25,9 +25,10 @@ extension ItemView {
         var episodeRouteOrigin: EpisodeRouteIntent.Origin?
 
         var body: some View {
-            Button {
+            let button = Button {
                 #if os(tvOS)
                 if let episodeRouteItem {
+                    focusCoordinator.focus(ItemView.Component.parent)
                     router.route(to: .resolvedEpisode(
                         item: episodeRouteItem,
                         origin: episodeRouteOrigin
@@ -61,9 +62,20 @@ extension ItemView {
             #else
             .buttonBorderShape(.capsule)
             #endif
-            .buttonStyle(.card)
             #if os(tvOS)
-                .focusable(!isEpisodeRouteFocusPending)
+            // The Button owns focus and Select; a focusable wrapper intercepts them.
+            .disabled(isEpisodeRouteFocusPending)
+            .coordinatedFocus(ItemView.Component.parent, consumesRequestOnAcquisition: true)
+            #endif
+
+            #if os(tvOS)
+            if episodeRouteItem != nil {
+                button.buttonStyle(BasicHoverButtonStyle(scalesOnInteraction: false))
+            } else {
+                button.buttonStyle(.card)
+            }
+            #else
+            button.buttonStyle(.card)
             #endif
         }
 

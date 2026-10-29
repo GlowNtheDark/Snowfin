@@ -60,13 +60,13 @@ extension LetterPickerBar {
             }
             .buttonStyle(.borderless)
             #if os(tvOS)
-                .buttonBorderShape(.roundedRectangle(radius: 0))
+            .buttonBorderShape(.roundedRectangle(radius: 0))
             #else
-                .buttonBorderShape(.roundedRectangle)
+            .buttonBorderShape(.roundedRectangle)
             #endif
-                .focused($isFocused)
-                .scaleEffect(isFocused ? 1.2 : 1)
-                .animation(.easeInOut(duration: 0.15), value: isFocused)
+            .focused($isFocused)
+            .scaleEffect(isFocused ? 1.2 : 1)
+            .animation(.easeInOut(duration: 0.15), value: isFocused)
         }
     }
 }

@@ -95,6 +95,11 @@ private struct BaseItemDtoLibraryGridElement: View {
     @Environment(\.episodeRouteOriginContext)
     private var episodeRouteOriginContext
 
+    #if os(tvOS)
+    @Environment(\.episodeRouteTabID)
+    private var episodeRouteTabID
+    #endif
+
     let item: BaseItemDto
     let libraryStyle: LibraryStyle
 
@@ -111,7 +116,8 @@ private struct BaseItemDtoLibraryGridElement: View {
         return episodeRouteOriginContext.origin(groupID: "", itemID: itemID)
     }
 
-    var body: some View {
+    @ViewBuilder
+    private var posterContent: some View {
         if let itemState = itemStateStore?.state(for: item) {
             ItemStatePoster(
                 itemState: itemState,
@@ -128,6 +134,20 @@ private struct BaseItemDtoLibraryGridElement: View {
         } else {
             poster(for: item)
         }
+    }
+
+    @ViewBuilder
+    var body: some View {
+        #if os(tvOS)
+        // MainTabView's Movies and TV Shows tabs are the only `library-` tab IDs.
+        if episodeRouteTabID?.hasPrefix("library-") == true {
+            posterContent.withViewContext(.isMoviesTVLibrary)
+        } else {
+            posterContent
+        }
+        #else
+        posterContent
+        #endif
     }
 
     private func poster(for item: BaseItemDto) -> some View {
@@ -227,7 +247,7 @@ private struct BaseItemDtoLibraryListElement: View {
         }
         .matchedTransitionSource(id: "item", in: namespace)
         #if os(tvOS)
-            .focusedValue(\.focusedPoster, AnyPoster(item))
+        .focusedValue(\.focusedPoster, AnyPoster(item))
         #endif
     }
 

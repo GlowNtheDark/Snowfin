@@ -56,9 +56,25 @@ struct NavigationInjectionView: View {
             get: { isTabContentActive ? presentation.wrappedValue : nil },
             set: { value in
                 guard isTabContentActive else { return }
+                #if DEBUG
+                if value == nil, let currentRoute = presentation.wrappedValue {
+                    EpisodePlaybackDiagnostics.logEpisodesBack(
+                        currentRoute.route.playbackDiagnosticID,
+                        event: "outer-presentation-binding-set-nil coordinator=\(coordinator.debugDiagnosticID) route=\(currentRoute.route.id) canDismiss=\(canDismiss) isPresentationInteractive=\(isPresentationInteractive)"
+                    )
+                }
+                #endif
                 guard value != nil || canDismiss else { return }
+                #if DEBUG
+                if value == nil, let currentRoute = presentation.wrappedValue {
+                    EpisodePlaybackDiagnostics.log(
+                        currentRoute.route.playbackDiagnosticID,
+                        event: "presentation-binding-cleanup coordinator=\(coordinator.debugDiagnosticID) route=\(currentRoute.route.id)"
+                    )
+                }
+                #endif
                 if value == nil {
-                    presentation.wrappedValue?.route.onWillDismiss?()
+                    presentation.wrappedValue?.notifyWillDismiss()
                 }
                 presentation.wrappedValue = value
             }
@@ -81,66 +97,73 @@ struct NavigationInjectionView: View {
         )
         .environmentObject(coordinator)
         #if os(tvOS)
-            .fullScreenCover(
-                item: activePresentation($coordinator.presentedSheet)
-            ) {
-                guard isTabContentActive else { return }
-                coordinator.presentedSheet = nil
-            } content: { presentedRoute in
-                NavigationInjectionView(coordinator: presentedRoute.coordinator) {
-                    presentedRoute.route.destination
-                }
-                .background(.regularMaterial)
+        .fullScreenCover(
+            item: activePresentation($coordinator.presentedSheet)
+        ) {
+            guard isTabContentActive else { return }
+            coordinator.presentedSheet = nil
+        } content: { presentedRoute in
+            NavigationInjectionView(coordinator: presentedRoute.coordinator) {
+                presentedRoute.route.destination
             }
-            .fullScreenCover(
-                item: activePresentation(
-                    $coordinator.presentedFullScreen,
-                    canDismiss: isPresentationInteractive
-                )
-            ) { presentedRoute in
-                NavigationInjectionView(coordinator: presentedRoute.coordinator) {
-                    presentedRoute.route.destination
-                        .environment(\.isCurrentPresentationDismissible, $isPresentationInteractive)
-                }
-            }
-            .interactiveDismissDisabled(!isPresentationInteractive)
-        #else
-            .sheet(
-                item: $coordinator.presentedSheet
-            ) {
-                coordinator.presentedSheet = nil
-            } content: { presentedRoute in
-                NavigationInjectionView(coordinator: presentedRoute.coordinator) {
-                    presentedRoute.route.destination
-                }
-            }
-            .presentation(
+            .background(.regularMaterial)
+        }
+        .fullScreenCover(
+            item: activePresentation(
                 $coordinator.presentedFullScreen,
-                transition: .zoomIfAvailable(
-                    .init(
-                        dimmingVisualEffect: .systemThickMaterialDark,
-                        prefersScalePresentingView: false
-                    ),
-                    options: .init(
-                        isInteractive: isPresentationInteractive,
-                        preferredPresentationSafeAreaInsets: .zero,
-                    ),
-                    otherwise: .slide(.init(edge: .bottom), options: .init(isInteractive: isPresentationInteractive))
-                )
-            ) { presentedRouteBinding, _ in
-                let vc = UIPreferencesHostingController {
-                    NavigationInjectionView(coordinator: presentedRouteBinding.wrappedValue.coordinator) {
-                        presentedRouteBinding.wrappedValue.route.destination
-                            .onPreferenceChange(PresentationControllerShouldDismissPreferenceKey.self) { newValue in
-                                isPresentationInteractive = newValue
-                            }
-                    }
-                }
-
-                vc.view.backgroundColor = .black
-
-                return vc
+                canDismiss: isPresentationInteractive
+            )
+        ) {
+            guard isTabContentActive else { return }
+            coordinator.fullScreenPresentationDidDismiss()
+        } content: { presentedRoute in
+            NavigationInjectionView(coordinator: presentedRoute.coordinator) {
+                presentedRoute.route.destination
+                    .environment(\.isCurrentPresentationDismissible, $isPresentationInteractive)
             }
+            .onDisappear {
+                guard isTabContentActive else { return }
+                coordinator.fullScreenPresentationDidDisappear(presentedRoute)
+            }
+        }
+        .interactiveDismissDisabled(!isPresentationInteractive)
+        #else
+        .sheet(
+            item: $coordinator.presentedSheet
+        ) {
+            coordinator.presentedSheet = nil
+        } content: { presentedRoute in
+            NavigationInjectionView(coordinator: presentedRoute.coordinator) {
+                presentedRoute.route.destination
+            }
+        }
+        .presentation(
+            $coordinator.presentedFullScreen,
+            transition: .zoomIfAvailable(
+                .init(
+                    dimmingVisualEffect: .systemThickMaterialDark,
+                    prefersScalePresentingView: false
+                ),
+                options: .init(
+                    isInteractive: isPresentationInteractive,
+                    preferredPresentationSafeAreaInsets: .zero,
+                ),
+                otherwise: .slide(.init(edge: .bottom), options: .init(isInteractive: isPresentationInteractive))
+            )
+        ) { presentedRouteBinding, _ in
+            let vc = UIPreferencesHostingController {
+                NavigationInjectionView(coordinator: presentedRouteBinding.wrappedValue.coordinator) {
+                    presentedRouteBinding.wrappedValue.route.destination
+                        .onPreferenceChange(PresentationControllerShouldDismissPreferenceKey.self) { newValue in
+                            isPresentationInteractive = newValue
+                        }
+                }
+            }
+
+            vc.view.backgroundColor = .black
+
+            return vc
+        }
         #endif
     }
 }

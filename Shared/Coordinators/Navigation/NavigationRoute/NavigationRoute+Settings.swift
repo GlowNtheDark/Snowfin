@@ -264,6 +264,20 @@ extension NavigationRoute {
         }
     }
 
+    #if os(tvOS)
+    static var themeSettings: NavigationRoute {
+        NavigationRoute(id: "themeSettings") {
+            ThemeSettingsView()
+        }
+    }
+
+    static var customThemeEditor: NavigationRoute {
+        NavigationRoute(id: "customThemeEditor") {
+            CustomThemeEditorView()
+        }
+    }
+    #endif
+
     static var videoPlayerSettings: NavigationRoute {
         NavigationRoute(
             id: "videoPlayerSettings"

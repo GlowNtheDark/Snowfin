@@ -40,17 +40,25 @@ final class RootCoordinator: ObservableObject {
         case ready
     }
 
+    @Published
+    private(set) var themePalette = ThemePreference.applicationDefault.palette
+
     private var started = false
     private var accentColorCancellable: AnyCancellable?
+    private var themeIdentifierCancellable: AnyCancellable?
+    private var themeCustomPrimaryColorCancellable: AnyCancellable?
     private var appearanceCancellable: AnyCancellable?
     private var currentSessionCancellable: AnyCancellable?
     private var splashScreenCancellable: AnyCancellable?
+    private var appliedCompatibilityAccent: ThemeColor?
 
     @Injected(\.userSessionManager)
     private var userSessionManager: UserSessionManager
 
     deinit {
         accentColorCancellable?.cancel()
+        themeIdentifierCancellable?.cancel()
+        themeCustomPrimaryColorCancellable?.cancel()
         appearanceCancellable?.cancel()
         currentSessionCancellable?.cancel()
         splashScreenCancellable?.cancel()
@@ -91,18 +99,34 @@ final class RootCoordinator: ObservableObject {
 
     private func setUserDefaultsObservation() {
         accentColorCancellable?.cancel()
+        themeIdentifierCancellable?.cancel()
+        themeCustomPrimaryColorCancellable?.cancel()
         appearanceCancellable?.cancel()
         splashScreenCancellable?.cancel()
 
-        #if os(tvOS)
-        migrateLegacyAccentColorIfNeeded()
-        #endif
+        applyUserThemePreference()
+
+        themeIdentifierCancellable = Defaults.publisher(.userThemeIdentifier)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.applyUserThemePreference()
+                }
+            }
+
+        themeCustomPrimaryColorCancellable = Defaults.publisher(.userThemeCustomPrimaryColor)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.applyUserThemePreference()
+                }
+            }
 
         accentColorCancellable = Task {
-            applyAccentColor(Defaults[.userAccentColor])
+            var lastObservedAccent = Defaults[.userAccentColor]
 
             for await newValue in Defaults.updates(.userAccentColor) {
-                applyAccentColor(newValue)
+                guard ThemeColor(newValue) != ThemeColor(lastObservedAccent) else { continue }
+                lastObservedAccent = newValue
+                applyLegacyAccentEdit(newValue)
             }
         }
         .asAnyCancellable()
@@ -119,11 +143,16 @@ final class RootCoordinator: ObservableObject {
 
     private func setAppDefaultsObservation() {
         accentColorCancellable?.cancel()
+        themeIdentifierCancellable?.cancel()
+        themeCustomPrimaryColorCancellable?.cancel()
         appearanceCancellable?.cancel()
         splashScreenCancellable?.cancel()
 
         accentColorCancellable = Task {
-            applyAccentColor(.applicationDefaultAccent)
+            applyTheme(
+                .applicationDefault,
+                compatibilityAccent: .applicationDefaultAccent
+            )
         }
         .asAnyCancellable()
 
@@ -148,6 +177,10 @@ final class RootCoordinator: ObservableObject {
 
     @MainActor
     private func applyAccentColor(_ color: Color) {
+        let currentAccent = ThemeColor(color)
+        guard appliedCompatibilityAccent != currentAccent else { return }
+
+        appliedCompatibilityAccent = currentAccent
         Defaults[.accentColor] = color
 
         #if os(iOS)
@@ -155,13 +188,78 @@ final class RootCoordinator: ObservableObject {
         #endif
     }
 
-    #if os(tvOS)
-    private func migrateLegacyAccentColorIfNeeded() {
-        guard Defaults[.userAccentColor].isLegacyJellyfinPurple else { return }
-
-        Defaults[.userAccentColor] = .snowfinIceBlue
+    private func applyUserThemePreference() {
+        let preference = loadUserThemePreference()
+        let compatibilityAccent = compatibilityAccentColor(for: preference)
+        applyTheme(preference, compatibilityAccent: compatibilityAccent)
     }
-    #endif
+
+    private func applyTheme(_ preference: ThemePreference, compatibilityAccent: Color) {
+        let palette = preference.palette
+        if themePalette != palette {
+            themePalette = palette
+        }
+
+        applyAccentColor(compatibilityAccent)
+    }
+
+    private func loadUserThemePreference() -> ThemePreference {
+        let identifierValue = Defaults[.userThemeIdentifier]
+        let migrationVersion = Defaults[.userThemePreferenceMigrationVersion]
+        let customPrimaryColor = Defaults[.userThemeCustomPrimaryColor]
+        let existingIdentifier = ThemeIdentifier(rawValue: identifierValue)
+        let existingPreference = existingIdentifier.map { identifier in
+            ThemePreference(
+                identifier: identifier,
+                customPrimary: identifier == .custom ? ThemeColor(customPrimaryColor) : nil
+            )
+        }
+        let legacyAccent = Defaults[.userAccentColor]
+        let preference = ThemePreferenceMigration.resolve(
+            existing: existingPreference,
+            migrationVersion: migrationVersion,
+            legacyAccent: ThemeColor(legacyAccent)
+        )
+
+        if existingPreference != nil {
+            if migrationVersion < ThemePreferenceMigration.currentVersion {
+                Defaults[.userThemePreferenceMigrationVersion] = ThemePreferenceMigration.currentVersion
+            }
+            return preference
+        }
+
+        guard migrationVersion < ThemePreferenceMigration.currentVersion else {
+            return preference
+        }
+
+        // Save the raw Color before the identifier so an interrupted migration can
+        // safely retry without replacing a custom color with the key's default.
+        if preference.identifier == .custom {
+            Defaults[.userThemeCustomPrimaryColor] = legacyAccent
+        }
+        Defaults[.userThemeIdentifier] = preference.identifier.rawValue
+        Defaults[.userThemePreferenceMigrationVersion] = ThemePreferenceMigration.currentVersion
+
+        return preference
+    }
+
+    private func compatibilityAccentColor(for preference: ThemePreference) -> Color {
+        if preference.identifier == .custom {
+            Defaults[.userThemeCustomPrimaryColor]
+        } else {
+            preference.compatibilityAccent.swiftUIColor
+        }
+    }
+
+    private func applyLegacyAccentEdit(_ color: Color) {
+        let preference = loadUserThemePreference()
+        guard ThemeColor(color) != preference.compatibilityAccent else { return }
+
+        Defaults[.userThemeCustomPrimaryColor] = color
+        Defaults[.userThemeIdentifier] = ThemeIdentifier.custom.rawValue
+        Defaults[.userThemePreferenceMigrationVersion] = ThemePreferenceMigration.currentVersion
+        applyUserThemePreference()
+    }
 
     @MainActor
     private func applyAppearance(_ appearance: AppAppearance) {

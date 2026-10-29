@@ -1258,6 +1258,8 @@ internal enum L10n {
   internal static let previousItem = L10n.tr("Localizable", "previousItem", fallback: "Previous item")
   /// Primary
   internal static let primary = L10n.tr("Localizable", "primary", fallback: "Primary")
+  /// Primary color
+  internal static let primaryColor = L10n.tr("Localizable", "primaryColor", fallback: "Primary color")
   /// The main cover image or poster for this item. This is the most prominent image shown across the app, including in libraries, search results, and detail pages.
   internal static let primaryImageDescription = L10n.tr("Localizable", "primaryImageDescription", fallback: "The main cover image or poster for this item. This is the most prominent image shown across the app, including in libraries, search results, and detail pages.")
   /// Producer
@@ -1476,6 +1478,8 @@ internal enum L10n {
   internal static let seeMore = L10n.tr("Localizable", "seeMore", fallback: "See more")
   /// Select all
   internal static let selectAll = L10n.tr("Localizable", "selectAll", fallback: "Select all")
+  /// Selected
+  internal static let selected = L10n.tr("Localizable", "selected", fallback: "Selected")
   /// Select image
   internal static let selectImage = L10n.tr("Localizable", "selectImage", fallback: "Select image")
   /// Select server
@@ -1686,6 +1690,12 @@ internal enum L10n {
   internal static let test = L10n.tr("Localizable", "test", fallback: "Test")
   /// Test size
   internal static let testSize = L10n.tr("Localizable", "testSize", fallback: "Test size")
+  /// Theme
+  internal static let theme = L10n.tr("Localizable", "theme", fallback: "Theme")
+  /// Choose a primary color. Screen derives readable colors for buttons and focus.
+  internal static let themeCustomDescription = L10n.tr("Localizable", "themeCustomDescription", fallback: "Choose a primary color. Screen derives readable colors for buttons and focus.")
+  /// Choose a curated palette or create a custom theme.
+  internal static let themeSelectionDescription = L10n.tr("Localizable", "themeSelectionDescription", fallback: "Choose a curated palette or create a custom theme.")
   /// Theme song
   internal static let themeSong = L10n.tr("Localizable", "themeSong", fallback: "Theme song")
   /// Theme video

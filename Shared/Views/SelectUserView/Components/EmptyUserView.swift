@@ -51,8 +51,8 @@ extension SelectUserView {
             .foregroundStyle(.primary, .secondary)
             .buttonBorderShape(.circle)
             #if os(tvOS)
-                .buttonStyle(.borderless)
-                .focused(focusTarget, equals: .addUser)
+            .buttonStyle(.borderless)
+            .focused(focusTarget, equals: .addUser)
             #endif
         }
 

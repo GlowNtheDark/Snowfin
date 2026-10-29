@@ -23,6 +23,10 @@ struct ViewContext: OptionSet {
     static let isInParent = Self(rawValue: 1 << 4)
     static let isInResume = Self(rawValue: 1 << 5)
     static let withConstrainedSize = Self(rawValue: 1 << 6)
+    static let isMovieDetails = Self(rawValue: 1 << 7)
+    static let isSearchResults = Self(rawValue: 1 << 8)
+    static let isMoviesTVLibrary = Self(rawValue: 1 << 9)
+    static let isPlaybackOverlay = Self(rawValue: 1 << 10)
 }
 
 extension EnvironmentValues {

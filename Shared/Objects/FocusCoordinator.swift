@@ -794,18 +794,18 @@ private struct CoordinatedFocusModifier: ViewModifier {
                     consumeRequestIfNeeded()
                 }
             }
-        #if os(tvOS)
+            #if os(tvOS)
             .onReceive(coordinator.$request) { request in
                 apply(request)
             }
-        #else
+            #else
             .onChange(of: coordinator.request) {
                 apply(coordinator.request)
             }
-        #endif
+            #endif
             .onDisappear {
-                    coordinator.update(id, isFocused: false)
-                }
+                coordinator.update(id, isFocused: false)
+            }
     }
 }
 
@@ -835,18 +835,18 @@ private struct CoordinatedFocusSelectionModifier: ViewModifier {
             .onChange(of: selection.wrappedValue) {
                 coordinator.update(id, isFocused: selection.wrappedValue == id)
             }
-        #if os(tvOS)
+            #if os(tvOS)
             .onReceive(coordinator.$request) { request in
                 apply(request)
             }
-        #else
+            #else
             .onChange(of: coordinator.request) {
                 apply(coordinator.request)
             }
-        #endif
+            #endif
             .onDisappear {
-                    coordinator.update(id, isFocused: false)
-                }
+                coordinator.update(id, isFocused: false)
+            }
     }
 }
 

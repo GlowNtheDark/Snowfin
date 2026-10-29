@@ -6,7 +6,6 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
 import SwiftUI
 
 extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerView {
@@ -14,8 +13,8 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
     #if os(tvOS)
     struct SupplementTitleButtonStyle: ButtonStyle {
 
-        @Default(.accentColor)
-        private var accentColor
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         @Environment(\.isFocused)
         private var isFocused
@@ -42,15 +41,20 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
 
         private func glassBody(_ configuration: Configuration) -> some View {
             baseLabel(configuration)
-                .foregroundStyle(isFocused || isSelected ? accentColor.overlayColor : .white)
+                .foregroundStyle(foregroundColor)
                 .glassEffect(
                     .regular
-                        .tint(isFocused || isSelected ? accentColor : nil)
+                        .tint(isFocused ? screenTheme.actions.primaryFill.swiftUIColor : isSelected ? screenTheme.selection.background
+                            .swiftUIColor : nil)
                         .interactive(isFocused),
                     in: Capsule()
                 )
+                .overlay {
+                    Capsule()
+                        .stroke(focusOrSelectionKeyline, lineWidth: isFocused ? 2 : isSelected ? 1 : 0)
+                }
                 .scaleEffect(isFocused ? 1.06 : 1)
-                .shadow(color: isFocused ? accentColor.opacity(0.3) : .clear, radius: isFocused ? 14 : 0)
+                .shadow(color: focusGlow, radius: isFocused ? min(screenTheme.focus.glowRadius, 14) : 0)
                 .opacity(inactiveSelectedOpacity)
                 .animation(.easeInOut(duration: 0.1), value: isFocused)
                 .animation(.easeInOut(duration: 0.1), value: isSelected)
@@ -58,14 +62,14 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
 
         private func legacyBody(_ configuration: Configuration) -> some View {
             baseLabel(configuration)
-                .foregroundStyle(isFocused || isSelected ? accentColor.overlayColor : .white)
+                .foregroundStyle(foregroundColor)
                 .background {
                     if isFocused {
                         Capsule()
-                            .fill(accentColor)
+                            .fill(screenTheme.actions.primaryFill.swiftUIColor)
                     } else if isSelected {
                         Capsule()
-                            .fill(accentColor.opacity(0.34))
+                            .fill(screenTheme.selection.background.swiftUIColor)
                     } else {
                         Capsule()
                             .fill(Material.ultraThinMaterial)
@@ -77,15 +81,41 @@ extension VideoPlayer.UIVideoPlayerContainerViewController.SupplementContainerVi
                 }
                 .overlay {
                     Capsule()
-                        .stroke(isFocused ? accentColor.opacity(0.72) : .white.opacity(0.16), lineWidth: 1)
+                        .stroke(focusOrSelectionKeyline, lineWidth: 1)
                 }
                 .clipShape(Capsule())
                 .subtleShadow()
                 .opacity(inactiveSelectedOpacity)
                 .scaleEffect(isFocused ? 1.06 : 1)
-                .shadow(color: isFocused ? accentColor.opacity(0.3) : .clear, radius: isFocused ? 14 : 0)
+                .shadow(color: focusGlow, radius: isFocused ? min(screenTheme.focus.glowRadius, 14) : 0)
                 .animation(.easeInOut(duration: 0.1), value: isFocused)
                 .animation(.easeInOut(duration: 0.1), value: isSelected)
+        }
+
+        private var foregroundColor: Color {
+            if isFocused {
+                screenTheme.actions.primaryForeground.swiftUIColor
+            } else if isSelected {
+                screenTheme.selection.foreground.swiftUIColor
+            } else {
+                .white
+            }
+        }
+
+        private var focusOrSelectionKeyline: Color {
+            if isFocused {
+                screenTheme.focus.keylineOnPrimaryFill.swiftUIColor
+            } else if isSelected {
+                screenTheme.selection.indicator.swiftUIColor
+            } else {
+                .white.opacity(0.16)
+            }
+        }
+
+        private var focusGlow: Color {
+            isFocused
+                ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity)
+                : .clear
         }
 
         private var inactiveSelectedOpacity: Double {

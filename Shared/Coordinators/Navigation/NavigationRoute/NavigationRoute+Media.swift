@@ -79,6 +79,7 @@ extension NavigationRoute {
         return NavigationRoute(
             id: "videoPlayer",
             style: .fullscreen,
+            playbackDiagnosticID: manager.episodePlaybackDiagnosticID,
             onWillDismiss: onWillDismiss
         ) {
             VideoPlayerViewShim(manager: manager)

@@ -114,16 +114,16 @@ final class ContentGroupViewModel<Provider: ContentGroupProvider>: ViewModel {
             .eraseToAnyPublisher()
 
         metadataChanges
-        #if os(tvOS)
-        .receive(on: DispatchQueue.main)
-        #endif
-        .sink { [weak self] _ in
-            self?.lastRefreshSignalDate = Date.now
             #if os(tvOS)
-            self?.invalidateHome()
+                .receive(on: DispatchQueue.main)
             #endif
-        }
-        .store(in: &cancellables)
+            .sink { [weak self] _ in
+                self?.lastRefreshSignalDate = Date.now
+                #if os(tvOS)
+                self?.invalidateHome()
+                #endif
+            }
+            .store(in: &cancellables)
 
         #if os(tvOS)
         if provider is DefaultContentGroupProvider {

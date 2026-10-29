@@ -7,7 +7,6 @@
 //
 
 import Combine
-import Defaults
 import JellyfinAPI
 import SwiftUI
 
@@ -25,11 +24,11 @@ extension VideoPlayer.PlaybackControls {
         @EnvironmentObject
         private var manager: MediaPlayerManager
 
+        @Environment(\.screenTheme)
+        private var screenTheme
+
         @ObservedObject
         private var seasonsViewModel: PagingLibraryViewModel<SeasonViewModelLibrary>
-
-        @Default(.accentColor)
-        private var accentColor
 
         @FocusState
         private var focusedTarget: EpisodesFocusTarget?
@@ -108,7 +107,7 @@ extension VideoPlayer.PlaybackControls {
                             .fill(.ultraThinMaterial)
                             .overlay {
                                 Rectangle()
-                                    .fill(Color.snowfinDeepNavy.opacity(0.88))
+                                    .fill(screenTheme.surfaces.canvas.swiftUIColor.opacity(0.88))
                             }
                     }
                     .overlay {
@@ -125,8 +124,22 @@ extension VideoPlayer.PlaybackControls {
                 priority: .userInitiated
             )
             .onAppear {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "episodes-surface-appear isPresentingPlaybackEpisodes=\(containerState.isPresentingPlaybackEpisodes)"
+                )
+                #endif
                 isRestoringCurrentEpisodeFocus = true
                 restoreCurrentSeason()
+            }
+            .onDisappear {
+                #if DEBUG
+                EpisodePlaybackDiagnostics.logEpisodesBack(
+                    manager.episodePlaybackDiagnosticID,
+                    event: "episodes-surface-disappear isPresentingPlaybackEpisodes=\(containerState.isPresentingPlaybackEpisodes)"
+                )
+                #endif
             }
             .onReceive(seasonsViewModel.$elements) { _ in
                 if selectedSeasonID == nil {
@@ -208,13 +221,15 @@ extension VideoPlayer.PlaybackControls {
                             .fill(.ultraThinMaterial)
                             .overlay {
                                 Rectangle()
-                                    .fill(Color.snowfinDeepNavy.opacity(isSelected ? 0.42 : 0.7))
+                                    .fill(screenTheme.surfaces.canvas.swiftUIColor.opacity(isSelected ? 0.42 : 0.7))
                             }
                     }
                     .overlay {
                         Rectangle()
                             .stroke(
-                                isSelected ? accentColor.opacity(0.92) : Color.white.opacity(0.14),
+                                isSelected
+                                    ? screenTheme.selection.indicator.swiftUIColor
+                                    : screenTheme.actions.secondaryBoundary.swiftUIColor,
                                 lineWidth: isSelected ? 2 : 1
                             )
                     }
@@ -226,7 +241,7 @@ extension VideoPlayer.PlaybackControls {
         private var episodesContent: some View {
             if seasonsViewModel.elements.isEmpty {
                 ProgressView()
-                    .tint(accentColor)
+                    .tint(screenTheme.actions.primaryFill.swiftUIColor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let selectedSeason {
                 EpisodesShelf(
@@ -356,8 +371,8 @@ extension VideoPlayer.PlaybackControls {
         @EnvironmentObject
         private var manager: MediaPlayerManager
 
-        @Default(.accentColor)
-        private var accentColor
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         @ObservedObject
         var season: PagingLibraryViewModel<EpisodeLibrary>
@@ -541,7 +556,7 @@ extension VideoPlayer.PlaybackControls {
                     }
                     .aspectRatio(16 / 9, contentMode: .fill)
                     .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
-                    .background(Color.snowfinDeepNavy)
+                    .background(screenTheme.surfaces.canvas.swiftUIColor)
                     .clipped()
 
                     if isCurrent {
@@ -552,16 +567,21 @@ extension VideoPlayer.PlaybackControls {
                             Image(systemName: "play.fill")
                         }
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(accentColor.overlayColor)
+                        .foregroundStyle(screenTheme.actions.primaryForeground.swiftUIColor)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
-                        .background(Rectangle().fill(accentColor))
+                        .background(Rectangle().fill(screenTheme.selection.indicator.swiftUIColor))
                     }
                 }
                 .frame(width: CardMetrics.artworkWidth, height: CardMetrics.artworkHeight)
                 .overlay {
                     Rectangle()
-                        .stroke(isCurrent ? accentColor : Color.white.opacity(0.16), lineWidth: isCurrent ? 3 : 1)
+                        .stroke(
+                            isCurrent
+                                ? screenTheme.selection.indicator.swiftUIColor
+                                : screenTheme.actions.secondaryBoundary.swiftUIColor,
+                            lineWidth: isCurrent ? 3 : 1
+                        )
                 }
 
                 Text(episode.seasonEpisodeLabel ?? " ")
@@ -598,10 +618,10 @@ extension VideoPlayer.PlaybackControls {
 
     private struct EpisodesButtonStyle: ButtonStyle {
 
-        @Default(.accentColor)
-        private var accentColor
         @Environment(\.isFocused)
         private var isFocused
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         let isSelected: Bool
 
@@ -613,19 +633,25 @@ extension VideoPlayer.PlaybackControls {
                         .fill(.ultraThinMaterial)
                         .overlay {
                             Rectangle()
-                                .fill(Color.snowfinDeepNavy.opacity(isSelected ? 0.42 : 0.7))
+                                .fill(screenTheme.surfaces.canvas.swiftUIColor.opacity(isSelected ? 0.42 : 0.7))
                         }
                 }
                 .overlay {
                     Rectangle()
                         .stroke(
-                            isFocused ? accentColor : isSelected ? accentColor.opacity(0.92) : Color.white.opacity(0.14),
+                            isFocused
+                                ? screenTheme.focus.keylineOnSurface.swiftUIColor
+                                : isSelected
+                                ? screenTheme.selection.indicator.swiftUIColor
+                                : screenTheme.actions.secondaryBoundary.swiftUIColor,
                             lineWidth: isFocused ? 3 : isSelected ? 2 : 1
                         )
                 }
                 .shadow(
-                    color: isFocused ? accentColor.opacity(0.24) : .clear,
-                    radius: isFocused ? 14 : 0
+                    color: isFocused
+                        ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity * 0.85)
+                        : .clear,
+                    radius: isFocused ? min(screenTheme.focus.glowRadius, 14) : 0
                 )
                 .scaleEffect(configuration.isPressed ? 0.98 : isFocused ? 1.035 : 1)
                 .animation(.easeOut(duration: 0.14), value: isFocused)

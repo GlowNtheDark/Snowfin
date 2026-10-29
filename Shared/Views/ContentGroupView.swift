@@ -130,12 +130,12 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
             }
             #else
             .onReceive(tabItemSelected) { event in
-                    if event.isRepeat, event.isRoot {
-                        withAnimation {
-                            proxy.scrollTo("top", anchor: .top)
-                        }
+                if event.isRepeat, event.isRoot {
+                    withAnimation {
+                        proxy.scrollTo("top", anchor: .top)
                     }
                 }
+            }
             #endif
         }
     }
@@ -164,75 +164,75 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
         .animation(.linear(duration: 0.2), value: viewModel.state)
         .animation(.linear(duration: 0.2), value: viewModel.background.states)
         #if os(tvOS)
-            .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
-            .environment(
-                \.suppressesHomeDefaultFocus,
-                isHome && (focusCoordinator.isRestoringSidebarHomeFocus || focusCoordinator.didRestoreSidebarHomeFocus)
-            )
-            .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
-            .environment(\.itemStateStore, currentUserSession?.itemStateStore)
-            .onAppear {
-                if isHome, let navigationCoordinator = router.router.navigationCoordinator {
-                    registerHomeFocus?(focusCoordinator, navigationCoordinator)
+        .environment(\.homeTileCoordinator, isHome ? focusCoordinator : nil)
+        .environment(
+            \.suppressesHomeDefaultFocus,
+            isHome && (focusCoordinator.isRestoringSidebarHomeFocus || focusCoordinator.didRestoreSidebarHomeFocus)
+        )
+        .environment(\.homeFocusRevision, focusCoordinator.homeRevision)
+        .environment(\.itemStateStore, currentUserSession?.itemStateStore)
+        .onAppear {
+            if isHome, let navigationCoordinator = router.router.navigationCoordinator {
+                registerHomeFocus?(focusCoordinator, navigationCoordinator)
+            }
+        }
+        .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) { _ in
+            if isHome {
+                focusCoordinator.homeStopReported()
+                if !isHomeRefreshActive {
+                    focusCoordinator.homeRefreshFinished()
                 }
             }
-            .onReceive(Notifications[.didSendStopReport].publisher.receive(on: DispatchQueue.main)) { _ in
-                if isHome {
-                    focusCoordinator.homeStopReported()
-                    if !isHomeRefreshActive {
-                        focusCoordinator.homeRefreshFinished()
-                    }
+        }
+        .onChange(of: isHomeRefreshActive) { wasRefreshing, refreshing in
+            if isHome, wasRefreshing, !refreshing {
+                if viewModel.groups.isEmpty {
+                    focusCoordinator.cancelHomeReturn()
+                } else {
+                    focusCoordinator.homeRefreshFinished()
                 }
             }
-            .onChange(of: isHomeRefreshActive) { wasRefreshing, refreshing in
-                if isHome, wasRefreshing, !refreshing {
-                    if viewModel.groups.isEmpty {
-                        focusCoordinator.cancelHomeReturn()
-                    } else {
-                        focusCoordinator.homeRefreshFinished()
-                    }
-                }
+        }
+        .onChange(of: focusCoordinator.defersHomeRefresh) { _, deferred in
+            if isHome {
+                viewModel.setDefersHomeRefresh(deferred)
             }
-            .onChange(of: focusCoordinator.defersHomeRefresh) { _, deferred in
-                if isHome {
-                    viewModel.setDefersHomeRefresh(deferred)
+        }
+        .onReceive(tabItemSelected) { event in
+            if event.isRepeat, event.isRoot {
+                guard !focusCoordinator.isRestoringSidebarHomeFocus else {
+                    pendingFirstGroupFocus = false
+                    return
                 }
+                pendingFirstGroupFocus = true
             }
-            .onReceive(tabItemSelected) { event in
-                if event.isRepeat, event.isRoot {
-                    guard !focusCoordinator.isRestoringSidebarHomeFocus else {
-                        pendingFirstGroupFocus = false
-                        return
-                    }
-                    pendingFirstGroupFocus = true
-                }
-            }
+        }
         #endif
-            .navigationTitle(viewModel.provider.displayTitle)
+        .navigationTitle(viewModel.provider.displayTitle)
         #if os(iOS)
-            .toolbarTitleDisplayMode(router.isRootOfPath ? .inlineLarge : .inline)
+        .toolbarTitleDisplayMode(router.isRootOfPath ? .inlineLarge : .inline)
         #elseif os(tvOS)
-            .toolbar(router.isRootOfPath ? .hidden : .automatic, for: .navigationBar)
+        .toolbar(router.isRootOfPath ? .hidden : .automatic, for: .navigationBar)
         #endif
-            .onFirstAppear {
-                viewModel.refresh()
-            }
-            .refreshable {
-                viewModel.refresh()
-            }
-            .sinceLastDisappear { interval in
-                viewModel.refreshIfNeeded(sinceLastDisappear: interval)
-            }
-            .onSceneWillEnterForeground {
-                viewModel.refreshIfPendingChanges()
-            }
-            .topBarTrailing {
-                if #unavailable(iOS 26.0) {
-                    if viewModel.background.is(.refreshing) {
-                        ProgressView()
-                    }
+        .onFirstAppear {
+            viewModel.refresh()
+        }
+        .refreshable {
+            viewModel.refresh()
+        }
+        .sinceLastDisappear { interval in
+            viewModel.refreshIfNeeded(sinceLastDisappear: interval)
+        }
+        .onSceneWillEnterForeground {
+            viewModel.refreshIfPendingChanges()
+        }
+        .topBarTrailing {
+            if #unavailable(iOS 26.0) {
+                if viewModel.background.is(.refreshing) {
+                    ProgressView()
                 }
             }
-            .environmentObject(focusCoordinator)
+        }
+        .environmentObject(focusCoordinator)
     }
 }

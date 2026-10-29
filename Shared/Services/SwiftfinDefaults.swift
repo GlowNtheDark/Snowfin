@@ -106,6 +106,22 @@ extension Defaults.Keys {
         UserKey("userAccentColor", default: .applicationDefaultAccent)
     }
 
+    /// The selected semantic theme for the current user.
+    /// An empty value means the legacy accent has not yet been migrated.
+    static var userThemeIdentifier: Key<String> {
+        UserKey("userThemeIdentifier", default: "")
+    }
+
+    /// The original user-selected seed, stored as Color to preserve its exact value.
+    static var userThemeCustomPrimaryColor: Key<Color> {
+        UserKey("userThemeCustomPrimaryColor", default: .applicationDefaultAccent)
+    }
+
+    /// Version of the one-time legacy accent migration for the current user.
+    static var userThemePreferenceMigrationVersion: Key<Int> {
+        UserKey("userThemePreferenceMigrationVersion", default: 0)
+    }
+
     /// The appearance default for user contexts.
     /// /// Only use for `set`, use `appearance` for `get`.
     static var userAppearance: Key<AppAppearance> {

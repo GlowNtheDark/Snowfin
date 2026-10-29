@@ -26,6 +26,10 @@ struct RootView: View {
             }
         }
         .animation(.linear(duration: 0.1), value: rootCoordinator.state)
+        .environment(\.screenTheme, rootCoordinator.themePalette)
+        #if os(tvOS)
+        .tint(rootCoordinator.themePalette.actions.primaryFill.swiftUIColor)
+        #endif
         .task {
             rootCoordinator.start()
         }

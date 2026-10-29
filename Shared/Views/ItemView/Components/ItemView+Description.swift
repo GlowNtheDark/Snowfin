@@ -29,10 +29,10 @@ extension ItemView {
                     if let firstTagline = item.taglines?.first(where: \.isNotEmpty) {
                         Text(firstTagline)
                             .fontWeight(.bold)
-                        #if os(tvOS)
+                            #if os(tvOS)
                             .font(.title3)
                             .foregroundStyle(.white)
-                        #endif
+                            #endif
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
                     }

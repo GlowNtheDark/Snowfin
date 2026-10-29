@@ -12,8 +12,6 @@ import SwiftUI
 
 #if os(tvOS)
 struct SnowfinPlaybackSegmentOverlay: View {
-    private let snowfinIceBlue = Color(red: 46 / 255, green: 168 / 255, blue: 255 / 255)
-
     private enum FocusedAction: Hashable {
         case intro
         case playNext
@@ -25,6 +23,9 @@ struct SnowfinPlaybackSegmentOverlay: View {
 
     @ObservedObject
     var containerState: VideoPlayerContainerState
+
+    @Environment(\.screenTheme)
+    private var screenTheme
 
     @FocusState
     private var focusedAction: FocusedAction?
@@ -54,9 +55,13 @@ struct SnowfinPlaybackSegmentOverlay: View {
                     }
                     .focused($focusedAction, equals: .intro)
                     .buttonStyle(.borderedProminent)
-                    .tint(snowfinIceBlue)
+                    .tint(screenTheme.actions.primaryFill.swiftUIColor)
+                    .foregroundStyle(screenTheme.actions.primaryForeground.swiftUIColor)
                     .controlSize(.large)
-                    .shadow(color: snowfinIceBlue.opacity(0.35), radius: 18)
+                    .shadow(
+                        color: screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity),
+                        radius: CGFloat(screenTheme.focus.glowRadius)
+                    )
                     .padding(80)
 
                 case .nextEpisode, .countdown:
@@ -119,7 +124,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Up Next")
                             .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color.snowfinIceBlue)
+                            .foregroundStyle(screenTheme.player.activeControl.swiftUIColor)
 
                         if let remaining = presentation.remainingSeconds {
                             Text("Next episode in \(remaining)")
@@ -162,6 +167,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                             ) { item, _ in
                                 coordinator.playContinueWatching(item)
                             }
+                            .withViewContext(.isPlaybackOverlay)
                             .environment(\.itemStateStore, currentUserSession?.itemStateStore)
                             // Compensate for the reusable shelf's 60pt content
                             // insets so its tiles align with both card edges.
@@ -286,7 +292,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         if let seriesName = item.seriesName {
                             Text(seriesName)
                                 .font(.title2.weight(.semibold))
-                                .foregroundStyle(Color.snowfinIceBlue)
+                                .foregroundStyle(screenTheme.player.activeControl.swiftUIColor)
                                 .lineLimit(1)
                         }
 
@@ -346,7 +352,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                                 break
                             }
                         }
-                        .buttonStyle(ScreenPlayNextButtonStyle())
+                        .buttonStyle(ScreenPlayNextButtonStyle(isPrimary: false))
 
                         Button {
                             coordinator.playNextEpisode()
@@ -377,7 +383,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                                 break
                             }
                         }
-                        .buttonStyle(ScreenPlayNextButtonStyle())
+                        .buttonStyle(ScreenPlayNextButtonStyle(isPrimary: true))
                     }
                     .frame(width: 240, height: height - 68, alignment: .bottom)
                 }
@@ -405,7 +411,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
 
                     Circle()
                         .trim(from: 0, to: 0.82)
-                        .stroke(Color.snowfinIceBlue, style: .init(lineWidth: 5, lineCap: .square))
+                        .stroke(screenTheme.player.progress.swiftUIColor, style: .init(lineWidth: 5, lineCap: .square))
                         .rotationEffect(.degrees(-90))
 
                     Text("\(remaining)")
@@ -425,20 +431,61 @@ struct SnowfinPlaybackSegmentOverlay: View {
 
 private struct ScreenPlayNextButtonStyle: ButtonStyle {
 
+    let isPrimary: Bool
+
     @Environment(\.isFocused)
     private var isFocused
 
+    @Environment(\.isEnabled)
+    private var isEnabled
+
+    @Environment(\.screenTheme)
+    private var screenTheme
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color.white)
+        let fill: ThemeColor
+        let foreground: ThemeColor
+
+        if !isEnabled {
+            fill = isPrimary ? screenTheme.actions.primaryDisabledFill : screenTheme.actions.secondaryDisabledFill
+            foreground = isPrimary ? screenTheme.actions.primaryDisabledForeground : screenTheme.actions.secondaryDisabledForeground
+        } else if configuration.isPressed, isPrimary {
+            fill = screenTheme.actions.primaryPressedFill
+            foreground = screenTheme.actions.primaryPressedForeground
+        } else if configuration.isPressed {
+            fill = screenTheme.actions.secondaryPressedFill
+            foreground = screenTheme.actions.secondaryForeground
+        } else if isPrimary {
+            fill = screenTheme.actions.primaryFill
+            foreground = screenTheme.actions.primaryForeground
+        } else {
+            fill = screenTheme.actions.secondaryFill
+            foreground = screenTheme.actions.secondaryForeground
+        }
+
+        let keyline: ThemeColor? = {
+            guard isEnabled, isFocused else {
+                return isEnabled && !isPrimary ? screenTheme.actions.secondaryBoundary : nil
+            }
+            return isPrimary ? screenTheme.focus.keylineOnPrimaryFill : screenTheme.focus.keylineOnSurface
+        }()
+
+        return configuration.label
+            .foregroundStyle(foreground.swiftUIColor)
             .background {
                 Rectangle()
-                    .fill(Color(white: isFocused ? 0.18 : 0.12))
+                    .fill(fill.swiftUIColor)
                     .overlay {
                         Rectangle()
-                            .stroke(Color.white.opacity(isFocused ? 0.7 : 0.15), lineWidth: 2)
+                            .stroke(keyline?.swiftUIColor ?? .clear, lineWidth: 2)
                     }
             }
+            .shadow(
+                color: isEnabled && isFocused
+                    ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity)
+                    : .clear,
+                radius: CGFloat(screenTheme.focus.glowRadius)
+            )
             .scaleEffect(configuration.isPressed ? 0.98 : (isFocused ? 1.04 : 1))
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)

@@ -16,6 +16,7 @@ struct ItemView: View {
 
     enum Component {
         static let header = "itemView-header"
+        static let parent = "itemView-parent"
         static let play = "itemView-play"
         static let playFromBeginning = "itemView-play-from-beginning"
     }
@@ -32,6 +33,11 @@ struct ItemView: View {
     private var provider: ItemContentGroupProvider
     @StateObject
     private var viewModel: ContentGroupViewModel<ItemContentGroupProvider>
+
+    #if os(tvOS)
+    @Environment(\.screenTheme)
+    private var screenTheme
+    #endif
 
     init(provider: ItemContentGroupProvider) {
         self._provider = StateObject(wrappedValue: provider)
@@ -116,16 +122,29 @@ struct ItemView: View {
         .navigationTitle(provider.item.displayTitle)
     }
 
+    @ViewBuilder
+    private var themedContent: some View {
+        #if os(tvOS)
+        if provider.item.type == .movie {
+            content.withViewContext(.isMovieDetails)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+
     var body: some View {
         ZStack {
             #if os(tvOS)
-            Color.snowfinDeepNavy
+            (provider.item.type == .movie ? screenTheme.surfaces.canvas.swiftUIColor : .snowfinDeepNavy)
                 .ignoresSafeArea()
             #endif
 
             switch viewModel.state {
             case .content:
-                content
+                themedContent
             case .error:
                 viewModel.error.map(ErrorView.init)
             case .initial, .refreshing:
@@ -149,17 +168,17 @@ struct ItemView: View {
         }
         #endif
         .environmentObject(focusCoordinator)
-            .environment(\.episodeRouteOrigin, provider.episodeRouteOrigin)
+        .environment(\.episodeRouteOrigin, provider.episodeRouteOrigin)
         #if os(tvOS)
-            .environment(\.itemStateStore, provider.userSession?.itemStateStore)
-            .toolbarVisibility(.hidden, for: .navigationBar)
+        .environment(\.itemStateStore, provider.userSession?.itemStateStore)
+        .toolbarVisibility(.hidden, for: .navigationBar)
         #else
-            .navigationBarMenuButton(
-                isLoading: viewModel.background.is(.refreshing),
-                isHidden: !provider.item.canEdit
-            ) {
-                EditItemMenu(item: provider.item)
-            }
+        .navigationBarMenuButton(
+            isLoading: viewModel.background.is(.refreshing),
+            isHidden: !provider.item.canEdit
+        ) {
+            EditItemMenu(item: provider.item)
+        }
         #endif
     }
 }

@@ -6,7 +6,6 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
 import SwiftUI
 
 // TODO: refine segment animations when swiping fast
@@ -52,11 +51,11 @@ extension VideoPlayerSlider {
 
 private struct VideoPlayerSliderContent: SliderContentView {
 
-    @Default(.accentColor)
-    private var accentColor
-
     @Environment(\.isEnabled)
     private var isEnabled
+
+    @Environment(\.screenTheme)
+    private var screenTheme
 
     @EnvironmentObject
     private var containerState: VideoPlayerContainerState
@@ -66,7 +65,7 @@ private struct VideoPlayerSliderContent: SliderContentView {
     private let tickWidth: CGFloat = 8
 
     private var activeColor: Color {
-        isEnabled ? accentColor : .lightGray
+        isEnabled ? screenTheme.player.progress.swiftUIColor : screenTheme.foregrounds.disabled.swiftUIColor
     }
 
     private var scrubbedProgress: Double {
@@ -126,7 +125,7 @@ private struct VideoPlayerSliderContent: SliderContentView {
                     .frame(width: tickWidth, height: max(trackHeight, proxy.size.height - 2))
                     .overlay {
                         Rectangle()
-                            .stroke(Color.white.opacity(0.94), lineWidth: 1)
+                            .stroke(screenTheme.focus.keylineOnSurface.swiftUIColor, lineWidth: 1)
                     }
                     .offset(x: tickOffset(for: visibleTickProgress, in: proxy.size.width))
             }

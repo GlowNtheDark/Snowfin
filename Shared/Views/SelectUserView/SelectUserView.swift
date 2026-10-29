@@ -302,10 +302,10 @@ struct SelectUserView: View {
             )
             .focusSection()
             #if os(tvOS)
-                // The toolbar's native controls register before the saved-user
-                // default focus during presentation. Let the user region acquire
-                // focus before admitting secondary controls to the focus search.
-                    .disabled(userItems.isNotEmpty && !hasEstablishedUserFocus)
+            // The toolbar's native controls register before the saved-user
+            // default focus during presentation. Let the user region acquire
+            // focus before admitting secondary controls to the focus search.
+            .disabled(userItems.isNotEmpty && !hasEstablishedUserFocus)
             #endif
         }
         #if os(tvOS)
@@ -434,80 +434,80 @@ struct SelectUserView: View {
         }
         #endif
         .onChange(of: viewModel.servers.keys) {
-                let newValue = viewModel.servers.keys
-                if case let SelectUserServerSelection.server(id: id) = serverSelection,
-                   !newValue.contains(where: { $0.id == id })
-                {
-                    if newValue.count == 1, let firstServer = newValue.first {
-                        let newSelection = SelectUserServerSelection.server(id: firstServer.id)
-                        serverSelection = newSelection
-                        selectUserAllServersSplashscreen = newSelection
-                    } else {
-                        serverSelection = .all
-                        selectUserAllServersSplashscreen = .all
-                    }
+            let newValue = viewModel.servers.keys
+            if case let SelectUserServerSelection.server(id: id) = serverSelection,
+               !newValue.contains(where: { $0.id == id })
+            {
+                if newValue.count == 1, let firstServer = newValue.first {
+                    let newSelection = SelectUserServerSelection.server(id: firstServer.id)
+                    serverSelection = newSelection
+                    selectUserAllServersSplashscreen = newSelection
+                } else {
+                    serverSelection = .all
+                    selectUserAllServersSplashscreen = .all
                 }
             }
-            .onReceive(viewModel.$error) { error in
-                guard error != nil else { return }
-                UIDevice.feedback(.error)
-            }
-            .onReceive(viewModel.events) { event in
-                switch event {
-                case let .signedIn(user):
-                    Task { @MainActor in
-                        do {
-                            try await userSessionManager.signIn(userID: user.id, serverID: user.serverID)
-                            UIDevice.feedback(.success)
-                        } catch {
-                            if let sessionError = error as? UserSessionError {
-                                let invalidCredentialUserID: String? = switch sessionError {
-                                case let .missingAccessToken(userID), let .rejectedAccessToken(userID):
-                                    userID
-                                default:
-                                    nil
-                                }
-
-                                if invalidCredentialUserID == user.id,
-                                   let server = viewModel.servers.keys.first(where: { $0.id == user.serverID })
-                                {
-                                    router.route(to: .userSignIn(server: server))
-                                    return
-                                }
+        }
+        .onReceive(viewModel.$error) { error in
+            guard error != nil else { return }
+            UIDevice.feedback(.error)
+        }
+        .onReceive(viewModel.events) { event in
+            switch event {
+            case let .signedIn(user):
+                Task { @MainActor in
+                    do {
+                        try await userSessionManager.signIn(userID: user.id, serverID: user.serverID)
+                        UIDevice.feedback(.success)
+                    } catch {
+                        if let sessionError = error as? UserSessionError {
+                            let invalidCredentialUserID: String? = switch sessionError {
+                            case let .missingAccessToken(userID), let .rejectedAccessToken(userID):
+                                userID
+                            default:
+                                nil
                             }
 
-                            await viewModel.error(error)
+                            if invalidCredentialUserID == user.id,
+                               let server = viewModel.servers.keys.first(where: { $0.id == user.serverID })
+                            {
+                                router.route(to: .userSignIn(server: server))
+                                return
+                            }
                         }
+
+                        await viewModel.error(error)
                     }
                 }
             }
-            .onNotification(.didConnectToServer) { server in
-                viewModel.background.getServers()
-                serverSelection = .server(id: server.id)
+        }
+        .onNotification(.didConnectToServer) { server in
+            viewModel.background.getServers()
+            serverSelection = .server(id: server.id)
+        }
+        .onNotification(.didChangeServerConnection) { _ in
+            viewModel.background.getServers()
+        }
+        .onNotification(.didDeleteServer) { _ in
+            viewModel.background.getServers()
+        }
+        .alert(
+            L10n.delete,
+            isPresented: $isPresentingConfirmDeleteUsers
+        ) {
+            Button(L10n.delete, role: .destructive) {
+                viewModel.deleteUsers(selectedUsers)
+                selectedUsers.removeAll()
+                isEditing = false
+                UIDevice.feedback(.success)
             }
-            .onNotification(.didChangeServerConnection) { _ in
-                viewModel.background.getServers()
+        } message: {
+            if selectedUsers.count == 1, let first = selectedUsers.first {
+                Text(L10n.deleteUserSingleConfirmation(first.username))
+            } else {
+                Text(L10n.deleteUserMultipleConfirmation(selectedUsers.count))
             }
-            .onNotification(.didDeleteServer) { _ in
-                viewModel.background.getServers()
-            }
-            .alert(
-                L10n.delete,
-                isPresented: $isPresentingConfirmDeleteUsers
-            ) {
-                Button(L10n.delete, role: .destructive) {
-                    viewModel.deleteUsers(selectedUsers)
-                    selectedUsers.removeAll()
-                    isEditing = false
-                    UIDevice.feedback(.success)
-                }
-            } message: {
-                if selectedUsers.count == 1, let first = selectedUsers.first {
-                    Text(L10n.deleteUserSingleConfirmation(first.username))
-                } else {
-                    Text(L10n.deleteUserMultipleConfirmation(selectedUsers.count))
-                }
-            }
-            .errorMessage($viewModel.error)
+        }
+        .errorMessage($viewModel.error)
     }
 }

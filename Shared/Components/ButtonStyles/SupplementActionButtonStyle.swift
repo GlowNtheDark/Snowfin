@@ -37,11 +37,11 @@ struct SupplementActionButtonStyle: PrimitiveButtonStyle {
                         .fill(.white)
                     #endif
                 }
-            #if os(tvOS)
+                #if os(tvOS)
                 .clipShape(Rectangle())
-            #else
+                #else
                 .clipShape(RoundedRectangle(cornerRadius: 7))
-            #endif
+                #endif
         }
         .buttonStyle(.card)
     }
@@ -72,7 +72,7 @@ struct SupplementActionButtonStyle: PrimitiveButtonStyle {
         #if os(tvOS)
         .buttonBorderShape(.roundedRectangle(radius: 0))
         #else
-        .buttonBorderShape(.capsule)
+            .buttonBorderShape(.capsule)
         #endif
         #if os(tvOS)
         .buttonStyle(.card)

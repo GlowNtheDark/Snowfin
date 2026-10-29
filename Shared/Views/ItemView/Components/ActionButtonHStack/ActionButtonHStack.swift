@@ -18,6 +18,11 @@ extension ItemView {
         @Router
         private var router
 
+        #if os(tvOS)
+        @Environment(\.screenTheme)
+        private var screenTheme
+        #endif
+
         @StoredValue(.User.enabledTrailers)
         private var enabledTrailers: TrailerSelection
 
@@ -55,9 +60,17 @@ extension ItemView {
 
         private var playedTint: Color {
             #if os(tvOS)
-            .snowfinIceBlue
+            screenTheme.selection.indicator.swiftUIColor
             #else
             .jellyfinPurple
+            #endif
+        }
+
+        private func playedForeground(isPlayed: Bool) -> Color {
+            #if os(tvOS)
+            isPlayed ? screenTheme.actions.primaryForeground.swiftUIColor : screenTheme.actions.secondaryForeground.swiftUIColor
+            #else
+            .primary
             #endif
         }
 
@@ -70,6 +83,14 @@ extension ItemView {
             foregroundColor: Color,
             isRotated: Bool = false
         ) -> some View {
+            #if os(tvOS)
+            let inactiveTint = screenTheme.actions.secondaryFill.swiftUIColor
+            let inactiveForeground = screenTheme.actions.secondaryForeground.swiftUIColor
+            #else
+            let inactiveTint = Color.gray.opacity(0.3)
+            let inactiveForeground = foregroundColor
+            #endif
+
             #if os(tvOS)
             let shape: Rectangle = .rect
             #else
@@ -86,11 +107,19 @@ extension ItemView {
             .backport
             .glassEffect(
                 .regular.selection(
-                    tint: isHighlighted ? tint : .gray.opacity(0.3),
-                    foregroundColor: foregroundColor
+                    tint: isHighlighted ? tint : inactiveTint,
+                    foregroundColor: isHighlighted ? foregroundColor : inactiveForeground
                 ),
                 in: shape
             )
+            #if os(tvOS)
+            .overlay {
+                if !isHighlighted {
+                    shape
+                        .stroke(screenTheme.actions.secondaryBoundary.swiftUIColor, lineWidth: 1)
+                }
+            }
+            #endif
         }
 
         var body: some View {
@@ -106,7 +135,7 @@ extension ItemView {
                         systemImage: "checkmark",
                         isHighlighted: isPlayed,
                         tint: playedTint,
-                        foregroundColor: .primary
+                        foregroundColor: playedForeground(isPlayed: isPlayed)
                     )
                 }
                 .frame(height: 64)
@@ -134,7 +163,7 @@ extension ItemView {
 
         @ViewBuilder
         private var contentView: some View {
-            HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
+            let content = HStack(alignment: .center, spacing: UIDevice.isTV ? 30 : 10) {
 
                 #if os(tvOS)
                 if provider.item.type == .series {
@@ -157,7 +186,7 @@ extension ItemView {
                     .frame(width: 520, height: 75)
                     .labelStyle(.titleAndIcon)
                     .disabled(provider.isMarkingSeriesUnwatched)
-                    .focusable(!hasPendingEpisodeRouteFocus)
+                    .disabled(hasPendingEpisodeRouteFocus)
                     .accessibilityIdentifier("show-details-mark-unwatched")
                 }
                 #endif
@@ -175,13 +204,13 @@ extension ItemView {
                             systemImage: "checkmark",
                             isHighlighted: isPlayed,
                             tint: playedTint,
-                            foregroundColor: .primary
+                            foregroundColor: playedForeground(isPlayed: isPlayed)
                         )
                     }
                     #if !os(tvOS)
                     .foregroundStyle(.primary, .secondary)
                     #else
-                    .focusable(!hasPendingEpisodeRouteFocus)
+                        .disabled(hasPendingEpisodeRouteFocus)
                     #endif
                 }
 
@@ -204,7 +233,7 @@ extension ItemView {
                     #if !os(tvOS)
                     .foregroundStyle(.primary, .secondary)
                     #else
-                    .focusable(!hasPendingEpisodeRouteFocus)
+                        .disabled(hasPendingEpisodeRouteFocus)
                     #endif
                     .isSelected(isFavorited)
                 }
@@ -223,7 +252,9 @@ extension ItemView {
                             foregroundColor: .primary
                         )
                     }
-                    .focusable(!hasPendingEpisodeRouteFocus)
+                    #if os(tvOS)
+                    .disabled(hasPendingEpisodeRouteFocus)
+                    #endif
                 }
 
                 // MARK: tvOS Options
@@ -238,20 +269,35 @@ extension ItemView {
                             foregroundColor: .primary,
                             isRotated: true
                         )
+                        .frame(
+                            width: provider.item.type == .episode ? 60 : nil,
+                            height: provider.item.type == .episode ? 75 : nil
+                        )
                     }
                     .frame(width: 60)
                     .foregroundStyle(.primary, .secondary)
-                    .focusable(!hasPendingEpisodeRouteFocus)
+                    .disabled(hasPendingEpisodeRouteFocus)
                 }
                 #endif
             }
             .frame(height: UIDevice.isTV ? 75 : 44)
             .labelStyle(.iconOnly)
-            .buttonStyle(BasicHoverButtonStyle())
             .font(.title3)
             .fontWeight(.semibold)
             #if os(tvOS)
-                .errorMessage($markUnwatchedError)
+            .errorMessage($markUnwatchedError)
+            #endif
+
+            #if os(tvOS)
+            if provider.item.type == .episode {
+                content
+                    .buttonStyle(BasicHoverButtonStyle(scalesOnInteraction: false))
+                    .buttonBorderShape(.roundedRectangle(radius: 0))
+            } else {
+                content.buttonStyle(BasicHoverButtonStyle())
+            }
+            #else
+            content.buttonStyle(BasicHoverButtonStyle())
             #endif
         }
     }

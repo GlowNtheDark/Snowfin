@@ -15,6 +15,33 @@ struct PosterIndicatorsOverlay: View {
     @Environment(\.posterConfiguration)
     private var posterConfiguration
 
+    @Environment(\.viewContext)
+    private var viewContext
+
+    #if os(tvOS)
+    @Environment(\.screenTheme)
+    private var screenTheme
+
+    @Environment(\.homeFocusTile)
+    private var homeFocusTile
+
+    private var usesSemanticPalette: Bool {
+        viewContext.contains(.isMovieDetails) ||
+            viewContext.contains(.isSearchResults) ||
+            viewContext.contains(.isMoviesTVLibrary) ||
+            viewContext.contains(.isPlaybackOverlay) ||
+            homeFocusTile != nil
+    }
+    #endif
+
+    private var semanticPalette: ThemePalette? {
+        #if os(tvOS)
+        usesSemanticPalette ? screenTheme : nil
+        #else
+        nil
+        #endif
+    }
+
     let item: BaseItemDto
     let posterDisplayType: PosterDisplayType
 
@@ -58,7 +85,8 @@ struct PosterIndicatorsOverlay: View {
             ZStack {
                 if showsUnplayedIndicator {
                     UnplayedIndicator(
-                        count: posterConfiguration.unplayedStyle == .count ? item.userData?.unplayedItemCount : nil
+                        count: posterConfiguration.unplayedStyle == .count ? item.userData?.unplayedItemCount : nil,
+                        semanticPalette: semanticPalette
                     )
                     .frame(height: indicatorSize)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -93,7 +121,8 @@ struct PosterIndicatorsOverlay: View {
                     title: showsCompletedProgressIndicator ? nil : item.progressLabel,
                     progress: showsCompletedProgressIndicator ? 1 : item.progressPercentage ?? 0,
                     posterDisplayType: posterDisplayType,
-                    isCompleted: showsCompletedProgressIndicator
+                    isCompleted: showsCompletedProgressIndicator,
+                    semanticPalette: semanticPalette
                 )
                 .zIndex(5)
             }
@@ -120,10 +149,35 @@ struct PosterSelectionOverlay: View {
     @Environment(\.isSelected)
     private var isSelected
 
+    @Environment(\.viewContext)
+    private var viewContext
+
+    #if os(tvOS)
+    @Environment(\.screenTheme)
+    private var screenTheme
+
+    @Environment(\.homeFocusTile)
+    private var homeFocusTile
+    #endif
+
+    private var selectionColor: Color {
+        #if os(tvOS)
+        if viewContext.contains(.isMovieDetails) ||
+            viewContext.contains(.isSearchResults) ||
+            viewContext.contains(.isMoviesTVLibrary) ||
+            viewContext.contains(.isPlaybackOverlay) ||
+            homeFocusTile != nil
+        {
+            return screenTheme.selection.indicator.swiftUIColor
+        }
+        #endif
+        return accentColor
+    }
+
     var body: some View {
         if isSelected {
             ContainerRelativeShape()
-                .stroke(accentColor, lineWidth: UIDevice.isTV ? 12 : 8)
+                .stroke(selectionColor, lineWidth: UIDevice.isTV ? 12 : 8)
                 .clipped()
         }
     }

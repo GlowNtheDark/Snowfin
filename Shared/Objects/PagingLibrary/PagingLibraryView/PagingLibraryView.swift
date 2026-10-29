@@ -52,11 +52,17 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     @FocusState
     private var focusedElementID: Element.ID?
 
+    @FocusState
+    private var isEmptyContentFocused: Bool
+
     @EnvironmentObject
     private var navigationCoordinator: NavigationCoordinator
 
-    @Environment(\.tabContentFocusHandoffAcquired)
-    private var tabContentFocusHandoffAcquired
+    @EnvironmentObject
+    private var tabContentFocusHandoff: TabContentFocusHandoff
+
+    @Environment(\.isTabContentFocusable)
+    private var isTabContentFocusable
 
     @Environment(\.episodeRouteTabID)
     private var episodeRouteTabID
@@ -156,9 +162,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 )
             ) { element in
                 element.makeBody(libraryStyle: libraryStyle)
-                #if os(tvOS)
-                    .focused($focusedElementID, equals: element.id)
-                #endif
+                    #if os(tvOS)
+                        .focused($focusedElementID, equals: element.id)
+                    #endif
             }
             .onReachedBottomEdge(offset: .offset(300)) {
                 guard isTabContentActive else { return }
@@ -171,33 +177,33 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             .proxy(gridProxy)
             .environment(\.episodeRouteOriginContext, episodeRouteOriginContext)
             #if os(tvOS)
-                .background {
-                    CollectionVGridLocator(coordinator: gridScrollCoordinator)
-                        .id(gridLocatorID)
-                }
+            .background {
+                CollectionVGridLocator(coordinator: gridScrollCoordinator)
+                    .id(gridLocatorID)
+            }
             #endif
-                .ignoresSafeArea(edges: .horizontal)
+            .ignoresSafeArea(edges: .horizontal)
         }
         .scrollIndicators(.hidden)
         .withViewContext(.isListRowSeparatorVisible)
         .withViewContext(.isThumb)
         #if os(tvOS)
-            .focusSection()
+        .focusSection()
         #endif
-            .onReceive(tabItemSelected) { event in
-                if isTabContentActive, event.isRepeat, event.isRoot {
-                    #if os(tvOS)
-                    gridProxy.scrollToTop(animated: false)
-                    focusedElementID = nil
-                    DispatchQueue.main.async {
-                        guard isTabContentActive else { return }
-                        focusedElementID = viewModel.displayedElements.first?.id
-                    }
-                    #else
-                    gridProxy.scrollToTop(animated: true)
-                    #endif
+        .onReceive(tabItemSelected) { event in
+            if isTabContentActive, event.isRepeat, event.isRoot {
+                #if os(tvOS)
+                gridProxy.scrollToTop(animated: false)
+                focusedElementID = nil
+                DispatchQueue.main.async {
+                    guard isTabContentActive else { return }
+                    focusedElementID = viewModel.displayedElements.first?.id
                 }
+                #else
+                gridProxy.scrollToTop(animated: true)
+                #endif
             }
+        }
     }
 
     @ViewBuilder
@@ -226,6 +232,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 systemImage: viewModel.isSearchActive ? "magnifyingglass" : "rectangle.on.rectangle.slash"
             )
             .focusable(isTabContentActive)
+            #if os(tvOS)
+            .focused($isEmptyContentFocused)
+            #endif
         } else {
             elementsView
         }
@@ -299,69 +308,73 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         }
         #endif
         .onChange(of: viewModel.environment) {
-                viewModel.refreshForEnvironmentChange()
+            viewModel.refreshForEnvironmentChange()
+        }
+        .onChange(of: libraryStyle) { oldStyle, newStyle in
+            if Element.layout(for: oldStyle, options: libraryStyleOptions, insets: .zero) ==
+                Element.layout(for: newStyle, options: libraryStyleOptions, insets: .zero)
+            {
+                gridProxy.layout()
             }
-            .onChange(of: libraryStyle) { oldStyle, newStyle in
-                if Element.layout(for: oldStyle, options: libraryStyleOptions, insets: .zero) ==
-                    Element.layout(for: newStyle, options: libraryStyleOptions, insets: .zero)
-                {
-                    gridProxy.layout()
-                }
-            }
+        }
         #if os(tvOS)
-            .onChange(of: viewModel.letterScrollTarget) { _, letter in
-                savedFocusedElementID = nil
-                isLetterRestorePending = false
-                _ = scrollToLetter(letter)
-            }
-            .onChange(of: focusedElementID) { _, elementID in
-                if let elementID {
-                    savedFocusedElementID = elementID
-                    if isTabContentActive {
-                        tabContentFocusHandoffAcquired()
-                    }
+        .onChange(of: viewModel.letterScrollTarget) { _, letter in
+            savedFocusedElementID = nil
+            isLetterRestorePending = false
+            _ = scrollToLetter(letter)
+        }
+        .onChange(of: focusedElementID) { _, elementID in
+            if let elementID {
+                savedFocusedElementID = elementID
+                if isTabContentFocusable {
+                    tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
                 }
             }
-            .onChange(of: viewModel.elements) {
+        }
+        .onChange(of: isEmptyContentFocused) { _, isFocused in
+            guard isFocused, isTabContentFocusable else { return }
+            tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
+        }
+        .onChange(of: viewModel.elements) {
+            restoreLetterPositionIfNeeded()
+        }
+        .onAppear {
+            viewModel.setAutomaticRefreshActive(scenePhase == .active)
+            gridLocatorID = UUID()
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
+
+            DispatchQueue.main.async {
                 restoreLetterPositionIfNeeded()
             }
-            .onAppear {
-                viewModel.setAutomaticRefreshActive(scenePhase == .active)
-                gridLocatorID = UUID()
-                isLetterRestorePending = viewModel.letterScrollTarget != nil
-
-                DispatchQueue.main.async {
-                    restoreLetterPositionIfNeeded()
-                }
-            }
-            .onDisappear {
-                viewModel.setAutomaticRefreshActive(false)
-                isLetterRestorePending = viewModel.letterScrollTarget != nil
-                focusedElementID = nil
-                gridScrollCoordinator.locatorView = nil
-                gridScrollCoordinator.collectionView = nil
-            }
+        }
+        .onDisappear {
+            viewModel.setAutomaticRefreshActive(false)
+            isLetterRestorePending = viewModel.letterScrollTarget != nil
+            focusedElementID = nil
+            gridScrollCoordinator.locatorView = nil
+            gridScrollCoordinator.collectionView = nil
+        }
         #endif
-            .onReceive(viewModel.events) { event in
-                    guard isTabContentActive else { return }
-                    switch event {
-                    case let .gotRandomItem(element):
-                        element.libraryDidSelectElement(router: router, in: namespace)
-                    }
-                }
-                .onFirstAppear {
-                    if viewModel.automaticallyRefreshes {
-                        viewModel.setAutomaticRefreshActive(scenePhase == .active)
-                    } else {
-                        viewModel.refresh()
-                    }
-                }
+        .onReceive(viewModel.events) { event in
+            guard isTabContentActive else { return }
+            switch event {
+            case let .gotRandomItem(element):
+                element.libraryDidSelectElement(router: router, in: namespace)
+            }
+        }
+        .onFirstAppear {
+            if viewModel.automaticallyRefreshes {
+                viewModel.setAutomaticRefreshActive(scenePhase == .active)
+            } else {
+                viewModel.refresh()
+            }
+        }
         #if os(iOS)
-                .navigationBarMenuButton(
-                    isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
-                ) {
-                    menuContent
-                }
+        .navigationBarMenuButton(
+            isLoading: viewModel.background.is(.gettingNextPage) || viewModel.background.is(.gettingNextSearchPage)
+        ) {
+            menuContent
+        }
         #endif
     }
 

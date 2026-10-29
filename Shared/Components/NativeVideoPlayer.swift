@@ -46,15 +46,39 @@ struct NativeVideoPlayer: View {
             }
         }
         .onAppear {
+            #if DEBUG
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "player-initialized backend=AVPlayer managerState=\(String(describing: manager.state))"
+            )
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "manager-start-requested backend=AVPlayer"
+            )
+            #endif
             manager.proxy = proxy
             manager.start()
         }
         .prefersStatusBarHidden()
         .onChange(of: presentationCoordinator.isPresented) {
+            #if DEBUG
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "native-presentation-state isPresented=\(presentationCoordinator.isPresented)"
+            )
+            #endif
             Container.shared.mediaPlayerManager.reset()
             guard !presentationCoordinator.isPresented else { return }
             manager.stop()
         }
+        #if DEBUG
+        .onReceive(manager.$state) { newState in
+            EpisodePlaybackDiagnostics.log(
+                manager.episodePlaybackDiagnosticID,
+                event: "manager-state state=\(String(describing: newState))"
+            )
+        }
+        #endif
         .alert(
             L10n.error,
             isPresented: .constant(manager.error != nil)

@@ -19,6 +19,11 @@ struct PlayButton: View {
     @ObservedObject
     var provider: ItemContentGroupProvider
 
+    #if os(tvOS)
+    @Environment(\.screenTheme)
+    private var screenTheme
+    #endif
+
     @EnvironmentObject
     private var focusCoordinator: FocusCoordinator
 
@@ -41,7 +46,7 @@ struct PlayButton: View {
 
     private var primaryTint: Color {
         #if os(tvOS)
-        .snowfinIceBlue
+        screenTheme.actions.primaryFill.swiftUIColor
         #else
         accentColor
         #endif
@@ -49,7 +54,7 @@ struct PlayButton: View {
 
     private var primaryForeground: Color {
         #if os(tvOS)
-        .snowfinDeepNavy
+        screenTheme.actions.primaryForeground.swiftUIColor
         #else
         accentColor.overlayColor
         #endif
@@ -135,7 +140,7 @@ struct PlayButton: View {
         if let mediaSources = provider.mediaPlayerItemProvider?.item.mediaSources,
            mediaSources.count > 1
         {
-            Menu {
+            let menu = Menu {
                 Picker(
                     L10n.version,
                     sources: mediaSources,
@@ -153,9 +158,9 @@ struct PlayButton: View {
                     Text(L10n.version)
                 } icon: {
                     Image(systemName: "ellipsis")
-                    #if os(tvOS)
-                        .rotationEffect(.degrees(90))
-                    #endif
+                        #if os(tvOS)
+                            .rotationEffect(.degrees(90))
+                        #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .backport
@@ -166,27 +171,44 @@ struct PlayButton: View {
                     ),
                     in: shape
                 )
+                #if os(tvOS)
+                .frame(
+                    width: provider.item.type == .episode ? 60 : nil,
+                    height: provider.item.type == .episode ? 75 : nil
+                )
+                #endif
             }
             .foregroundStyle(.primary, .secondary)
             .font(.title3)
             .fontWeight(.semibold)
             .menuStyle(.button)
             #if os(tvOS)
-                .focusable(!isEpisodeRouteFocusPending)
+            .disabled(isEpisodeRouteFocusPending)
             #endif
-                .labelStyle(.iconOnly)
-                .buttonStyle(BasicHoverButtonStyle())
+            .labelStyle(.iconOnly)
             #if !os(tvOS)
-                .aspectRatio(1, contentMode: .fit)
+            .aspectRatio(1, contentMode: .fit)
             #else
-                .frame(width: 60)
+            .frame(width: 60)
+            #endif
+
+            #if os(tvOS)
+            if provider.item.type == .episode {
+                menu
+                    .buttonStyle(BasicHoverButtonStyle(scalesOnInteraction: false))
+                    .buttonBorderShape(.roundedRectangle(radius: 0))
+            } else {
+                menu.buttonStyle(BasicHoverButtonStyle())
+            }
+            #else
+            menu.buttonStyle(BasicHoverButtonStyle())
             #endif
         }
     }
 
     @ViewBuilder
     private var playButton: some View {
-        Button {
+        let button = Button {
             play()
         } label: {
             Group {
@@ -207,29 +229,27 @@ struct PlayButton: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .backport
             #if os(tvOS)
-                .glassEffect(
-                    .regular.selection(
-                        tint: primaryTint,
-                        foregroundColor: primaryForeground
-                    ),
-                    in: .rect
-                )
+            .glassEffect(
+                .regular.selection(
+                    tint: primaryTint,
+                    foregroundColor: primaryForeground
+                ),
+                in: .rect
+            )
             #else
-                .glassEffect(
-                    .regular.selection(
-                        tint: primaryTint,
-                        foregroundColor: primaryForeground
-                    ),
-                    in: .capsule
-                )
+            .glassEffect(
+                .regular.selection(
+                    tint: primaryTint,
+                    foregroundColor: primaryForeground
+                ),
+                in: .capsule
+            )
             #endif
         }
         #if os(tvOS)
         .buttonBorderShape(.roundedRectangle(radius: 0))
-        .buttonStyle(SnowfinPrimaryPlayButtonStyle())
         #else
-        .buttonBorderShape(.capsule)
-        .buttonStyle(BasicHoverButtonStyle())
+            .buttonBorderShape(.capsule)
         #endif
         .contextMenu {
             if currentMediaPlayerItemProvider?.item.userData?.playbackPositionTicks != 0 {
@@ -240,7 +260,18 @@ struct PlayButton: View {
         }
         .disabled(provider.mediaPlayerItemProvider == nil)
         #if os(tvOS)
-            .focusable(!isEpisodeArtworkFocusPending)
+        .disabled(isEpisodeArtworkFocusPending)
+        #endif
+
+        #if os(tvOS)
+        if provider.item.type == .episode {
+            // Separate the focus outline from the themed Play fill without resizing the control.
+            button.buttonStyle(BasicHoverButtonStyle(scalesOnInteraction: false, outlineInset: -3))
+        } else {
+            button.buttonStyle(SnowfinPrimaryPlayButtonStyle())
+        }
+        #else
+        button.buttonStyle(BasicHoverButtonStyle())
         #endif
     }
 
@@ -298,8 +329,13 @@ struct PlayButton: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background {
                     Rectangle()
-                        .fill(Color.white.opacity(0.1))
+                        .fill(screenTheme.actions.secondaryFill.swiftUIColor)
                 }
+                .overlay {
+                    Rectangle()
+                        .stroke(screenTheme.actions.secondaryBoundary.swiftUIColor, lineWidth: 1)
+                }
+                .foregroundStyle(screenTheme.actions.secondaryForeground.swiftUIColor)
                 .contentShape(Rectangle())
                 .accessibilityLabel(L10n.playFromBeginning)
         }
@@ -354,6 +390,9 @@ struct PlayButton: View {
 #if os(tvOS)
 private struct SnowfinPrimaryPlayButtonStyle: ButtonStyle {
 
+    @Environment(\.screenTheme)
+    private var screenTheme
+
     @Environment(\.isFocused)
     private var isFocused
 
@@ -363,7 +402,7 @@ private struct SnowfinPrimaryPlayButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : isFocused ? 1.045 : 1)
             .brightness(isFocused ? 0.04 : 0)
             .shadow(
-                color: isFocused ? Color.snowfinIceBlue.opacity(0.42) : .clear,
+                color: isFocused ? screenTheme.focus.glow.swiftUIColor.opacity(0.42) : .clear,
                 radius: isFocused ? 24 : 0
             )
             .animation(.easeOut(duration: 0.16), value: isFocused)

@@ -316,41 +316,41 @@ struct PosterHStack<
             layout: layout
         ) { item in
             posterButton(for: item)
-            #if os(tvOS)
-                .environment(\.homeFocusTile, homeTiles.first { tile in
-                    FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
-                })
-                .environment(\.posterHStackFocusController, focusController)
-                .environment(\.posterHStackFocusIndex, elements.firstIndex(of: item))
-            #endif
+                #if os(tvOS)
+                    .environment(\.homeFocusTile, homeTiles.first { tile in
+                        FocusCoordinator.HomeTile.make(poster: item, groupID: tile.groupID, index: tile.index)?.itemID == tile.itemID
+                    })
+                    .environment(\.posterHStackFocusController, focusController)
+                    .environment(\.posterHStackFocusIndex, elements.firstIndex(of: item))
+                #endif
         }
         .clipsToBounds(false)
         #if os(tvOS)
-            .allowBouncing(false)
+        .allowBouncing(false)
         #endif
-            .insets(horizontal: horizontalInset)
-            .itemSpacing(PosterHStackMetrics.itemSpacing)
-            .onPrefetchingElements { elements in
-                imagePrefetcher.startPrefetching(
-                    with: prefetchRequests(for: elements)
-                )
-            }
-            .onCancelPrefetchingElements { elements in
-                imagePrefetcher.stopPrefetching(
-                    with: prefetchRequests(for: elements)
-                )
-            }
-            .scrollBehavior(posterScrollBehavior)
-            .withViewContext(.isThumb)
+        .insets(horizontal: horizontalInset)
+        .itemSpacing(PosterHStackMetrics.itemSpacing)
+        .onPrefetchingElements { elements in
+            imagePrefetcher.startPrefetching(
+                with: prefetchRequests(for: elements)
+            )
+        }
+        .onCancelPrefetchingElements { elements in
+            imagePrefetcher.stopPrefetching(
+                with: prefetchRequests(for: elements)
+            )
+        }
+        .scrollBehavior(posterScrollBehavior)
+        .withViewContext(.isThumb)
         #if os(tvOS)
-            .preference(key: HomeFocusRowsKey.self, value: environment.homeTileCoordinator == nil ? [] : [
-                HomeFocusRow(
-                    groupID: environment.homeFocusGroup ?? "",
-                    order: environment.homeFocusRowOrder,
-                    revision: environment.homeFocusRevision,
-                    tiles: homeTiles
-                ),
-            ])
+        .preference(key: HomeFocusRowsKey.self, value: environment.homeTileCoordinator == nil ? [] : [
+            HomeFocusRow(
+                groupID: environment.homeFocusGroup ?? "",
+                order: environment.homeFocusRowOrder,
+                revision: environment.homeFocusRevision,
+                tiles: homeTiles
+            ),
+        ])
         #endif
     }
 }

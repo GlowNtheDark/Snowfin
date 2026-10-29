@@ -6,7 +6,6 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
 import SwiftUI
 
 extension VideoPlayer.PlaybackControls {
@@ -64,33 +63,43 @@ extension VideoPlayer.PlaybackControls {
 
     struct TransportButtonStyle: ButtonStyle {
 
-        @Default(.accentColor)
-        private var accentColor
+        @Environment(\.screenTheme)
+        private var screenTheme
 
         @Environment(\.isFocused)
         private var isFocused
 
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .foregroundStyle(isFocused ? accentColor.overlayColor : .white)
+                .foregroundStyle(
+                    isFocused ? screenTheme.actions.primaryForeground.swiftUIColor : .white
+                )
                 .background {
                     Rectangle()
                         .fill(.ultraThinMaterial)
                         .overlay {
                             Rectangle()
-                                .fill(isFocused ? accentColor : Color.snowfinDeepNavy.opacity(0.62))
+                                .fill(
+                                    isFocused
+                                        ? screenTheme.actions.primaryFill.swiftUIColor
+                                        : screenTheme.surfaces.canvas.swiftUIColor.opacity(0.62)
+                                )
                         }
                 }
                 .overlay {
                     Rectangle()
                         .stroke(
-                            isFocused ? Color.white.opacity(0.8) : Color.white.opacity(0.16),
+                            isFocused
+                                ? screenTheme.focus.keylineOnPrimaryFill.swiftUIColor
+                                : Color.white.opacity(0.16),
                             lineWidth: isFocused ? 2 : 1
                         )
                 }
                 .shadow(
-                    color: isFocused ? accentColor.opacity(0.34) : .clear,
-                    radius: isFocused ? 16 : 0
+                    color: isFocused
+                        ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity)
+                        : .clear,
+                    radius: isFocused ? screenTheme.focus.glowRadius : 0
                 )
                 .scaleEffect(configuration.isPressed ? 0.96 : isFocused ? 1.05 : 1)
                 .animation(.easeOut(duration: 0.12), value: isFocused)

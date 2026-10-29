@@ -38,6 +38,8 @@ struct PosterButton<Item: Poster>: View {
     private var initialTabCandidateFocused
     @Environment(\.homeTileCoordinator)
     private var homeTileCoordinator
+    @Environment(\.screenTheme)
+    private var screenTheme
     @Environment(\.homeFocusGroup)
     private var homeFocusGroup
     @Environment(\.posterHStackFocusController)
@@ -91,6 +93,26 @@ struct PosterButton<Item: Poster>: View {
         homeFocusGroup == "recently-added-movies"
     }
 
+    private var usesSemanticPosterTheme: Bool {
+        viewContext.contains(.isMovieDetails) ||
+            viewContext.contains(.isSearchResults) ||
+            viewContext.contains(.isMoviesTVLibrary) ||
+            viewContext.contains(.isPlaybackOverlay) ||
+            homeFocusTile != nil
+    }
+
+    private var focusOutlineColor: Color {
+        usesSemanticPosterTheme ? screenTheme.focus.keylineOnSurface.swiftUIColor : accentColor
+    }
+
+    private var focusGlowColor: Color {
+        usesSemanticPosterTheme ? screenTheme.focus.glow.swiftUIColor : accentColor
+    }
+
+    private var focusOutlineOpacity: Double {
+        usesSemanticPosterTheme ? 1 : 0.95
+    }
+
     private var focusedPosterScale: CGFloat {
         guard isFocused else { return 1 }
         if posterHStackFocusController != nil {
@@ -141,28 +163,28 @@ struct PosterButton<Item: Poster>: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if os(tvOS)
-            .overlay {
-                if homeTileCoordinator != nil {
-                    Rectangle()
-                        .fill(Color.black.opacity(isFocused ? 0 : 0.08))
-                        .animation(.easeOut(duration: 0.1), value: isFocused)
-                        .allowsHitTesting(false)
-                }
+        .overlay {
+            if homeTileCoordinator != nil {
+                Rectangle()
+                    .fill(Color.black.opacity(isFocused ? 0 : 0.08))
+                    .animation(.easeOut(duration: 0.1), value: isFocused)
+                    .allowsHitTesting(false)
             }
+        }
         #endif
-            .overlay { overlay.posterStyle(displayType) }
-                .contentShape(.contextMenuPreview, Rectangle())
-                .matchedTransitionSource(id: "item", in: namespace)
+        .overlay { overlay.posterStyle(displayType) }
+        .contentShape(.contextMenuPreview, Rectangle())
+        .matchedTransitionSource(id: "item", in: namespace)
         #if os(tvOS)
-            .if(!removesRecentlyAddedMoviesShadows) { $0.subtleShadow() }
+        .if(!removesRecentlyAddedMoviesShadows) { $0.subtleShadow() }
         #else
-            .subtleShadow()
+        .subtleShadow()
         #endif
         #if os(tvOS)
         .overlay {
             Rectangle()
                 .stroke(
-                    accentColor.opacity(isFocused ? 0.95 : 0),
+                    focusOutlineColor.opacity(isFocused ? focusOutlineOpacity : 0),
                     lineWidth: 3
                 )
         }
@@ -170,7 +192,7 @@ struct PosterButton<Item: Poster>: View {
         .scaleEffect(focusedPosterScale)
         .if(!removesRecentlyAddedMoviesShadows) {
             $0.shadow(
-                color: isFocused ? accentColor.opacity(homeTileCoordinator == nil ? 0.28 : 0.10) : .clear,
+                color: isFocused ? focusGlowColor.opacity(homeTileCoordinator == nil ? 0.28 : 0.10) : .clear,
                 radius: isFocused ? 16 : 0
             )
         }
@@ -219,64 +241,64 @@ struct PosterButton<Item: Poster>: View {
         .environment(\.posterDisplayType, displayType)
         .foregroundStyle(.primary, .secondary)
         #if os(tvOS)
-            .buttonStyle(SnowfinPosterButtonStyle())
-            .buttonBorderShape(.roundedRectangle(radius: 0))
-            .focused($isFocused)
-            .modifier(CoordinatedPosterFocusModifier(
-                coordinator: routeFocusCoordinator,
-                targetID: routeFocusTargetID,
-                focused: $isFocused
-            ))
-            .focusedValue(\.focusedPoster, AnyPoster(item))
-            .onChange(of: isFocused) { _, focused in
-                guard focused, launchFocusFirstPoster == AnyPoster(item) else { return }
-                initialTabCandidateFocused?()
+        .buttonStyle(SnowfinPosterButtonStyle())
+        .buttonBorderShape(.roundedRectangle(radius: 0))
+        .focused($isFocused)
+        .modifier(CoordinatedPosterFocusModifier(
+            coordinator: routeFocusCoordinator,
+            targetID: routeFocusTargetID,
+            focused: $isFocused
+        ))
+        .focusedValue(\.focusedPoster, AnyPoster(item))
+        .onChange(of: isFocused) { _, focused in
+            guard focused, launchFocusFirstPoster == AnyPoster(item) else { return }
+            initialTabCandidateFocused?()
+        }
+        .onChange(of: isFocused) { _, focused in
+            guard focused else { return }
+            let preservesHomeVerticalOffset = homeFocusTile.map {
+                homeTileCoordinator?.consumeHomeVerticalScrollSuppression(for: $0) ?? false
+            } ?? false
+            DispatchQueue.main.async {
+                guard isFocused, let index = posterHStackFocusIndex else { return }
+                guard !preservesHomeVerticalOffset else { return }
+                posterHStackFocusController?.scrollFocusedPoster(
+                    at: index,
+                    forceLayout: homeTileCoordinator == nil
+                )
             }
-            .onChange(of: isFocused) { _, focused in
-                guard focused else { return }
-                let preservesHomeVerticalOffset = homeFocusTile.map {
-                    homeTileCoordinator?.consumeHomeVerticalScrollSuppression(for: $0) ?? false
-                } ?? false
-                DispatchQueue.main.async {
-                    guard isFocused, let index = posterHStackFocusIndex else { return }
-                    guard !preservesHomeVerticalOffset else { return }
-                    posterHStackFocusController?.scrollFocusedPoster(
-                        at: index,
-                        forceLayout: homeTileCoordinator == nil
-                    )
-                }
-            }
-            .modifier(HomeTileFocusRegistration(
-                coordinator: homeTileCoordinator,
-                tile: homeFocusTile,
-                focused: $isFocused
-            ))
-            .background {
-                if launchFocusFirstPoster == AnyPoster(item) {
-                    LaunchFocusCandidateProbe(
-                        onReady: {
-                            initialTabCandidateReady?()
-                            if isFocused {
-                                initialTabCandidateFocused?()
-                            }
+        }
+        .modifier(HomeTileFocusRegistration(
+            coordinator: homeTileCoordinator,
+            tile: homeFocusTile,
+            focused: $isFocused
+        ))
+        .background {
+            if launchFocusFirstPoster == AnyPoster(item) {
+                LaunchFocusCandidateProbe(
+                    onReady: {
+                        initialTabCandidateReady?()
+                        if isFocused {
+                            initialTabCandidateFocused?()
                         }
-                    )
-                    .allowsHitTesting(false)
-                }
+                    }
+                )
+                .allowsHitTesting(false)
             }
-            .background {
-                if let posterHStackFocusController,
-                   posterHStackFocusIndex == 0
-                {
-                    LaunchFocusCandidateProbe(
-                        onReady: {},
-                        onLayout: { posterHStackFocusController.register(from: $0) }
-                    )
-                    .allowsHitTesting(false)
-                }
+        }
+        .background {
+            if let posterHStackFocusController,
+               posterHStackFocusIndex == 0
+            {
+                LaunchFocusCandidateProbe(
+                    onReady: {},
+                    onLayout: { posterHStackFocusController.register(from: $0) }
+                )
+                .allowsHitTesting(false)
             }
+        }
         #else
-            .buttonStyle(.borderless)
+        .buttonStyle(.borderless)
         #endif
         #if os(tvOS)
         .environment(\.homeTileCoordinator, homeTileCoordinator)

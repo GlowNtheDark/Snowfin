@@ -550,13 +550,13 @@ private struct BaseItemDtoPosterLabel: View {
                         .font(.footnote)
                         .multilineTextAlignment(.leading)
                         .lineLimit(details.isEmpty ? 2 : 1, reservesSpace: true)
-                    #if os(tvOS)
+                        #if os(tvOS)
                         .if(homeTileCoordinator != nil) { title in
                             title
                                 .opacity(isFocused ? 1 : 0.85)
                                 .animation(.easeOut(duration: 0.1), value: isFocused)
                         }
-                    #endif
+                        #endif
 
                     DotHStack {
                         ForEach(details.indices, id: \.self) { index in

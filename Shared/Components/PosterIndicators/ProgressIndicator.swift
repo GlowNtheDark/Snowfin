@@ -23,10 +23,17 @@ struct ProgressIndicator: View {
     let progress: Double
     let posterDisplayType: PosterDisplayType
     let isCompleted: Bool
+    /// Optional palette override for a scoped surface; `nil` preserves the existing accent behavior.
+    var semanticPalette: ThemePalette?
 
     private var progressColor: Color {
         #if os(tvOS)
-        isCompleted ? accentColor.watchedAccentColor : accentColor
+        if let semanticPalette {
+            return (
+                isCompleted ? semanticPalette.player.completedProgress : semanticPalette.player.progress
+            ).swiftUIColor
+        }
+        return isCompleted ? accentColor.watchedAccentColor : accentColor
         #else
         accentColor
         #endif

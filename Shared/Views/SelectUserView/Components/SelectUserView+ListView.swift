@@ -87,7 +87,7 @@ extension SelectUserView {
                     }
                     .isSelected(selectedUsers.contains(item.user))
                     #if os(tvOS)
-                        .focused(focusTarget, equals: .user(id: item.user.id))
+                    .focused(focusTarget, equals: .user(id: item.user.id))
                     #endif
                     #if os(iOS)
                     .swipeActions {
@@ -107,11 +107,11 @@ extension SelectUserView {
             }
             .listStyle(.plain)
             #if os(iOS)
-                .scrollContentBackground(.hidden)
+            .scrollContentBackground(.hidden)
             #else
-                .edgePadding()
-                .scrollClipDisabled()
-                .focusSection()
+            .edgePadding()
+            .scrollClipDisabled()
+            .focusSection()
             #endif
         }
     }

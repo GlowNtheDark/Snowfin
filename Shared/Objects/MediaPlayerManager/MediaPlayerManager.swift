@@ -11,12 +11,31 @@ import Defaults
 import FactoryKit
 import Foundation
 import JellyfinAPI
+import Logging
 import VLCUI
 
 // TODO: proper error catching
 // TODO: be a UserSessionService?
 
 typealias MediaPlayerManagerPublisher = LegacyEventPublisher<MediaPlayerManager?>
+
+#if DEBUG
+enum EpisodePlaybackDiagnostics {
+
+    private static let logger = Logger(label: "Screen.EpisodePlayback")
+
+    static func logEpisodesBack(_ diagnosticID: String?, event: String) {
+        guard let diagnosticID else { return }
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        logger.debug("[SCREEN_EPISODES_BACK] t=\(timestamp) trace=\(diagnosticID) \(event)")
+    }
+
+    static func log(_ diagnosticID: String?, event: String) {
+        guard let diagnosticID else { return }
+        logger.debug("[SCREEN_EPISODE_PLAYBACK] trace=\(diagnosticID) \(event)")
+    }
+}
+#endif
 
 extension Scope {
     static let session = Cached()
@@ -149,6 +168,12 @@ final class MediaPlayerManager: ViewModel {
     /// Snapshot the real outgoing position before stopping the proxy can reset it.
     private(set) var previousItemStopSeconds: Duration?
 
+    let episodePlaybackDiagnosticID: String?
+
+    #if DEBUG
+    private var didLogEpisodePlaybackStart = false
+    #endif
+
     // TODO: replace with graph dependency package
     private func setSupplements() {
         var newSupplements = Defaults[.VideoPlayer.supplements].compactMap { kind -> (any MediaPlayerSupplement)? in
@@ -215,6 +240,7 @@ final class MediaPlayerManager: ViewModel {
     ) {
         self.item = provider.item
         self.queue = queue.map { AnyMediaPlayerQueue($0) }
+        self.episodePlaybackDiagnosticID = (queue as? EpisodeMediaPlayerQueue)?.playbackDiagnosticID
         self.state = .loadingItem
         self.initialMediaPlayerItemProvider = provider
         super.init()
@@ -228,6 +254,7 @@ final class MediaPlayerManager: ViewModel {
     ) {
         self.item = playbackItem.baseItem
         self.queue = queue.map { AnyMediaPlayerQueue($0) }
+        self.episodePlaybackDiagnosticID = (queue as? EpisodeMediaPlayerQueue)?.playbackDiagnosticID
         self.state = .playback
         super.init()
 
@@ -263,6 +290,13 @@ final class MediaPlayerManager: ViewModel {
 
     @Function(\Action.Cases.error)
     private func onError(_ error: Error) async throws {
+        #if DEBUG
+        Self.logEpisodePlayback(
+            episodePlaybackDiagnosticID,
+            event: "manager-error itemID=\(playbackItem?.baseItem.id ?? item.id ?? "unknown")"
+        )
+        #endif
+
         if let playbackItem {
             logger.error(
                 "Error while playing item",
@@ -403,18 +437,36 @@ final class MediaPlayerManager: ViewModel {
         }
         self.initialMediaPlayerItemProvider = nil
         playbackItem = try await initialMediaPlayerItemProvider()
+
+        #if DEBUG
+        Self.logEpisodePlayback(
+            episodePlaybackDiagnosticID,
+            event: "media-item-resolved itemID=\(playbackItem?.baseItem.id ?? "unknown")"
+        )
+        #endif
     }
 
     // TODO: remove playback item?
     //       - check that observers would respond correctly to stopping
     @Function(\Action.Cases.stop)
     private func _stop() async throws {
+        #if DEBUG
+        Self.logEpisodePlayback(
+            episodePlaybackDiagnosticID,
+            event: "manager-stop-began itemID=\(item.id ?? "unknown")"
+        )
+        #endif
+
         await self.cancel()
 
         snowfinSegmentCoordinator.reset()
         proxy?.stop()
         Container.shared.mediaPlayerManagerPublisher().send(nil)
         Container.shared.mediaPlayerManager.reset()
+
+        #if DEBUG
+        Self.logEpisodePlayback(episodePlaybackDiagnosticID, event: "manager-stop-finished")
+        #endif
     }
 
     @Function(\Action.Cases.togglePlayPause)
@@ -426,6 +478,21 @@ final class MediaPlayerManager: ViewModel {
             setPlaybackRequestStatus(status: .playing)
         }
     }
+
+    #if DEBUG
+    func logEpisodePlaybackStarted(backend: String) {
+        guard let episodePlaybackDiagnosticID, !didLogEpisodePlaybackStart else { return }
+        didLogEpisodePlaybackStart = true
+        Self.logEpisodePlayback(
+            episodePlaybackDiagnosticID,
+            event: "backend-playing backend=\(backend) itemID=\(item.id ?? "unknown")"
+        )
+    }
+
+    static func logEpisodePlayback(_ diagnosticID: String?, event: String) {
+        EpisodePlaybackDiagnostics.log(diagnosticID, event: event)
+    }
+    #endif
 
     /// Rebuilds the playback item with new stream indexes / bitrate.
     /// Stops the current proxy, requests new playback info from the server, and starts playback with the new configuration.

@@ -73,6 +73,9 @@ private struct BackportGlassButtonStyleBody: View {
     @Environment(\.isEnabled)
     private var isEnabled
 
+    @Environment(\.screenTheme)
+    private var screenTheme
+
     let configuration: PrimitiveButtonStyleConfiguration
     let legacyGlass: BackportGlass
     let prominence: Prominence
@@ -94,8 +97,15 @@ private struct BackportGlassButtonStyleBody: View {
             nativeButton
                 .buttonStyle(.glass)
         case .prominent:
+            #if os(tvOS)
             nativeButton
                 .buttonStyle(.glassProminent)
+                .tint(prominentTint)
+                .foregroundStyle(prominentForeground)
+            #else
+            nativeButton
+                .buttonStyle(.glassProminent)
+            #endif
         }
     }
 
@@ -116,23 +126,25 @@ private struct BackportGlassButtonStyleBody: View {
         case .standard:
             fallbackButton
                 .backport
-            #if os(tvOS)
+                #if os(tvOS)
                 .glassEffect(legacyGlass, in: .rect)
-            #else
+                #else
                 .glassEffect(legacyGlass, in: .capsule)
-            #endif
+                #endif
         case .prominent:
             fallbackButton
                 .backport
-            #if os(tvOS)
+                #if os(tvOS)
                 .glassEffect(
                     legacyGlass.selection(
                         tint: prominentTint,
-                        foregroundColor: prominentTint.overlayColor
+                        foregroundColor: prominentForeground,
+                        disabledTint: prominentDisabledTint,
+                        disabledForegroundColor: prominentDisabledForeground
                     ),
                     in: .rect
                 )
-            #else
+                #else
                 .glassEffect(
                     legacyGlass.selection(
                         tint: prominentTint,
@@ -140,7 +152,7 @@ private struct BackportGlassButtonStyleBody: View {
                     ),
                     in: .capsule
                 )
-            #endif
+                #endif
         }
     }
 
@@ -192,7 +204,50 @@ private struct BackportGlassButtonStyleBody: View {
         case .destructive, .cancel:
             .red
         default:
+            #if os(tvOS)
+            isEnabled ? screenTheme.actions.primaryFill.swiftUIColor : screenTheme.actions.primaryDisabledFill.swiftUIColor
+            #else
             .accentColor
+            #endif
         }
+    }
+
+    private var prominentForeground: Color {
+        switch configuration.role {
+        case .destructive, .cancel:
+            prominentTint.overlayColor
+        default:
+            #if os(tvOS)
+            isEnabled ? screenTheme.actions.primaryForeground.swiftUIColor : screenTheme.actions.primaryDisabledForeground.swiftUIColor
+            #else
+            prominentTint.overlayColor
+            #endif
+        }
+    }
+
+    private var prominentDisabledTint: Color? {
+        #if os(tvOS)
+        switch configuration.role {
+        case .destructive, .cancel:
+            nil
+        default:
+            screenTheme.actions.primaryDisabledFill.swiftUIColor
+        }
+        #else
+        nil
+        #endif
+    }
+
+    private var prominentDisabledForeground: Color? {
+        #if os(tvOS)
+        switch configuration.role {
+        case .destructive, .cancel:
+            nil
+        default:
+            screenTheme.actions.primaryDisabledForeground.swiftUIColor
+        }
+        #else
+        nil
+        #endif
     }
 }

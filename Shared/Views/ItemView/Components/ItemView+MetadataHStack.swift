@@ -22,7 +22,9 @@ extension ItemView {
                     Text(premiereYear)
                 }
 
-                if let firstGenre = item.genres?.first {
+                if item.type != .episode,
+                   let firstGenre = item.genres?.first
+                {
                     Text(firstGenre)
                 }
 
@@ -58,9 +60,9 @@ extension ItemView {
             .font(UIDevice.isTV ? .callout : .caption)
             .fontWeight(.semibold)
             #if os(tvOS)
-                .foregroundStyle(.white.opacity(0.78))
+            .foregroundStyle(.white.opacity(0.78))
             #else
-                .foregroundStyle(.secondary)
+            .foregroundStyle(.secondary)
             #endif
         }
     }

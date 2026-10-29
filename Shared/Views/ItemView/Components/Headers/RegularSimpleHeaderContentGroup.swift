@@ -69,8 +69,8 @@ extension ItemView {
                     )
                     #if os(tvOS)
                     .posterBorder()
-                    .posterCornerRadius(posterDisplayType)
-                    .subtleShadow()
+                        .posterCornerRadius(posterDisplayType)
+                        .subtleShadow()
                     #endif
                     .frame(
                         maxWidth: .infinity,

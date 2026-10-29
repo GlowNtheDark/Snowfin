@@ -51,8 +51,8 @@ struct UserButton: View {
         }
         .foregroundStyle(.primary, .secondary)
         #if os(tvOS)
-            .buttonStyle(.borderless)
-            .buttonBorderShape(.roundedRectangle(radius: 0))
+        .buttonStyle(.borderless)
+        .buttonBorderShape(.roundedRectangle(radius: 0))
         #endif
     }
 

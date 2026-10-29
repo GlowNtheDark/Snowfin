@@ -184,6 +184,9 @@ extension AVMediaPlayerProxy {
                 // TODO: buffering
                 case .playing:
                     self.manager?.setPlaybackRequestStatus(status: .playing)
+                    #if DEBUG
+                    self.manager?.logEpisodePlaybackStarted(backend: "AVPlayer")
+                    #endif
                 @unknown default: ()
                 }
             }

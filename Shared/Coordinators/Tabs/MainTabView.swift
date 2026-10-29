@@ -7,7 +7,6 @@
 //
 
 import Combine
-import Defaults
 import FactoryKit
 import JellyfinAPI
 import SwiftUI
@@ -25,14 +24,14 @@ struct MainTabView: View {
     @Namespace
     private var sidebarFocusNamespace
 
+    @Namespace
+    private var sidebarSelectionNamespace
+
     @FocusState
     private var focusedSidebarTabID: String?
 
-    @State
-    private var isSidebarHandoffInProgress = false
-
-    @State
-    private var pendingSidebarFocusHandoffTabID: String?
+    @StateObject
+    private var tabContentFocusHandoff = TabContentFocusHandoff()
 
     @State
     private var previewedSidebarTabID: String?
@@ -59,8 +58,8 @@ struct MainTabView: View {
     @StateObject
     private var searchFocus = TVSearchFocusCoordinator()
 
-    @Default(.accentColor)
-    private var accentColor
+    @Environment(\.screenTheme)
+    private var screenTheme
     #endif
 
     init() {
@@ -142,6 +141,10 @@ struct MainTabView: View {
         focusedSidebarTabID != nil && !isSidebarHandoffInProgress
     }
 
+    private var isSidebarHandoffInProgress: Bool {
+        tabContentFocusHandoff.pendingTabID != nil
+    }
+
     private var displayedTabID: String? {
         previewedSidebarTabID ?? tabCoordinator.selectedTabID
     }
@@ -157,10 +160,14 @@ struct MainTabView: View {
         let restoresHomeTile = isHome && homePlaybackCoordinator?.isRestoringSidebarHomeFocus == true
         let entersRootContent = tab.coordinator.path.isEmpty
         let requiresFocusHandoff = restoresHomeTile || (
-            entersRootContent && (tab.item.id == TabItem.search.id || tab.item.keepsContentAlive)
+            entersRootContent && (
+                tab.item.id == TabItem.search.id ||
+                    tab.item.id == "media" ||
+                    tab.item.id == "settings" ||
+                    tab.item.keepsContentAlive
+            )
         )
-        isSidebarHandoffInProgress = requiresFocusHandoff
-        pendingSidebarFocusHandoffTabID = requiresFocusHandoff ? tab.item.id : nil
+        tabContentFocusHandoff.begin(tabID: requiresFocusHandoff ? tab.item.id : nil)
         previewedSidebarTabID = tab.item.id
         if tabCoordinator.selectedTabID != tab.item.id {
             tabCoordinator.selectedTabID = tab.item.id
@@ -226,20 +233,17 @@ struct MainTabView: View {
                 id: \.item.id
             ) { tab in
                 let isActive = tab.item.id == displayedTabID
+                let isHomeTab = tab.item.id == tabCoordinator.tabs.first?.item.id
                 NavigationInjectionView(
                     coordinator: tab.coordinator
                 ) {
                     tab.item.content
                 }
                 .environmentObject(tabCoordinator)
+                .environmentObject(tabContentFocusHandoff)
                 .environment(\.tabItemSelected, tab.publisher)
                 .environment(\.episodeRouteTabID, tab.item.id)
                 .environment(\.isTabContentFocusable, isActive && !isSidebarExpanded)
-                .environment(\.tabContentFocusHandoffAcquired) {
-                    guard pendingSidebarFocusHandoffTabID == tab.item.id else { return }
-                    pendingSidebarFocusHandoffTabID = nil
-                    isSidebarHandoffInProgress = false
-                }
                 .id(tab.item.id)
                 .environment(\.isTabContentActive, tab.item.keepsContentAlive ? Binding(
                     get: { tab.item.id == displayedTabID },
@@ -249,14 +253,13 @@ struct MainTabView: View {
                 .disabled(!isActive || isSidebarExpanded)
                 .allowsHitTesting(isActive)
                 .accessibilityHidden(!isActive || isSidebarExpanded)
-                .environment(\.initialTabCandidateReady) {
+                .environment(\.initialTabCandidateReady, isHomeTab ? {
                     requestInitialHomeContentFocus(for: tab)
-                }
-                .environment(\.initialTabCandidateFocused) {
+                } : nil)
+                .environment(\.initialTabCandidateFocused, isHomeTab ? {
                     initialHomeContentFocusAcquired(for: tab)
-                }
-                .environment(\.registerHomeFocus) { coordinator, navigationCoordinator in
-                    guard tab.item.id == tabCoordinator.tabs.first?.item.id else { return }
+                } : nil)
+                .environment(\.registerHomeFocus, isHomeTab ? { coordinator, navigationCoordinator in
                     let previousCoordinator = homePlaybackCoordinator
                     coordinator.inheritLastFocusedHomeTile(homePlaybackCoordinator?.lastFocusedHomeTile)
                     homePlaybackCoordinator = coordinator
@@ -264,7 +267,7 @@ struct MainTabView: View {
                     if focusedSidebarTabID == tab.item.id || previousCoordinator?.isRestoringSidebarHomeFocus == true {
                         coordinator.prepareSidebarHomeReturn()
                     }
-                }
+                } : nil)
                 .onExitCommand {
                     guard isActive, !protectsHomePlaybackReturn else { return }
                     returnToSidebar(tabID: tab.item.id)
@@ -274,8 +277,10 @@ struct MainTabView: View {
     }
 
     private func sidebarButton(for tab: TabCoordinator.TabData) -> some View {
-        let isSelected = tab.item.id == displayedTabID
+        let isSelected = tab.item.id == tabCoordinator.selectedTabID
         let isFocused = tab.item.id == focusedSidebarTabID
+        let rowForeground = isFocused ? screenTheme.sidebar.focusedForeground.swiftUIColor :
+            isSelected ? screenTheme.sidebar.selectedForeground.swiftUIColor : screenTheme.sidebar.idleForeground.swiftUIColor
 
         return Button {
             activateSidebarTab(tab)
@@ -284,6 +289,10 @@ struct MainTabView: View {
                 Image(systemName: tab.item.systemImage)
                     .font(.system(size: 26, weight: .semibold))
                     .frame(width: 38, height: 38)
+                    .foregroundStyle(rowForeground)
+                    .animation(.easeInOut(duration: 0.2), value: isFocused)
+                    .animation(.easeInOut(duration: 0.2), value: isSelected)
+                    .animation(.easeInOut(duration: 0.2), value: screenTheme)
 
                 if isSidebarExpanded {
                     Text(tab.item.displayTitle)
@@ -291,27 +300,52 @@ struct MainTabView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                         .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(rowForeground)
+                        .animation(.easeInOut(duration: 0.2), value: isFocused)
+                        .animation(.easeInOut(duration: 0.2), value: isSelected)
+                        .animation(.easeInOut(duration: 0.2), value: screenTheme)
 
                     Spacer(minLength: 0)
                 }
             }
-            .foregroundStyle(isFocused ? Color.black : Color.white)
             .padding(.horizontal, isSidebarExpanded ? 14 : 11)
             .frame(width: isSidebarExpanded ? nil : 60, alignment: .leading)
             .frame(minHeight: 64, alignment: .leading)
             .frame(maxWidth: isSidebarExpanded ? .infinity : nil, alignment: .leading)
             .background {
-                if isFocused {
+                ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(accentColor)
-                } else if isSelected {
+                        .fill(isSelected ? screenTheme.sidebar.selectedBackground.swiftUIColor : .clear)
+                        .animation(.easeInOut(duration: 0.2), value: isSelected)
+                        .animation(.easeInOut(duration: 0.2), value: screenTheme)
+
                     Rectangle()
-                        .fill(accentColor.opacity(0.22))
-                        .overlay {
-                            Rectangle()
-                                .stroke(accentColor.opacity(0.8), lineWidth: 2)
-                        }
+                        .fill(isFocused ? screenTheme.sidebar.focusedBackground.swiftUIColor : .clear)
+                        .shadow(
+                            color: isFocused ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity * 0.45) : .clear,
+                            radius: isFocused ? screenTheme.focus.glowRadius * 0.5 : 0
+                        )
+                        .animation(.easeInOut(duration: 0.2), value: isFocused)
+                        .animation(.easeInOut(duration: 0.2), value: screenTheme)
+
+                    if isSelected {
+                        Rectangle()
+                            .fill(screenTheme.sidebar.selectionIndicator.swiftUIColor)
+                            .frame(width: 5)
+                            .matchedGeometryEffect(id: "selected-page", in: sidebarSelectionNamespace)
+                            .animation(.easeInOut(duration: 0.2), value: isSelected)
+                            .animation(.easeInOut(duration: 0.2), value: screenTheme)
+                    }
                 }
+            }
+            .overlay {
+                Rectangle()
+                    .strokeBorder(
+                        isFocused ? screenTheme.focus.keylineOnSurface.swiftUIColor : .clear,
+                        lineWidth: 2
+                    )
+                    .animation(.easeInOut(duration: 0.2), value: isFocused)
+                    .animation(.easeInOut(duration: 0.2), value: screenTheme)
             }
             .contentShape(Rectangle())
         }
@@ -366,13 +400,16 @@ struct MainTabView: View {
             .padding(.top, 60)
             .padding(.bottom, 30)
             .frame(width: isSidebarExpanded ? 292 : 84)
+            .transaction(value: isSidebarExpanded) { transaction in
+                transaction.animation = nil
+            }
             .frame(maxHeight: .infinity, alignment: .top)
             .background {
                 Rectangle()
-                    .fill(Color.snowfinDeepNavy)
+                    .fill(screenTheme.surfaces.canvas.swiftUIColor)
                     .overlay(alignment: .trailing) {
                         Rectangle()
-                            .fill(Color.snowfinIceBlue.opacity(0.2))
+                            .fill(screenTheme.sidebar.selectionIndicator.swiftUIColor.opacity(0.2))
                             .frame(width: 1)
                     }
             }
@@ -397,7 +434,7 @@ struct MainTabView: View {
                 previewedSidebarTabID = tabID
             }
         }
-        .background(Color.snowfinDeepNavy)
+        .background(screenTheme.surfaces.canvas.swiftUIColor)
         .onReceive(homeNavigationCoordinator?.$presentedSheet.eraseToAnyPublisher() ?? Just(nil).eraseToAnyPublisher()) { presentedRoute in
             let previousDetailsCoordinator = homeDetailsCoordinator
             homeDetailsCoordinator = presentedRoute?.route.id.hasPrefix("item-") == true ? presentedRoute?.coordinator : nil
@@ -444,10 +481,10 @@ struct MainTabView: View {
                 Just(false).eraseToAnyPublisher()
         ) { restoring in
             if !restoring,
-               pendingSidebarFocusHandoffTabID == tabCoordinator.tabs.first?.item.id
+               let homeTabID = tabCoordinator.tabs.first?.item.id,
+               tabContentFocusHandoff.pendingTabID == homeTabID
             {
-                pendingSidebarFocusHandoffTabID = nil
-                isSidebarHandoffInProgress = false
+                tabContentFocusHandoff.complete(tabID: homeTabID)
             }
         }
         .onChange(of: tabCoordinator.selectedTabID) { _, tabID in
@@ -456,10 +493,6 @@ struct MainTabView: View {
             }
             guard focusedSidebarTabID == nil else { return }
             previewedSidebarTabID = tabID
-        }
-        .transaction(value: isSidebarExpanded) { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
         }
     }
     #endif
@@ -474,12 +507,12 @@ struct MainTabView: View {
                     await tabCoordinator.route(to: route)
                 }
             }
-        #if os(tvOS)
+            #if os(tvOS)
             .environmentObject(searchFocus)
             .background(alignment: .top) {
                 FocusedPosterCinematicBackgroundView()
             }
-        #endif
+            #endif
     }
 }
 
@@ -495,7 +528,7 @@ private struct SnowfinSidebarButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }

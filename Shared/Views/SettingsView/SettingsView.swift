@@ -25,11 +25,32 @@ struct SettingsView: View {
     @Default(.appFontChoice)
     private var appFontChoice
 
+    @Environment(\.screenTheme)
+    private var screenTheme
+
+    @Default(.userThemeIdentifier)
+    private var userThemeIdentifier
+
     @State
     private var isAppFontMenuPresented = false
 
     @FocusState
     private var appFontFocusTarget: AppFontFocusTarget?
+
+    @FocusState
+    private var themeSettingsFocusTarget: ThemeSettingsFocusTarget?
+
+    @FocusState
+    private var sidebarHandoffFocusTarget: SettingsSidebarHandoffFocusTarget?
+
+    @Environment(\.isTabContentFocusable)
+    private var isTabContentFocusable
+
+    @Environment(\.episodeRouteTabID)
+    private var episodeRouteTabID
+
+    @EnvironmentObject
+    private var tabContentFocusHandoff: TabContentFocusHandoff
 
     @Namespace
     private var appFontFocusScope
@@ -86,6 +107,10 @@ struct SettingsView: View {
             guard isAppFontMenuPresented else { return }
             dismissAppFontMenu()
         }
+        .onChange(of: sidebarHandoffFocusTarget) { _, target in
+            guard target != nil, isTabContentFocusable else { return }
+            tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
+        }
         #else
         Form(image: .jellyfinBlobBlue) {
             serverSection
@@ -95,9 +120,9 @@ struct SettingsView: View {
         }
         #if os(iOS)
         .navigationTitle(L10n.settings)
-        .navigationBarCloseButton {
-            router.dismiss()
-        }
+            .navigationBarCloseButton {
+                router.dismiss()
+            }
         #endif
         #endif
     }
@@ -111,6 +136,9 @@ struct SettingsView: View {
                 UserProfileRow(user: userSession.user.data) {
                     router.route(to: .localUserSettings(user: userSession.user.data))
                 }
+                #if os(tvOS)
+                .focused($sidebarHandoffFocusTarget, equals: .profile)
+                #endif
 
                 ChevronButton(
                     L10n.server,
@@ -157,14 +185,19 @@ struct SettingsView: View {
             .listRowInsets(.zero)
             .listRowBackground(Color.clear)
             #if os(iOS)
-                .listRowSeparator(.hidden)
+            .listRowSeparator(.hidden)
             #endif
-                .fontWeight(.semibold)
-                .backport
-                .buttonStyle(.glassProminent.shadow(false))
-                .tint(accentColor)
+            .fontWeight(.semibold)
+            .backport
+            .buttonStyle(.glassProminent.shadow(false))
             #if os(iOS)
-                .controlSize(.large)
+            .tint(accentColor)
+            .controlSize(.large)
+            #else
+            .tint(screenTheme.actions.primaryFill.swiftUIColor)
+            #endif
+            #if os(tvOS)
+            .focused($sidebarHandoffFocusTarget, equals: .switchUser)
             #endif
         }
     }
@@ -208,7 +241,18 @@ struct SettingsView: View {
             Picker(L10n.appearance, selection: $appearance)
             #endif
 
+            #if os(tvOS)
+            ChevronButton(
+                L10n.theme,
+                content: Text(selectedThemeIdentifier.displayName),
+                systemName: "paintpalette.fill"
+            ) {
+                router.route(to: .themeSettings)
+            }
+            .focused($themeSettingsFocusTarget, equals: .theme)
+            #else
             ColorPicker(L10n.accentColor, selection: $accentColor, supportsOpacity: false)
+            #endif
 
             #if os(tvOS)
             AppFontSelectionRow(
@@ -261,9 +305,24 @@ struct SettingsView: View {
 }
 
 #if os(tvOS)
+private enum SettingsSidebarHandoffFocusTarget: Hashable {
+    case profile
+    case switchUser
+}
+
 private enum AppFontFocusTarget: Hashable {
     case row
     case choice(AppFontChoice)
+}
+
+private enum ThemeSettingsFocusTarget: Hashable {
+    case theme
+}
+
+private extension SettingsView {
+    var selectedThemeIdentifier: ThemeIdentifier {
+        ThemeIdentifier(rawValue: userThemeIdentifier) ?? .arctic
+    }
 }
 
 private struct AppFontMenuAnchorKey: PreferenceKey {

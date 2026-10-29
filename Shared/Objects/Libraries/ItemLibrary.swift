@@ -386,7 +386,6 @@ private struct ItemLibraryBody<Content: View>: View {
 
                 if let sort = filterViewModel.currentFilters.sortBy.first {
                     Text(sort.displayTitle)
-                        .foregroundStyle(.secondary)
                 }
             }
             .font(.headline)
@@ -447,23 +446,63 @@ private struct SnowfinLibraryToolbarButtonStyle: ButtonStyle {
     @Environment(\.isFocused)
     private var isFocused
 
+    @Environment(\.isEnabled)
+    private var isEnabled
+
+    @Environment(\.screenTheme)
+    private var screenTheme
+
+    private func colors(isPressed: Bool) -> (fill: Color, foreground: Color) {
+        if !isEnabled {
+            return (
+                screenTheme.actions.secondaryDisabledFill.swiftUIColor,
+                screenTheme.actions.secondaryDisabledForeground.swiftUIColor
+            )
+        } else if isPressed, isFocused {
+            return (
+                screenTheme.actions.primaryPressedFill.swiftUIColor,
+                screenTheme.actions.primaryPressedForeground.swiftUIColor
+            )
+        } else if isPressed {
+            return (
+                screenTheme.actions.secondaryPressedFill.swiftUIColor,
+                screenTheme.actions.secondaryForeground.swiftUIColor
+            )
+        } else if isFocused {
+            return (
+                screenTheme.actions.primaryFill.swiftUIColor,
+                screenTheme.actions.primaryForeground.swiftUIColor
+            )
+        }
+
+        return (
+            screenTheme.actions.secondaryFill.swiftUIColor,
+            screenTheme.actions.secondaryForeground.swiftUIColor
+        )
+    }
+
     func makeBody(configuration: Configuration) -> some View {
+        let colors = colors(isPressed: configuration.isPressed)
+        let isVisuallyFocused = isEnabled && isFocused
+
         configuration.label
-            .foregroundStyle(isFocused ? Color.snowfinDeepNavy : Color.white)
+            .foregroundStyle(colors.foreground)
             .background {
                 Rectangle()
-                    .fill(isFocused ? Color.snowfinIceBlue : Color.snowfinDeepNavy)
+                    .fill(colors.fill)
                     .overlay {
-                        if isFocused {
-                            Rectangle()
-                                .stroke(Color.snowfinIceBlue, lineWidth: 2)
-                        }
+                        Rectangle()
+                            .stroke(
+                                isVisuallyFocused ? screenTheme.focus.keylineOnPrimaryFill.swiftUIColor : .clear,
+                                lineWidth: 2
+                            )
                     }
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .shadow(
-                color: isFocused ? Color.snowfinIceBlue.opacity(0.3) : .clear,
-                radius: isFocused ? 14 : 0
+                color: isVisuallyFocused
+                    ? screenTheme.focus.glow.swiftUIColor.opacity(screenTheme.focus.glowOpacity)
+                    : .clear,
+                radius: isVisuallyFocused ? screenTheme.focus.glowRadius : 0
             )
             .animation(.easeOut(duration: 0.15), value: isFocused)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)

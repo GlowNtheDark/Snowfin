@@ -15,6 +15,25 @@ struct UnplayedIndicator: View {
     private var accentColor
 
     let count: Int?
+    var semanticPalette: ThemePalette?
+
+    private var indicatorColor: Color {
+        #if os(tvOS)
+        if let semanticPalette {
+            return semanticPalette.actions.primaryFill.swiftUIColor
+        }
+        #endif
+        return accentColor
+    }
+
+    private var indicatorForeground: Color {
+        #if os(tvOS)
+        if let semanticPalette {
+            return semanticPalette.actions.primaryForeground.swiftUIColor
+        }
+        #endif
+        return accentColor.overlayColor
+    }
 
     var body: some View {
         AlternateLayoutView(alignment: .topTrailing) {
@@ -24,18 +43,18 @@ struct UnplayedIndicator: View {
             if let count, count > 0 {
                 Text(count.description)
                     .fontWeight(.semibold)
-                    .foregroundStyle(accentColor.overlayColor)
+                    .foregroundStyle(indicatorForeground)
                     .padding(.horizontal, UIDevice.isTV ? 8 : 4)
                     .fixedSize()
                     .frame(minWidth: size.width, minHeight: size.height)
                     .background {
                         UnevenRoundedRectangle(bottomLeadingRadius: UIDevice.isTV ? 0 : 6)
-                            .fill(accentColor)
+                            .fill(indicatorColor)
                     }
             } else {
                 #if !os(tvOS)
                 Q3RightTriangle()
-                    .fill(accentColor)
+                    .fill(indicatorColor)
                 #endif
             }
         }
