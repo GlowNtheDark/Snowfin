@@ -63,6 +63,16 @@ extension MediaPlayerItem {
             throw ErrorMessage(L10n.unknownError)
         }
 
+        // Resolve the configured audio preference against this source before asking
+        // Jellyfin for playback info. Relying on defaultAudioStreamIndex alone can
+        // choose a different track when the server response/source changes between
+        // episodes.
+        let configuredAudioStreamIndex = Self.preferredAudioStreamIndex(
+            in: initialMediaSource,
+            userConfiguration: userSession.user.data.configuration
+        )
+        let resolvedAudioStreamIndex = audioStreamIndex ?? configuredAudioStreamIndex
+
         let maxBitrate = try await MediaPlayerManager.getMaxBitrate(for: requestedBitrate)
 
         let deviceProfile = DeviceProfile.build(
@@ -77,7 +87,7 @@ extension MediaPlayerItem {
         playbackInfo.liveStreamID = initialMediaSource.liveStreamID
         playbackInfo.maxStreamingBitrate = maxBitrate
         playbackInfo.userID = userSession.user.id
-        playbackInfo.audioStreamIndex = audioStreamIndex
+        playbackInfo.audioStreamIndex = resolvedAudioStreamIndex
         playbackInfo.subtitleStreamIndex = subtitleStreamIndex
 
         if !item.isLiveStream {
@@ -175,11 +185,46 @@ extension MediaPlayerItem {
             url: playbackURL,
             requestedBitrate: requestedBitrate,
             deviceProfile: deviceProfile,
-            initialAudioStreamIndex: audioStreamIndex,
+            initialAudioStreamIndex: resolvedAudioStreamIndex,
             initialSubtitleStreamIndex: subtitleStreamIndex,
             previewImageProvider: previewImageProvider,
             thumbnailProvider: item.getNowPlayingImage
         )
+    }
+
+    private static func preferredAudioStreamIndex(
+        in mediaSource: MediaSourceInfo,
+        userConfiguration: UserConfiguration?
+    ) -> Int? {
+        let audioStreams = mediaSource.mediaStreams?.filter { $0.type == .audio } ?? []
+
+        if userConfiguration?.isPlayDefaultAudioTrack == true,
+           let defaultTrack = audioStreams.first(where: { $0.isDefault == true }),
+           let index = defaultTrack.index
+        {
+            return index
+        }
+
+        if let preferredLanguage = normalizedLanguage(userConfiguration?.audioLanguagePreference),
+           let preferredTrack = audioStreams.first(where: {
+               normalizedLanguage($0.language) == preferredLanguage
+           }),
+           let index = preferredTrack.index
+        {
+            return index
+        }
+
+        return mediaSource.defaultAudioStreamIndex
+            ?? audioStreams.first(where: { $0.index != nil })?.index
+    }
+
+    private static func normalizedLanguage(_ identifier: String?) -> String? {
+        guard let identifier = identifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !identifier.isEmpty
+        else { return nil }
+
+        let localeIdentifier = identifier.replacingOccurrences(of: "_", with: "-")
+        return Locale(identifier: localeIdentifier).language.languageCode?.identifier.lowercased()
     }
 
     // TODO: audio type stream

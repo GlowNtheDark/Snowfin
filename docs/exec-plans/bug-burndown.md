@@ -10,7 +10,8 @@ Runtime target: Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator. No phy
 **Latest focused status (2026-10-28):** episode-artwork playback after 15 consecutive
 cycles, player presentation cleanup, Episodes Back, player return to Show Details, and
 Show Details → Home focus restoration passed in the user-reported Simulator run below.
-English audio preference and the Next Episode countdown ring remain open. Quality,
+English audio preference is now Simulator-verified; the Next Episode countdown ring
+also passed its focused check below. Quality,
 Audio, Subtitles, and nested-picker Back need dedicated regression coverage. The
 classification counts that follow describe the original audit checkpoint, not these
 new playback findings.
@@ -538,7 +539,7 @@ This final simulator run supersedes the open R01 status recorded above. R01 is *
 - **Episodes Back — PASS:** SwiftUI `onExitCommand` dismissed the Episodes surface without exiting playback.
 - **Return navigation — PASS:** Normal player Back returned to the same Show Details route. Show Details → Home restored the expected Home focus.
 - **Outstanding regression coverage:** Quality, Audio, Subtitles, and nested picker Back handling still need a dedicated regression check. These cases are not included in the 5/5 result above.
-- **Open playback issues:** English audio preference is unresolved. The Next Episode countdown presentation and focus follow-ups are recorded below with their combined Simulator result.
+- **Open playback issues:** The Next Episode countdown presentation and focus follow-ups are recorded below with their combined Simulator result.
 - **Scope / evidence boundary:** These results do not close other previously unverified route, focus, playback, or iOS cases in this register. No physical Apple TV result is claimed.
 - **Implementation and verification detail:** See [the 2026-10-28 playback/navigation plan](completed/episode-playback-navigation-2026-10-28.md). The 15-cycle run was user-reported; it was not repeated during commit preparation.
 
@@ -549,4 +550,12 @@ This final simulator run supersedes the open R01 status recorded above. R01 is *
 - **Focus after countdown cancellation:** The Next Episode subtree no longer reassigns Play Next focus on countdown presentation changes. Initial focus remains owned by the overlay presentation lifecycle; native directional focus between Play Next and Keep Watching is preserved.
 - **Episodes horizontal navigation root cause and correction:** The UIKit press handler queued a manual `focusedTarget` move for Left/Right while episode cards were native focusable Buttons in a horizontal `ScrollView`. The queued move reads the current target when handled, allowing a native focus advance to be followed by another custom advance; visible scrolling follows that focus. Left/Right now fall through to tvOS native focus navigation. App-owned Up/Down routing between the season selector and episode shelf remains.
 - **Combined Simulator acceptance:** (1) One Left/Right press advances exactly one episode and focus/scroll stay synchronized. (2) Repeated movement, both boundaries, selection, and Episodes Back work. (3) Cancel countdown with Back, then move Up/Down repeatedly between Play Next and Keep Watching without focus snapping back. (4) Both buttons activate. (5) Down from Play Next reaches the content shelf. (6) Fullscreen cleanup, playback, countdown ring, and Episodes Back remain functional. Jamie reports all five scenario groups passed.
-- **Evidence boundary:** Simulator results were user-reported; no build or runtime session was performed during this checkpoint. English audio preference remains unresolved. Other previously recorded playback and navigation gaps remain separately scoped.
+- **Evidence boundary:** Simulator results were user-reported; no build or runtime session was performed during this checkpoint. At this checkpoint, English audio preference remained unresolved; its later verification is recorded below. Other previously recorded playback and navigation gaps remain separately scoped.
+
+### 2026-10-28 English audio preference verification
+
+- **Status: 5/5 PASS — Jamie-reported Simulator verification.** English was selected on initial playback and remained selected across three consecutive autoplay transitions. Explicit manual track selection was respected. When English was unavailable, playback used the configured fallback. “Play Default Track” correctly took precedence over the preferred language.
+- **Correction:** `MediaPlayerItem.build` now resolves the requested audio stream from the explicit selection, the user's Play Default Track setting, the normalized preferred language, then Jellyfin's default/first available audio stream. The resolved index is sent in playback info and initializes the player item, so initial launches and every episode transition use the same preference path.
+- **Metadata:** Language identifiers are normalized through Foundation locale parsing before matching, including ISO alpha-2/alpha-3 and locale-tag forms such as `en-US`.
+- **Preserved behavior:** Explicit stream indexes remain authoritative. Subtitle selection, playback lifecycle, fullscreen cleanup, Next Episode UI, and navigation behavior are unchanged.
+- **Evidence boundary:** All five runtime scenarios were reported by Jamie on Simulator. No build was run during this checkpoint; no physical Apple TV result is claimed.
