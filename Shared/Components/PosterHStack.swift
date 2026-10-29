@@ -22,9 +22,12 @@ enum PosterHStackMetrics {
     }()
 
     #if os(tvOS)
-    // Approximately 30% wider than the previous five/seven-column rows.
+    // Shared with the tvOS library grid so poster sizing follows Home's reference.
     static let landscapeColumns: CGFloat = 4
     static let portraitColumns: CGFloat = 5.75
+    static let libraryLandscapeColumns = 4
+    static let libraryPortraitColumns = 6
+    static let libraryItemSpacing: CGFloat = 30
     #endif
 }
 

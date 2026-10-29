@@ -114,16 +114,16 @@ extension LibraryElement {
             switch libraryStyle.posterDisplayType {
             case .landscape:
                 return .columns(
-                    4,
+                    PosterHStackMetrics.libraryLandscapeColumns,
                     insets: gridInsets,
-                    itemSpacing: EdgeInsets.edgePadding,
+                    itemSpacing: PosterHStackMetrics.libraryItemSpacing,
                     lineSpacing: EdgeInsets.edgePadding
                 )
             case .portrait, .square:
                 return .columns(
-                    7,
+                    PosterHStackMetrics.libraryPortraitColumns,
                     insets: gridInsets,
-                    itemSpacing: EdgeInsets.edgePadding,
+                    itemSpacing: PosterHStackMetrics.libraryItemSpacing,
                     lineSpacing: EdgeInsets.edgePadding
                 )
             }
