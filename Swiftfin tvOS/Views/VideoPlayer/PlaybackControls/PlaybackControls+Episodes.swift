@@ -273,39 +273,6 @@ extension VideoPlayer.PlaybackControls {
                 else { return }
 
                 focusEpisode(in: season)
-
-            case .left, .right:
-                moveHorizontally(direction)
-            }
-        }
-
-        private func moveHorizontally(_ direction: PlaybackEpisodesMoveRequest.Direction) {
-            let offset = direction == .left ? -1 : 1
-
-            switch focusedTarget {
-            case let .season(seasonID):
-                guard let index = seasonsViewModel.elements.firstIndex(where: { $0.id == seasonID }) else {
-                    return
-                }
-
-                let nextIndex = index + offset
-                guard seasonsViewModel.elements.indices.contains(nextIndex) else { return }
-                focusedTarget = .season(seasonsViewModel.elements[nextIndex].id)
-
-            case let .episode(episodeID):
-                guard let selectedSeason,
-                      let index = selectedSeason.elements.firstIndex(where: {
-                          ($0.id ?? $0.displayTitle) == episodeID
-                      })
-                else { return }
-
-                let nextIndex = index + offset
-                guard selectedSeason.elements.indices.contains(nextIndex) else { return }
-                let episode = selectedSeason.elements[nextIndex]
-                focusedTarget = .episode(episode.id ?? episode.displayTitle)
-
-            case .none:
-                break
             }
         }
 

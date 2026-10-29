@@ -106,10 +106,6 @@ extension VideoPlayer.PlaybackControls {
                 .up
             case .downArrow:
                 .down
-            case .leftArrow:
-                .left
-            case .rightArrow:
-                .right
             default:
                 nil
             }

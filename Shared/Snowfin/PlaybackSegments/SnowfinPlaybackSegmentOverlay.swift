@@ -149,7 +149,8 @@ struct SnowfinPlaybackSegmentOverlay: View {
                             item: presentation.item,
                             width: nextWidth,
                             height: panelHeight,
-                            remaining: presentation.remainingSeconds
+                            remaining: presentation.remainingSeconds,
+                            countdownProgress: presentation.countdownProgress
                         )
                     }
                     .frame(width: contentWidth, height: panelHeight, alignment: .topLeading)
@@ -194,11 +195,6 @@ struct SnowfinPlaybackSegmentOverlay: View {
         .onAppear {
             allowsContinueWatchingFocus = false
             continueWatchingViewModel.refresh()
-        }
-        .task {
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            focusedAction = .playNext
         }
         .onChange(of: presentation.remainingSeconds != nil) { wasCountingDown, isCountingDown in
             if wasCountingDown && !isCountingDown {
@@ -269,7 +265,8 @@ struct SnowfinPlaybackSegmentOverlay: View {
         item: BaseItemDto?,
         width: CGFloat,
         height: CGFloat,
-        remaining: Int?
+        remaining: Int?,
+        countdownProgress: Double?
     ) -> some View {
         ZStack {
             if let item {
@@ -331,7 +328,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                     .frame(width: width - 68 - 28 - 240, height: height - 68, alignment: .bottomLeading)
 
                     VStack(alignment: .center, spacing: 10) {
-                        countdownIndicator(remaining: remaining)
+                        countdownIndicator(remaining: remaining, progress: countdownProgress)
 
                         Button {
                             coordinator.keepWatching()
@@ -346,7 +343,7 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         .focused($focusedAction, equals: .keepWatching)
                         .onMoveCommand { direction in
                             switch direction {
-                            case .up, .down, .left, .right:
+                            case .left, .right:
                                 focusedAction = .playNext
                             default:
                                 break
@@ -375,7 +372,6 @@ struct SnowfinPlaybackSegmentOverlay: View {
                                 }
                             case .up:
                                 allowsContinueWatchingFocus = false
-                                focusedAction = .playNext
                             case .left, .right:
                                 allowsContinueWatchingFocus = false
                                 focusedAction = .keepWatching
@@ -398,8 +394,8 @@ struct SnowfinPlaybackSegmentOverlay: View {
     }
 
     @ViewBuilder
-    private func countdownIndicator(remaining: Int?) -> some View {
-        if let remaining {
+    private func countdownIndicator(remaining: Int?, progress: Double?) -> some View {
+        if let remaining, let progress {
             VStack(alignment: .center, spacing: 4) {
                 Text("Starting in")
                     .font(.system(size: 20, weight: .medium))
@@ -410,9 +406,10 @@ struct SnowfinPlaybackSegmentOverlay: View {
                         .stroke(.white.opacity(0.2), lineWidth: 5)
 
                     Circle()
-                        .trim(from: 0, to: 0.82)
+                        .trim(from: 0, to: progress)
                         .stroke(screenTheme.player.progress.swiftUIColor, style: .init(lineWidth: 5, lineCap: .square))
                         .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: progress)
 
                     Text("\(remaining)")
                         .font(.system(size: 38, weight: .bold, design: .monospaced))

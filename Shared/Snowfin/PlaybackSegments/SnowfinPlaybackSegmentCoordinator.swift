@@ -25,6 +25,8 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         let kind: Kind
         let item: BaseItemDto?
         let remainingSeconds: Int?
+        let countdownDurationSeconds: Int?
+        let countdownProgress: Double?
     }
 
     @Published
@@ -240,7 +242,13 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
         self.countdownTask = nil
         cancelledCountdownSegmentIDs.insert(segment.id)
 
-        self.presentation = .init(kind: .nextEpisode, item: presentation.item, remainingSeconds: nil)
+        self.presentation = .init(
+            kind: .nextEpisode,
+            item: presentation.item,
+            remainingSeconds: nil,
+            countdownDurationSeconds: nil,
+            countdownProgress: nil
+        )
         isOverlayPresented = true
 
         log("Credits countdown cancelled", segment: segment)
@@ -302,7 +310,13 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
             break
         case .showSkipButton:
             activeSegment = segment
-            present(.init(kind: .intro, item: nil, remainingSeconds: nil))
+            present(.init(
+                kind: .intro,
+                item: nil,
+                remainingSeconds: nil,
+                countdownDurationSeconds: nil,
+                countdownProgress: nil
+            ))
         case .autoSkip:
             seek(to: segment.end)
             log("Intro auto-skip completed", segment: segment)
@@ -359,7 +373,13 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
             log("Credits overlay waiting for next-episode resolution")
             return
         }
-        present(.init(kind: kind, item: provider.item, remainingSeconds: nil))
+        present(.init(
+            kind: kind,
+            item: provider.item,
+            remainingSeconds: nil,
+            countdownDurationSeconds: nil,
+            countdownProgress: nil
+        ))
     }
 
     private func startCountdownIfPossible(for segment: SnowfinPlaybackSegment) {
@@ -375,11 +395,31 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
 
         let duration = Defaults[.VideoPlayer.Segments.countdownDuration].rawValue
         let countdownItemID = currentItemID
-        present(.init(kind: .countdown, item: provider.item, remainingSeconds: duration))
+        present(.init(
+            kind: .countdown,
+            item: provider.item,
+            remainingSeconds: duration,
+            countdownDurationSeconds: duration,
+            countdownProgress: 0
+        ))
         log("Credits countdown started at \(duration) seconds", segment: segment)
 
         countdownTask = Task { [weak self] in
             guard let self else { return }
+            await Task.yield()
+            guard !Task.isCancelled,
+                  self.currentItemID == countdownItemID,
+                  self.activeSegment?.id == segment.id
+            else { return }
+
+            self.presentation = .init(
+                kind: .countdown,
+                item: self.nextItemProvider?.item ?? provider.item,
+                remainingSeconds: duration,
+                countdownDurationSeconds: duration,
+                countdownProgress: 1 / Double(duration)
+            )
+
             for remaining in stride(from: duration - 1, through: 0, by: -1) {
                 do {
                     try await Task.sleep(for: .seconds(1))
@@ -392,7 +432,13 @@ final class SnowfinPlaybackSegmentCoordinator: ObservableObject {
                       let next = self.nextItemProvider
                 else { return }
 
-                self.presentation = .init(kind: .countdown, item: next.item, remainingSeconds: remaining)
+                self.presentation = .init(
+                    kind: .countdown,
+                    item: next.item,
+                    remainingSeconds: remaining,
+                    countdownDurationSeconds: duration,
+                    countdownProgress: Double(duration - max(remaining - 1, 0)) / Double(duration)
+                )
             }
 
             self.log("Credits countdown completed", segment: segment)

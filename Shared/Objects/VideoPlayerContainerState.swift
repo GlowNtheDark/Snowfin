@@ -22,8 +22,6 @@ struct PlaybackEpisodesMoveRequest: Equatable {
     enum Direction: Equatable {
         case up
         case down
-        case left
-        case right
     }
 
     let id: UUID
