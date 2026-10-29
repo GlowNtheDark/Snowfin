@@ -52,11 +52,13 @@ Other navigation should likewise return through the screen that launched it.
 See [Episode Details](episode-details.md), [focus restoration](focus-restoration.md),
 and [navigation implementation](../design-docs/navigation-stack.md).
 
-## Search, TV Shows, and Movies tab lifetime
+## Home, Search, TV Shows, and Movies tab lifetime
 
-Within a signed-in tvOS session, Search, TV Shows, and Movies preload and retain their
-content across tab changes. Search keeps its query, result groups, and scroll position,
-and re-entry targets its Search field. TV Shows and Movies retain their browsing state.
+Within a signed-in tvOS session, Home, Search, TV Shows, and Movies preload and retain
+their content across tab changes. Home loads its configured shelves during session
+startup and retains their view models and browsing state when another tab is selected.
+Search keeps its query, result groups, and scroll position, and re-entry targets its
+Search field. TV Shows and Movies retain their browsing state.
 Refreshes preserve the last loaded collection until its replacement is available,
 including a genuinely empty replacement. Inactive retained tabs must not take focus, accept input, appear in
 accessibility, or present routes. Right/Select enters Search at its field or a library

@@ -64,7 +64,8 @@ extension TabItem {
         TabItem(
             id: provider.id,
             title: provider.displayTitle,
-            systemImage: "house.fill"
+            systemImage: "house.fill",
+            keepsContentAlive: UIDevice.isTV
         ) {
             ContentGroupView(provider: provider)
         }

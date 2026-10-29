@@ -157,9 +157,10 @@ unresolved; do not describe either first target as the intended one.
 
 ### Tab lifetime
 
-Search, TV Shows, and Movies remain mounted during a signed-in tvOS session. Search
-preserves its query, results, and scroll position across tab previews; the library tabs
-preserve paging, filter, grid, letter, and focus state. Their inactive views are
+Home, Search, TV Shows, and Movies remain mounted during a signed-in tvOS session. Home
+loads its shelves during startup and preserves their view models and browsing state
+across tab previews. Search preserves its query, results, and scroll position; the
+library tabs preserve paging, filter, grid, letter, and focus state. Their inactive views are
 transparent, disabled, excluded from hit testing/accessibility, and guarded against
 focus/route callbacks. Other tabs use selected-only mounting. An inactive retained tab
 must never steal focus or receive the current press. See the
