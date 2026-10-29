@@ -2,10 +2,18 @@
 
 Audit date: 2026-10-10
 Scope: A01/A02 shared playback Back-path fix, B01 sidebar-return fix, A03 Episodes focus-restoration fix, and focused simulator acceptance; other register entries retain their prior evidence.
-Original audit baseline: `8da2e06b1935bb7fa86b2b08a0705acf6d1dea2f` on `codex/phase1-shared-item-state`. B01 follow-up started from `aba7494196f8be6dba4a32542d3b00b4fc609776` on the same branch; the B01 remediation changes in this working tree are uncommitted.
+Original audit baseline: `8da2e06b1935bb7fa86b2b08a0705acf6d1dea2f` on `codex/phase1-shared-item-state`. B01 follow-up started from `aba7494196f8be6dba4a32542d3b00b4fc609776` on the same branch; its remediation is included in commit `89aedf51`.
 Runtime target: Apple TV 4K (3rd generation), 1080p, tvOS 27.0 simulator. No physical Apple TV was used.
 
 ## Executive summary
+
+**Latest focused status (2026-10-28):** episode-artwork playback after 15 consecutive
+cycles, player presentation cleanup, Episodes Back, player return to Show Details, and
+Show Details → Home focus restoration passed in the user-reported Simulator run below.
+English audio preference and the Next Episode countdown ring remain open. Quality,
+Audio, Subtitles, and nested-picker Back need dedicated regression coverage. The
+classification counts that follow describe the original audit checkpoint, not these
+new playback findings.
 
 The 26 initial register items plus one newly discovered Episodes boundary case were reviewed: **0 confirmed open bugs**, **13 runtime passes**, **8 source-verified cases with runtime coverage still incomplete**, **1 previously reported issue not reproduced**, **5 unverified cases**, and **0 blocked cases**. No P0 was found. A01, A02, A03, B01, and F06 pass their focused simulator acceptance paths; the original A03 cross-season reproduction and its correction are recorded below.
 
@@ -498,3 +506,38 @@ This final simulator run supersedes the open R01 status recorded above. R01 is *
 - **Library-origin episode route — runtime UNVERIFIED:** No episode-containing library origin was available for a safe end-to-end fixture. Search and Home paths do not establish library-origin routing or return focus.
 - **Missing-result / unresolved-owner fallback — runtime UNVERIFIED:** No disposable test item with a missing or invalid owner was available. No real Jellyfin data was changed to manufacture a failure case.
 - **Build and scope:** The signed in-place simulator build/install succeeded on the specified device; no physical Apple TV was used. The iOS `.item(id:)` implementation remains on its prior path by source review; no iOS runtime test was run.
+
+### 2026-10-25 Episode Details focus and parent activation
+
+- **Status:** Source correction implemented; updated Simulator behavior **UNVERIFIED**. Jamie reproduced indistinct focus throughout NCIS S1:E10 Episode Details and an NCIS parent control that enlarged without navigating.
+- **Source finding:** The parent, Play, version menu, and action controls added `.focusable(...)` around already focusable native controls. This creates an extra focus target without the underlying Button's activation action. It also separates the focused target from the control styling. Apple explicitly warns against applying this wrapper to intrinsically focusable controls in [Build SwiftUI apps for tvOS](https://developer.apple.com/videos/play/wwdc2020/10042/). This source defect matches the reported symptoms; the installed application's focused item and action dispatch were not captured in a new runtime trace.
+- **Dispatch review:** The parent handler already uses its nested `@Router` to push `.resolvedEpisode(item:origin:)`. The existing resolver refetches and verifies the episode and owning series before creating the episode intent. The route does not start playback; unresolved ownership retains the strict error fallback. The route resolver, router, and presentation hierarchy were not changed.
+- **Correction:** Native controls now own focus and Select. Pending artwork-entry gates temporarily disable the existing controls instead of adding focusable wrappers. Episode Details Play, version, and action controls use the same native card style as the parent and other Details cards; the trailer control inherits its row's style. Other Details styles and iOS styles remain in place. The parent records its existing coordinator target before presenting Show Details, and registers that target with `coordinatedFocus` for return to the same Episode Details instance.
+- **Source verification:** Reviewed the task-only diff against the pre-existing working tree. SwiftFormat lint and syntax-only parsing with tvOS and iOS target conditions succeeded for the five affected Swift files. Syntax parsing is not type checking or a successful app build. No Xcode build, app installation, or updated-app runtime check was performed.
+- **Required Simulator checks — UNVERIFIED:** Enter Episode Details through E10's metadata action; verify visible native focus and activation on every available header control and menu. Focus/select NCIS and confirm NCIS Show Details, Season 1, E10 artwork focus, and no autoplay. Back must return to the same Episode Details parent control, then the original Show Details metadata control, then the actual Search/Home origin, one layer per press. Recheck pending episode-artwork entry so Play/actions cannot take initial focus. Exact restoration, native focus appearance, and iOS runtime behavior still require validation.
+
+### 2026-10-25 Episode Details outline presentation follow-up
+
+- **Runtime baseline from Jamie:** Focus now works and the NCIS parent opens Show Details in Simulator. The native card styles introduced focus growth on Play, watched, favorite, and parent controls, plus an oversized white highlight on the compact ellipsis menu. The functional focus/activation correction is retained.
+- **Presentation correction:** Reuse `BasicHoverButtonStyle`'s existing Ice Blue outline and restrained glow with interaction scaling disabled only for Episode Details header controls. The Play outline has a small visual outset to separate it from the blue fill without changing layout or hit bounds. Version and Advanced ellipsis labels are constrained to their existing 60 × 75 button bounds so the focus border remains compact. Other callers retain the style's previous defaults; iOS branches, native control eligibility, activation handlers, route dispatch, and focus restoration are unchanged.
+- **Source checks:** Reviewed the incremental presentation diff against the existing working tree; focused SwiftFormat and SwiftLint checks succeeded. No redundant `.focusable` modifiers were added. No build or commit was performed.
+- **Updated Simulator checks — UNVERIFIED:** Confirm fixed control dimensions, visible colored outlines including contrast on Play, and a compact ellipsis border. Recheck menu Select/Back, NCIS parent activation without autoplay, and one-layer Back restoration. Jamie's functional baseline does not establish these updated visual results or exact return focus.
+
+## Feature regression verification
+
+### 2026-10-25 Screen Themes final Simulator regression
+
+- **Status:** **PASS — user-reported.** Jamie reports that all final Screen Themes Simulator regression tests passed. The scenario-by-scenario matrix and simulator configuration were not included in this checkpoint request, so this entry records the reported result without expanding its scope.
+- **Completed phases:** Palette model and contrast-aware resolver; per-user curated/custom preference with legacy accent migration; Settings selection/custom-color editor and app-wide semantic palette propagation; theme integration across shared controls, posters, Details/Search/library surfaces, and playback; regression verification. The implementation checkpoint and phase summary are in [the completed Screen Themes plan](completed/screen-themes.md).
+- **Checkpoint scope:** This is a feature-verification record, not a claim that the whole worktree was theme-only. At this checkpoint, navigation/focus follow-ups and local signing edits remained separate. The latest navigation/playback status is recorded in the 2026-10-28 checkpoint below. No build or additional Simulator run was performed during this checkpoint review.
+
+### 2026-10-28 episode playback and Back regression checkpoint
+
+- **Status:** **PASS — user-reported Simulator verification, 5/5 scenarios.** This checkpoint records Jamie's latest Apple TV Simulator report; detailed build/device logs were not attached to this commit request.
+- **Episode artwork playback — PASS:** Episode artwork launched playback reliably for 15 consecutive cycles while remaining in Show Details. Identity-scoped fullscreen presentation cleanup released each completed player route, and the next artwork activation launched a fresh player directly from Show Details.
+- **Episodes Back — PASS:** SwiftUI `onExitCommand` dismissed the Episodes surface without exiting playback.
+- **Return navigation — PASS:** Normal player Back returned to the same Show Details route. Show Details → Home restored the expected Home focus.
+- **Outstanding regression coverage:** Quality, Audio, Subtitles, and nested picker Back handling still need a dedicated regression check. These cases are not included in the 5/5 result above.
+- **Open playback issues:** English audio preference is unresolved. The Next Episode countdown ring is unresolved. Track these separately; neither is claimed fixed by the playback lifecycle regression result.
+- **Scope / evidence boundary:** These results do not close other previously unverified route, focus, playback, or iOS cases in this register. No physical Apple TV result is claimed.
+- **Implementation and verification detail:** See [the 2026-10-28 playback/navigation plan](completed/episode-playback-navigation-2026-10-28.md). The 15-cycle run was user-reported; it was not repeated during commit preparation.
