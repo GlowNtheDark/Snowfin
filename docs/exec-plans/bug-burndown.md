@@ -247,6 +247,7 @@ Severity describes the impact if a behavior regresses, not its current status. A
 - **References:** [state-management reconciliation/runtime evidence](../design-docs/state-management.md#migration-coverage-and-remaining-scope), lines 290-313; [notification reconciliation](<../../Shared/Services/Notifications.swift:152>).
 - **Dependencies / blocker:** A safe series with known episode states; changing server watched state requires restoration.
 - **Next action:** Repeat only with recorded before-state; assert all loaded children, Continue, unrelated rows, and focus, then restore the initial state.
+- **Current implementation acceptance (2026-10-28):** Jamie accepted the episode watched/progress presentation and Continue Watching selection in user testing. This covers the exercised behavior only; focused in-place progress updates, membership add/remove, completion/Next Up replacement, deterministic fallback focus, descendant reconciliation, and unrelated-shelf stability are not a completed matrix. Keep B02–B07 edge cases open.
 
 ### E02 — App Font is independent from subtitle font settings
 

@@ -90,20 +90,20 @@ extension SeriesEpisodeContentGroup {
         @ViewBuilder
         private var overlayView: some View {
             #if os(tvOS)
-            if posterConfiguration.indicators.contains(.played), isWatched {
-                ProgressIndicator(
-                    title: nil,
-                    progress: 1,
-                    posterDisplayType: .landscape,
-                    isCompleted: true,
-                    semanticPalette: screenTheme
-                )
-            } else if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
+            if posterConfiguration.indicators.contains(.progress), let progressLabel = episode.progressLabel {
                 ProgressIndicator(
                     title: progressLabel,
                     progress: episode.progressPercentage ?? 0,
                     posterDisplayType: .landscape,
                     isCompleted: false,
+                    semanticPalette: screenTheme
+                )
+            } else if posterConfiguration.indicators.contains(.played), isWatched {
+                ProgressIndicator(
+                    title: nil,
+                    progress: 1,
+                    posterDisplayType: .landscape,
+                    isCompleted: true,
                     semanticPalette: screenTheme
                 )
             }

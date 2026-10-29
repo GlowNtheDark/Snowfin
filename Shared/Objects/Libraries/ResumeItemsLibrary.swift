@@ -126,7 +126,6 @@ private extension ResumeItemsLibrary {
         let partialEpisodes = deduplicatedEpisodes(
             resumeItems.filter { item in
                 item.type == .episode &&
-                    item.userData?.isPlayed != true &&
                     (item.userData?.playbackPositionTicks ?? 0) > 0
             }
         )

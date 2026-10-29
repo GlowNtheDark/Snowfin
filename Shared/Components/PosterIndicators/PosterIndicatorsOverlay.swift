@@ -70,14 +70,15 @@ struct PosterIndicatorsOverlay: View {
     private var showsProgressIndicator: Bool {
         indicators.contains(.progress) &&
             item.progressLabel != nil &&
-            !isWatched
+            (!isWatched || item.type == .episode)
     }
 
     private var showsCompletedProgressIndicator: Bool {
         indicators.contains(.played) &&
             item.canBePlayed &&
             !item.isLiveStream &&
-            isWatched
+            isWatched &&
+            !(item.type == .episode && showsProgressIndicator)
     }
 
     var body: some View {
