@@ -7,9 +7,44 @@
 //
 
 import Combine
+import Defaults
 import FactoryKit
 import JellyfinAPI
 import SwiftUI
+#if DEBUG && os(tvOS)
+import os
+#endif
+
+#if DEBUG && os(tvOS)
+private let sidebarPerformanceLog = OSLog(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.snowfin.tvos",
+    category: "PointsOfInterest"
+)
+
+private func sidebarPerformanceEvent(_ name: StaticString, tabID: String) {
+    os_signpost(.event, log: sidebarPerformanceLog, name: name, "%{public}s", tabID)
+}
+
+private func sidebarPerformanceEvent(_ name: StaticString, tabID: String, latencyMilliseconds: Double) {
+    os_signpost(
+        .event,
+        log: sidebarPerformanceLog,
+        name: name,
+        "%{public}s latency_ms=%{public}.2f",
+        tabID,
+        latencyMilliseconds
+    )
+}
+
+private func sidebarElapsedMilliseconds(since start: UInt64) -> Double {
+    Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+}
+
+private final class SidebarPerformanceState {
+    var pendingFocusStart: (tabID: String, uptimeNanoseconds: UInt64)?
+    var pendingSelectionStart: (tabID: String, uptimeNanoseconds: UInt64)?
+}
+#endif
 
 // TODO: fix weird tvOS icon rendering
 struct MainTabView: View {
@@ -36,6 +71,11 @@ struct MainTabView: View {
     @State
     private var previewedSidebarTabID: String?
 
+    #if DEBUG
+    @State
+    private var sidebarPerformanceState = SidebarPerformanceState()
+    #endif
+
     @State
     private var hasRequestedLaunchContentFocus = false
 
@@ -60,6 +100,9 @@ struct MainTabView: View {
 
     @Environment(\.screenTheme)
     private var screenTheme
+
+    @Default(.sidebarClockEnabled)
+    private var sidebarClockEnabled
     #endif
 
     init() {
@@ -149,7 +192,17 @@ struct MainTabView: View {
         previewedSidebarTabID ?? tabCoordinator.selectedTabID
     }
 
-    private func activateSidebarTab(_ tab: TabCoordinator.TabData) {
+    private func activateSidebarTab(_ tab: TabCoordinator.TabData, source: String) {
+        #if DEBUG
+        let selectionStartedAt = DispatchTime.now().uptimeNanoseconds
+        sidebarPerformanceState.pendingSelectionStart = (tab.item.id, selectionStartedAt)
+        sidebarPerformanceEvent("SidebarSelectionStarted", tabID: tab.item.id)
+        LibraryFocusDiagnostics.record(
+            "sidebar-activation",
+            tabID: tab.item.id,
+            detail: "source=\(source) pathIsRoot=\(tab.coordinator.path.isEmpty)"
+        )
+        #endif
         homePlaybackCoordinator?.cancelHomeReturn()
         let isHome = tab.item.id == tabCoordinator.tabs.first?.item.id
         if isHome {
@@ -173,6 +226,18 @@ struct MainTabView: View {
             tabCoordinator.selectedTabID = tab.item.id
         }
         focusedSidebarTabID = nil
+        #if DEBUG
+        LibraryFocusDiagnostics.record(
+            "sidebar-focus-cleared",
+            tabID: tab.item.id,
+            detail: "requested state; engine acquisition not implied"
+        )
+        sidebarPerformanceEvent(
+            "SidebarSelectionHandlerReturned",
+            tabID: tab.item.id,
+            latencyMilliseconds: sidebarElapsedMilliseconds(since: selectionStartedAt)
+        )
+        #endif
         if restoresHomeTile {
             homePlaybackCoordinator?.sidebarReleasedHomeFocus()
         }
@@ -180,6 +245,9 @@ struct MainTabView: View {
         if tab.item.id == TabItem.search.id, tab.coordinator.path.isEmpty {
             DispatchQueue.main.async {
                 guard displayedTabID == tab.item.id else { return }
+                #if DEBUG
+                sidebarPerformanceEvent("SidebarSelectionEventSent", tabID: tab.item.id)
+                #endif
                 searchFocus.requestEntry()
             }
             return
@@ -194,6 +262,14 @@ struct MainTabView: View {
         // event that asks the destination to focus its primary content.
         DispatchQueue.main.async {
             guard displayedTabID == tab.item.id else { return }
+            #if DEBUG
+            sidebarPerformanceEvent("SidebarSelectionEventSent", tabID: tab.item.id)
+            LibraryFocusDiagnostics.record(
+                "root-tab-event-sent",
+                tabID: tab.item.id,
+                detail: "isRoot=\(tab.coordinator.path.isEmpty), isRepeat=true"
+            )
+            #endif
             tab.publisher.send(.init(isRoot: tab.coordinator.path.isEmpty, isRepeat: true))
         }
     }
@@ -245,10 +321,7 @@ struct MainTabView: View {
                 .environment(\.episodeRouteTabID, tab.item.id)
                 .environment(\.isTabContentFocusable, isActive && !isSidebarExpanded)
                 .id(tab.item.id)
-                .environment(\.isTabContentActive, tab.item.keepsContentAlive ? Binding(
-                    get: { tab.item.id == displayedTabID },
-                    set: { _ in }
-                ) : .constant(true))
+                .environment(\.isTabContentActive, tab.item.keepsContentAlive ? isActive : true)
                 .opacity(isActive ? 1 : 0)
                 .disabled(!isActive || isSidebarExpanded)
                 .allowsHitTesting(isActive)
@@ -283,7 +356,7 @@ struct MainTabView: View {
             isSelected ? screenTheme.sidebar.selectedForeground.swiftUIColor : screenTheme.sidebar.idleForeground.swiftUIColor
 
         return Button {
-            activateSidebarTab(tab)
+            activateSidebarTab(tab, source: "select")
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: tab.item.systemImage)
@@ -353,7 +426,7 @@ struct MainTabView: View {
         .focused($focusedSidebarTabID, equals: tab.item.id)
         .onMoveCommand { direction in
             guard direction == .right else { return }
-            activateSidebarTab(tab)
+            activateSidebarTab(tab, source: "right-arrow")
         }
         .prefersDefaultFocus(
             !isAwaitingLaunchContentFocus && isSelected && !isSidebarHandoffInProgress,
@@ -431,10 +504,23 @@ struct MainTabView: View {
                 if tabID == tabCoordinator.tabs.first?.item.id {
                     homePlaybackCoordinator?.prepareSidebarHomeReturn()
                 }
+                #if DEBUG
+                let startedAt = DispatchTime.now().uptimeNanoseconds
+                sidebarPerformanceState.pendingFocusStart = (tabID, startedAt)
+                sidebarPerformanceEvent("SidebarFocusObserved", tabID: tabID)
+                LibraryFocusDiagnostics.record("sidebar-focusstate-observed", tabID: tabID, detail: "focused tab ID changed")
+                #endif
                 previewedSidebarTabID = tabID
             }
         }
         .background(screenTheme.surfaces.canvas.swiftUIColor)
+        .overlay(alignment: .topTrailing) {
+            if isSidebarExpanded, sidebarClockEnabled {
+                SidebarClock()
+                    .padding(.top, 24)
+                    .padding(.trailing, 36)
+            }
+        }
         .onReceive(homeNavigationCoordinator?.$presentedSheet.eraseToAnyPublisher() ?? Just(nil).eraseToAnyPublisher()) { presentedRoute in
             let previousDetailsCoordinator = homeDetailsCoordinator
             homeDetailsCoordinator = presentedRoute?.route.id.hasPrefix("item-") == true ? presentedRoute?.coordinator : nil
@@ -494,6 +580,37 @@ struct MainTabView: View {
             guard focusedSidebarTabID == nil else { return }
             previewedSidebarTabID = tabID
         }
+        #if DEBUG
+        .onChange(of: displayedTabID) { _, tabID in
+            guard let tabID else { return }
+            sidebarPerformanceEvent("SidebarPreviewActivated", tabID: tabID)
+            LibraryFocusDiagnostics.record(
+                "displayed-tab-changed",
+                tabID: tabID,
+                detail: "selected=\(tabCoordinator.selectedTabID ?? "-") sidebarExpanded=\(isSidebarExpanded)"
+            )
+            if let pendingSidebarFocusStart = sidebarPerformanceState.pendingFocusStart,
+               pendingSidebarFocusStart.tabID == tabID
+            {
+                sidebarPerformanceEvent(
+                    "SidebarFocusToPreview",
+                    tabID: tabID,
+                    latencyMilliseconds: sidebarElapsedMilliseconds(since: pendingSidebarFocusStart.uptimeNanoseconds)
+                )
+                sidebarPerformanceState.pendingFocusStart = nil
+            }
+            if let pendingSidebarSelectionStart = sidebarPerformanceState.pendingSelectionStart,
+               pendingSidebarSelectionStart.tabID == tabID
+            {
+                sidebarPerformanceEvent(
+                    "SidebarSelectionToPreview",
+                    tabID: tabID,
+                    latencyMilliseconds: sidebarElapsedMilliseconds(since: pendingSidebarSelectionStart.uptimeNanoseconds)
+                )
+                sidebarPerformanceState.pendingSelectionStart = nil
+            }
+        }
+        #endif
     }
     #endif
 

@@ -25,7 +25,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     private var tabContentActivity
 
     private var isTabContentActive: Bool {
-        tabContentActivity.wrappedValue
+        tabContentActivity
     }
 
     @Environment(\.scenePhase)
@@ -69,6 +69,9 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
     @State
     private var pendingEpisodeRouteOrigin: EpisodeRouteIntent.Origin?
+
+    @State
+    private var tabActivationRefreshTask: Task<Void, Never>?
 
     @State
     private var savedFocusedElementID: Element.ID?
@@ -145,7 +148,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
     private var elementsView: some View {
         AlternateLayoutView {
             Color.clear
-        } content: { frame in
+        } content: { (frame: FrameAndSafeAreaInsets) in
 
             let insets: EdgeInsets = if #available(iOS 26, *), isSafeAreaBarApplied {
                 frame.safeAreaInsets + 10
@@ -153,7 +156,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
                 .zero + 10
             }
 
-            CollectionVGrid(
+            let grid = CollectionVGrid(
                 uniqueElements: viewModel.displayedElements,
                 layout: Element.layout(
                     for: libraryStyle,
@@ -177,12 +180,22 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             .proxy(gridProxy)
             .environment(\.episodeRouteOriginContext, episodeRouteOriginContext)
             #if os(tvOS)
-            .background {
-                CollectionVGridLocator(coordinator: gridScrollCoordinator)
-                    .id(gridLocatorID)
-            }
+            withInitialGridFocus(grid)
+                .background {
+                    CollectionVGridLocator(coordinator: gridScrollCoordinator, tabID: episodeRouteTabID)
+                        .id(gridLocatorID)
+                }
+                .ignoresSafeArea(edges: .horizontal)
+                .onAppear {
+                    recordGridReadiness("grid-view-appeared")
+                }
+                .onChange(of: viewModel.displayedElements.count) { _, _ in
+                    recordGridReadiness("grid-content-count-changed")
+                }
+            #else
+            grid
+                .ignoresSafeArea(edges: .horizontal)
             #endif
-            .ignoresSafeArea(edges: .horizontal)
         }
         .scrollIndicators(.hidden)
         .withViewContext(.isListRowSeparatorVisible)
@@ -191,14 +204,17 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         .focusSection()
         #endif
         .onReceive(tabItemSelected) { event in
+            #if DEBUG && os(tvOS)
+            LibraryFocusDiagnostics.record(
+                "tab-event-received",
+                tabID: episodeRouteTabID,
+                detail: "active=\(isTabContentActive) root=\(event.isRoot) repeat=\(event.isRepeat)"
+            )
+            #endif
             if isTabContentActive, event.isRepeat, event.isRoot {
                 #if os(tvOS)
                 gridProxy.scrollToTop(animated: false)
-                focusedElementID = nil
-                DispatchQueue.main.async {
-                    guard isTabContentActive else { return }
-                    focusedElementID = viewModel.displayedElements.first?.id
-                }
+                focusFirstGridElementForTabEntry()
                 #else
                 gridProxy.scrollToTop(animated: true)
                 #endif
@@ -287,25 +303,19 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             viewModel.setAutomaticRefreshActive(phase == .active)
         }
         .onChange(of: isTabContentActive) { _, active in
-            if active {
-                viewModel.refreshAutomaticallyIfStale()
-            }
+            #if DEBUG && os(tvOS)
+            LibraryFocusDiagnostics.record("tab-content-active-changed", tabID: episodeRouteTabID, detail: "active=\(active)")
+            #endif
+            tabContentActivityChanged(active)
         }
         #if os(tvOS)
         .onChange(of: navigationCoordinator.presentedSheet?.route.episodeRouteOrigin) { _, origin in
             episodeRouteOriginChanged(origin)
         }
-        .onReceive(Notifications[.itemUserDataDidChange].publisher.receive(on: DispatchQueue.main)) { update in
-            guard observesItemState,
-                  !viewModel.automaticallyRefreshes,
-                  update.userSessionID == userSessionManager.currentSession?.id,
-                  shouldRefreshItemLibrary(after: update)
-            else { return }
-
-            Task {
-                await viewModel.refreshCollectionForMembershipChange()
-            }
-        }
+        .onReceive(
+            Notifications[.itemUserDataDidChange].publisher.receive(on: DispatchQueue.main),
+            perform: itemUserDataDidChange
+        )
         #endif
         .onChange(of: viewModel.environment) {
             viewModel.refreshForEnvironmentChange()
@@ -324,6 +334,13 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             _ = scrollToLetter(letter)
         }
         .onChange(of: focusedElementID) { _, elementID in
+            #if DEBUG && os(tvOS)
+            LibraryFocusDiagnostics.record(
+                "grid-focusstate-observed",
+                tabID: episodeRouteTabID,
+                detail: "value=\(String(describing: elementID)); SwiftUI focus binding observation"
+            )
+            #endif
             if let elementID {
                 savedFocusedElementID = elementID
                 if isTabContentFocusable {
@@ -332,6 +349,13 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             }
         }
         .onChange(of: isEmptyContentFocused) { _, isFocused in
+            #if DEBUG && os(tvOS)
+            LibraryFocusDiagnostics.record(
+                "empty-content-focusstate-observed",
+                tabID: episodeRouteTabID,
+                detail: "focused=\(isFocused); SwiftUI focus binding observation"
+            )
+            #endif
             guard isFocused, isTabContentFocusable else { return }
             tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
         }
@@ -348,9 +372,11 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             }
         }
         .onDisappear {
+            tabActivationRefreshTask?.cancel()
+            tabActivationRefreshTask = nil
             viewModel.setAutomaticRefreshActive(false)
             isLetterRestorePending = viewModel.letterScrollTarget != nil
-            focusedElementID = nil
+            setFocusedElementID(nil, reason: "view disappeared reset")
             gridScrollCoordinator.locatorView = nil
             gridScrollCoordinator.collectionView = nil
         }
@@ -413,19 +439,19 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
             }
         }
         guard let index = exactIndex ?? fallbackIndex ?? elements.indices.first else {
-            focusedElementID = nil
+            setFocusedElementID(nil, reason: "details restoration found no valid item")
             return
         }
 
         let elementID = elements[index].id
         guard !gridScrollCoordinator.isItemVisible(at: index) else {
-            focusedElementID = elementID
+            setFocusedElementID(elementID, reason: "details restoration target already visible")
             return
         }
 
         gridScrollCoordinator.scrollToItem(at: index) {
             guard isTabContentActive else { return }
-            focusedElementID = elementID
+            setFocusedElementID(elementID, reason: "details restoration after scroll completion")
         }
     }
 
@@ -440,7 +466,7 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
         let elementID = viewModel.displayedElements[index].id
         gridScrollCoordinator.scrollToItem(at: index) {
             guard isTabContentActive else { return }
-            focusedElementID = elementID
+            setFocusedElementID(elementID, reason: "letter restoration after scroll completion")
         }
     }
 
@@ -468,6 +494,85 @@ struct PagingLibraryView<Library: PagingLibrary>: View where Library.Element: Li
 
             return initial == target
         }
+    }
+
+    private func tabContentActivityChanged(_ isActive: Bool) {
+        guard isActive else {
+            tabActivationRefreshTask?.cancel()
+            tabActivationRefreshTask = nil
+            return
+        }
+
+        tabActivationRefreshTask?.cancel()
+        tabActivationRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, isTabContentActive else { return }
+            viewModel.refreshAutomaticallyIfStale()
+            tabActivationRefreshTask = nil
+        }
+    }
+
+    private func itemUserDataDidChange(_ update: ItemUpdate) {
+        guard observesItemState,
+              !viewModel.automaticallyRefreshes,
+              update.userSessionID == userSessionManager.currentSession?.id,
+              shouldRefreshItemLibrary(after: update)
+        else { return }
+
+        Task {
+            await viewModel.refreshCollectionForMembershipChange()
+        }
+    }
+
+    @ViewBuilder
+    private func withInitialGridFocus(_ content: some View) -> some View {
+        if let library = viewModel.library as? ItemLibrary,
+           library.prefersInitialGridFocus,
+           let firstElementID = viewModel.displayedElements.first?.id
+        {
+            content.defaultFocus($focusedElementID, firstElementID, priority: .userInitiated)
+        } else {
+            content
+        }
+    }
+
+    private func focusFirstGridElementForTabEntry() {
+        guard isTabContentActive,
+              let library = viewModel.library as? ItemLibrary,
+              library.prefersInitialGridFocus,
+              let firstElementID = viewModel.displayedElements.first?.id
+        else { return }
+
+        setFocusedElementID(firstElementID, reason: "root tab-entry event")
+    }
+
+    private func setFocusedElementID(_ value: Element.ID?, reason: String) {
+        #if DEBUG && os(tvOS)
+        LibraryFocusDiagnostics.record(
+            "focusstate-request",
+            tabID: episodeRouteTabID,
+            detail: "value=\(String(describing: value)); reason=\(reason); request only, grant not implied"
+        )
+        #endif
+        focusedElementID = value
+    }
+
+    private func recordGridReadiness(_ event: String) {
+        #if DEBUG && os(tvOS)
+        let collectionView = gridScrollCoordinator.collectionView
+        let active = isTabContentActive
+        let count = viewModel.displayedElements.count
+        let firstID = String(describing: viewModel.displayedElements.first?.id)
+        let prefersGridFocus = (viewModel.library as? ItemLibrary)?.prefersInitialGridFocus ?? false
+        let isWindowReady = collectionView?.window != nil
+        let itemCount = collectionView?.numberOfItems(inSection: 0) ?? -1
+        LibraryFocusDiagnostics.record(
+            event,
+            tabID: episodeRouteTabID,
+            detail: "active=\(active) count=\(count) firstID=\(firstID) " +
+                "defaultFocus=\(prefersGridFocus) priority=userInitiated windowReady=\(isWindowReady) items=\(itemCount)"
+        )
+        #endif
     }
     #endif
 }
@@ -532,6 +637,7 @@ private final class CollectionVGridScrollCoordinator: ObservableObject {
 private struct CollectionVGridLocator: UIViewRepresentable {
 
     let coordinator: CollectionVGridScrollCoordinator
+    let tabID: String?
 
     final class LocatorView: UIView {
         var locate: (() -> Void)?
@@ -562,7 +668,22 @@ private struct CollectionVGridLocator: UIViewRepresentable {
                       self.coordinator.locatorView === uiView,
                       uiView.window != nil
                 else { return }
-                self.coordinator.collectionView = self.findCollectionView(near: uiView)
+                let collectionView = self.findCollectionView(near: uiView)
+                if self.coordinator.collectionView !== collectionView, let collectionView {
+                    #if DEBUG
+                    let firstCell = collectionView.cellForItem(at: IndexPath(item: 0, section: 0))
+                    let firstCellVisible = collectionView.indexPathsForVisibleItems.contains(IndexPath(item: 0, section: 0))
+                    let itemCount = collectionView.numberOfItems(inSection: 0)
+                    let bounds = collectionView.bounds
+                    LibraryFocusDiagnostics.record(
+                        "grid-collection-mounted",
+                        tabID: self.tabID,
+                        detail: "windowReady=true bounds=\(bounds) items=\(itemCount) " +
+                            "firstCellReady=\(firstCell != nil) firstCellVisible=\(firstCellVisible)"
+                    )
+                    #endif
+                }
+                self.coordinator.collectionView = collectionView
             }
         }
         uiView.locate?()

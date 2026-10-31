@@ -122,6 +122,18 @@ extension Defaults.Keys {
         UserKey("userThemePreferenceMigrationVersion", default: 0)
     }
 
+    static var sidebarClockEnabled: Key<Bool> {
+        UserKey("sidebarClockEnabled", default: true)
+    }
+
+    static var sidebarClockTimeFormat: Key<SidebarClockTimeFormat> {
+        UserKey("sidebarClockTimeFormat", default: .system)
+    }
+
+    static var sidebarClockSize: Key<SidebarClockSize> {
+        UserKey("sidebarClockSize", default: .medium)
+    }
+
     /// The appearance default for user contexts.
     /// /// Only use for `set`, use `appearance` for `get`.
     static var userAppearance: Key<AppAppearance> {

@@ -16,6 +16,7 @@ struct LetterPickerBarModifier: ViewModifier {
 
     let viewModel: FilterViewModel?
     let preferredLetter: ItemLetter?
+    let isFocusable: Bool
     let onLetterFocused: ((ItemLetter) -> Void)?
 
     @ViewBuilder
@@ -30,6 +31,7 @@ struct LetterPickerBarModifier: ViewModifier {
                     LetterPickerBar(
                         viewModel: viewModel,
                         preferredLetter: preferredLetter,
+                        isFocusable: isFocusable,
                         onLetterFocused: onLetterFocused
                     )
                 }

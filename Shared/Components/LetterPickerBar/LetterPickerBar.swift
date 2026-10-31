@@ -24,6 +24,7 @@ struct LetterPickerBar: PlatformView {
     var viewModel: FilterViewModel
 
     let preferredLetter: ItemLetter?
+    let isFocusable: Bool
     let onLetterFocused: ((ItemLetter) -> Void)?
 
     @State
@@ -193,12 +194,27 @@ struct LetterPickerBar: PlatformView {
                 preferredLetter ?? selectedLetter ?? letters.first ?? "#",
                 priority: focusedLetter == nil ? .userInitiated : .automatic
             )
+            .disabled(!isFocusable)
             .offset(x: edge == .leading ? -EdgeInsets.edgePadding / 1.5 : EdgeInsets.edgePadding / 1.5)
             .focusSection()
             .onChange(of: focusedLetter) { _, letter in
+                #if DEBUG && os(tvOS)
+                LibraryFocusDiagnostics.record(
+                    "letter-focusstate-observed",
+                    detail: "letter=\(letter.map { String(describing: $0) } ?? "nil"); SwiftUI focus binding observation"
+                )
+                #endif
                 guard let letter else { return }
                 onLetterFocused?(letter)
             }
+            #if DEBUG && os(tvOS)
+            .onAppear {
+                LibraryFocusDiagnostics.record("letter-picker-appeared", detail: "isFocusable=\(isFocusable)")
+            }
+            .onChange(of: isFocusable) { _, eligible in
+                LibraryFocusDiagnostics.record("letter-picker-eligibility", detail: "isFocusable=\(eligible)")
+            }
+            #endif
             .task(id: focusedLetter) {
                 activeLetter = focusedLetter
                 guard focusedLetter != nil else { return }

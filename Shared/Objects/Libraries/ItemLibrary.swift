@@ -36,6 +36,13 @@ struct ItemLibrary: PagingLibrary, SearchablePagingLibrary, WithRandomElementLib
         #endif
     }
 
+    #if os(tvOS)
+    var prefersInitialGridFocus: Bool {
+        guard parent.id == nil, let filters = environment?.filters else { return false }
+        return filters.itemTypes == [.movie] || filters.itemTypes == [.series]
+    }
+    #endif
+
     init(
         parent: BaseItemDto,
         filters: ItemFilterCollection? = nil
@@ -332,11 +339,51 @@ private struct ItemLibraryBody<Content: View>: View {
     @Router
     private var router
 
+    #if os(tvOS)
+    @EnvironmentObject
+    private var tabContentFocusHandoff: TabContentFocusHandoff
+
+    @Environment(\.episodeRouteTabID)
+    private var episodeRouteTabID
+
+    @FocusState
+    private var isSortControlFocused: Bool
+    #endif
+
     @ObservedObject
     private var viewModel: PagingLibraryViewModel<ItemLibrary>
 
     private let content: Content
     private let filterViewModel: FilterViewModel
+
+    #if os(tvOS)
+    private var isInitialGridFocusPending: Bool {
+        guard viewModel.library.prefersInitialGridFocus,
+              let episodeRouteTabID,
+              tabContentFocusHandoff.pendingTabID == episodeRouteTabID
+        else { return false }
+
+        if viewModel.displayedElements.isNotEmpty {
+            return true
+        }
+
+        switch viewModel.state {
+        case .initial, .refreshing:
+            return true
+        case .content, .error:
+            return false
+        }
+    }
+    #endif
+
+    private var isLetterPickerFocusable: Bool {
+        #if os(tvOS)
+        guard viewModel.library.prefersInitialGridFocus else { return true }
+        return !isInitialGridFocusPending && viewModel.displayedElements.isNotEmpty
+        #else
+        true
+        #endif
+    }
 
     init(
         filterViewModel: FilterViewModel,
@@ -352,7 +399,8 @@ private struct ItemLibraryBody<Content: View>: View {
         content
             .letterPickerBar(
                 filterViewModel: filterViewModel,
-                preferredLetter: viewModel.letterScrollTarget
+                preferredLetter: viewModel.letterScrollTarget,
+                isFocusable: isLetterPickerFocusable
             ) { letter in
                 viewModel.letterScrollTarget = letter
             }
@@ -394,7 +442,43 @@ private struct ItemLibraryBody<Content: View>: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SnowfinLibraryToolbarButtonStyle())
+        .focused($isSortControlFocused)
+        .disabled(isInitialGridFocusPending)
+        .onChange(of: isSortControlFocused) { _, isFocused in
+            #if DEBUG && os(tvOS)
+            LibraryFocusDiagnostics.record(
+                "filter-focusstate-observed",
+                tabID: episodeRouteTabID,
+                detail: "focused=\(isFocused); SwiftUI focus binding observation"
+            )
+            #endif
+            guard isFocused, viewModel.library.prefersInitialGridFocus else { return }
+            tabContentFocusHandoff.complete(tabID: episodeRouteTabID)
+        }
+        #if DEBUG && os(tvOS)
+        .onAppear {
+            recordLibraryFocusReadiness("filter-view-appeared")
+        }
+        .onChange(of: isInitialGridFocusPending) { _, _ in
+            recordLibraryFocusReadiness("filter-eligibility-changed")
+        }
+        .onChange(of: viewModel.displayedElements.count) { _, _ in
+            recordLibraryFocusReadiness("library-content-count-changed")
+        }
+        #endif
     }
+
+    #if DEBUG && os(tvOS)
+    private func recordLibraryFocusReadiness(_ event: String) {
+        LibraryFocusDiagnostics.record(
+            event,
+            tabID: episodeRouteTabID,
+            detail: "pending=\(isInitialGridFocusPending) filterDisabled=\(isInitialGridFocusPending) " +
+                "letterFocusable=\(isLetterPickerFocusable) count=\(viewModel.displayedElements.count) " +
+                "state=\(String(describing: viewModel.state))"
+        )
+    }
+    #endif
     #endif
 
     var body: some View {

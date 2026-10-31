@@ -22,11 +22,17 @@ final class TabContentFocusHandoff: ObservableObject {
     func begin(tabID: String?) {
         guard pendingTabID != tabID else { return }
         pendingTabID = tabID
+        #if DEBUG && os(tvOS)
+        LibraryFocusDiagnostics.record("handoff-began", tabID: tabID)
+        #endif
     }
 
     func complete(tabID: String?) {
         guard let tabID, pendingTabID == tabID else { return }
         pendingTabID = nil
+        #if DEBUG && os(tvOS)
+        LibraryFocusDiagnostics.record("handoff-completed", tabID: tabID)
+        #endif
     }
 }
 

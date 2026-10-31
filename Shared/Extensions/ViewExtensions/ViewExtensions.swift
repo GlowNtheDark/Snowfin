@@ -237,12 +237,14 @@ extension View {
     func letterPickerBar(
         filterViewModel: FilterViewModel?,
         preferredLetter: ItemLetter? = nil,
+        isFocusable: Bool = true,
         onLetterFocused: ((ItemLetter) -> Void)? = nil
     ) -> some View {
         modifier(
             LetterPickerBarModifier(
                 viewModel: filterViewModel,
                 preferredLetter: preferredLetter,
+                isFocusable: isFocusable,
                 onLetterFocused: onLetterFocused
             )
         )

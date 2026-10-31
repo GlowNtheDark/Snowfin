@@ -28,7 +28,7 @@ struct NavigationInjectionView: View {
     private var tabContentActivity
 
     private var isTabContentActive: Bool {
-        tabContentActivity.wrappedValue
+        tabContentActivity
     }
 
     @StateObject
@@ -171,7 +171,7 @@ struct NavigationInjectionView: View {
 // Ordinary navigation hosts remain active unless a retained tab opts out.
 extension EnvironmentValues {
     @Entry
-    var isTabContentActive: Binding<Bool> = .constant(true)
+    var isTabContentActive: Bool = true
 
     @Entry
     var isCurrentPresentationDismissible: Binding<Bool> = .constant(true)

@@ -35,6 +35,17 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
     private var registerHomeFocus
     @State
     private var homeFocusRows: [HomeFocusRow] = []
+    @Environment(\.isTabContentActive)
+    private var tabContentActivity
+
+    private var isTabContentActive: Bool {
+        tabContentActivity
+    }
+
+    @State
+    private var lastHomeTabDeactivation: Date?
+    @State
+    private var homeActivationRefreshTask: Task<Void, Never>?
 
     private var isHome: Bool {
         viewModel.provider is DefaultContentGroupProvider
@@ -190,6 +201,25 @@ struct ContentGroupView<Provider: ContentGroupProvider>: View {
                     focusCoordinator.cancelHomeReturn()
                 } else {
                     focusCoordinator.homeRefreshFinished()
+                }
+            }
+        }
+        .onChange(of: isTabContentActive) { wasActive, active in
+            guard isHome else { return }
+            if !active {
+                homeActivationRefreshTask?.cancel()
+                homeActivationRefreshTask = nil
+                lastHomeTabDeactivation = .now
+            } else if !wasActive, let lastHomeTabDeactivation {
+                homeActivationRefreshTask?.cancel()
+                homeActivationRefreshTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(200))
+                    guard !Task.isCancelled, isTabContentActive else { return }
+                    viewModel.refreshIfNeeded(
+                        sinceLastDisappear: Date.now.timeIntervalSince(lastHomeTabDeactivation)
+                    )
+                    self.lastHomeTabDeactivation = nil
+                    homeActivationRefreshTask = nil
                 }
             }
         }

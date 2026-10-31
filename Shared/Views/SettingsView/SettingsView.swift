@@ -25,6 +25,15 @@ struct SettingsView: View {
     @Default(.appFontChoice)
     private var appFontChoice
 
+    @Default(.sidebarClockEnabled)
+    private var sidebarClockEnabled
+
+    @Default(.sidebarClockTimeFormat)
+    private var sidebarClockTimeFormat
+
+    @Default(.sidebarClockSize)
+    private var sidebarClockSize
+
     @Environment(\.screenTheme)
     private var screenTheme
 
@@ -77,6 +86,7 @@ struct SettingsView: View {
             serverSection
             videoPlayerSection
             customizeSection
+            clockSection
             diagnosticsSection
         } image: {
             Image(.screenTvOSMark)
@@ -267,6 +277,27 @@ struct SettingsView: View {
             Text(L10n.viewsMayRequireRestart)
         }
     }
+
+    #if os(tvOS)
+    @ViewBuilder
+    private var clockSection: some View {
+        Section(L10n.clock) {
+            Toggle(L10n.showClock, isOn: $sidebarClockEnabled)
+
+            Picker(L10n.timeFormat, selection: $sidebarClockTimeFormat) {
+                ForEach(SidebarClockTimeFormat.allCases, id: \.self) { format in
+                    Text(format.title).tag(format)
+                }
+            }
+
+            Picker(L10n.clockSize, selection: $sidebarClockSize) {
+                ForEach(SidebarClockSize.allCases, id: \.self) { size in
+                    Text(size.title).tag(size)
+                }
+            }
+        }
+    }
+    #endif
 
     // MARK: - Diagnostics Section
 

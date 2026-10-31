@@ -292,6 +292,10 @@ internal enum L10n {
   internal static let cinematicBackground = L10n.tr("Localizable", "cinematicBackground", fallback: "Cinematic background")
   /// Client
   internal static let client = L10n.tr("Localizable", "client", fallback: "Client")
+  /// Clock
+  internal static let clock = L10n.tr("Localizable", "clock", fallback: "Clock")
+  /// Clock size
+  internal static let clockSize = L10n.tr("Localizable", "clockSize", fallback: "Clock size")
   /// Clip
   internal static let clip = L10n.tr("Localizable", "clip", fallback: "Clip")
   /// Close
@@ -1518,6 +1522,8 @@ internal enum L10n {
   internal static let short = L10n.tr("Localizable", "short", fallback: "Short")
   /// Show favorited
   internal static let showFavorited = L10n.tr("Localizable", "showFavorited", fallback: "Show favorited")
+  /// Show clock
+  internal static let showClock = L10n.tr("Localizable", "showClock", fallback: "Show Clock")
   /// Show missing episodes
   internal static let showMissingEpisodes = L10n.tr("Localizable", "showMissingEpisodes", fallback: "Show missing episodes")
   /// Show missing seasons
@@ -1564,6 +1570,10 @@ internal enum L10n {
   internal static let smaller = L10n.tr("Localizable", "smaller", fallback: "Smaller")
   /// Smallest
   internal static let smallest = L10n.tr("Localizable", "smallest", fallback: "Smallest")
+  /// Small
+  internal static let small = L10n.tr("Localizable", "small", fallback: "Small")
+  /// Medium
+  internal static let medium = L10n.tr("Localizable", "medium", fallback: "Medium")
   /// Smart
   internal static let smart = L10n.tr("Localizable", "smart", fallback: "Smart")
   /// Sort
@@ -1658,6 +1668,8 @@ internal enum L10n {
   internal static let syncPlay = L10n.tr("Localizable", "syncPlay", fallback: "SyncPlay")
   /// System
   internal static let system = L10n.tr("Localizable", "system", fallback: "System")
+  /// System Default
+  internal static let systemDefault = L10n.tr("Localizable", "systemDefault", fallback: "System Default")
   /// Tagline
   internal static let tagline = L10n.tr("Localizable", "tagline", fallback: "Tagline")
   /// Taglines
@@ -1706,6 +1718,8 @@ internal enum L10n {
   internal static let thumbImageDescription = L10n.tr("Localizable", "thumbImageDescription", fallback: "A thumbnail image used on the homepage and when browsing the library in thumbnail mode. Only applicable to video content.")
   /// Time
   internal static let time = L10n.tr("Localizable", "time", fallback: "Time")
+  /// Time format
+  internal static let timeFormat = L10n.tr("Localizable", "timeFormat", fallback: "Time Format")
   /// Time left
   internal static let timeLeft = L10n.tr("Localizable", "timeLeft", fallback: "Time left")
   /// Time limit
@@ -1716,6 +1730,10 @@ internal enum L10n {
   }
   /// Timestamp
   internal static let timestamp = L10n.tr("Localizable", "timestamp", fallback: "Timestamp")
+  /// 12-hour
+  internal static let twelveHour = L10n.tr("Localizable", "twelveHour", fallback: "12-hour")
+  /// 24-hour
+  internal static let twentyFourHour = L10n.tr("Localizable", "twentyFourHour", fallback: "24-hour")
   /// Title
   internal static let title = L10n.tr("Localizable", "title", fallback: "Title")
   /// Total time
