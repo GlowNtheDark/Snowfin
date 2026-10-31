@@ -419,7 +419,6 @@ extension VideoPlayer {
 
         #if os(tvOS)
         let onPressEvent = OnPressEvent()
-        private var lastTouchPokeTime: CFTimeInterval = 0
         #endif
 
         init(
@@ -696,6 +695,13 @@ extension VideoPlayer {
             }
 
             #if os(tvOS)
+            for direction in [UISwipeGestureRecognizer.Direction.up, .down] {
+                let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handlePlaybackSwipe(_:)))
+                swipe.direction = direction
+                swipe.delegate = self
+                view.addGestureRecognizer(swipe)
+            }
+
             containerState.$isPresentingOverlay
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] isPresenting in
@@ -995,15 +1001,17 @@ extension VideoPlayer {
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesBegan(touches, with: event)
 
-            let now = CACurrentMediaTime()
-            guard now - lastTouchPokeTime > 1.0 else { return }
-            lastTouchPokeTime = now
-
-            if !containerState.isPresentingOverlay {
-                containerState.isPresentingOverlay = true
-            } else {
+            if containerState.isPresentingOverlay {
                 containerState.timer.poke()
             }
+        }
+
+        @objc
+        private func handlePlaybackSwipe(_ gesture: UISwipeGestureRecognizer) {
+            guard gesture.state == .ended else { return }
+
+            let type: UIPress.PressType = gesture.direction == .up ? .upArrow : .downArrow
+            onPressEvent.send(.init(type: type, phase: .ended, defaultAction: {}))
         }
 
         private func forwardPressesBegan(
@@ -1128,6 +1136,11 @@ extension VideoPlayer {
         }
 
         private func handleSelectEnded(_ press: UIPress, event: UIPressesEvent?) {
+            #if os(tvOS) && DEBUG
+            PlaybackScrubDiagnostics.log(
+                "select-ended scrubbing=\(containerState.isScrubbing) focused=\(containerState.isProgressBarFocused) current=\(manager.seconds) pending=\(containerState.scrubbedSeconds.value)"
+            )
+            #endif
             if containerState.isPresentingSegmentOverlay {
                 forwardPressesEnded([press], event: event)
                 return
@@ -1161,6 +1174,11 @@ extension VideoPlayer {
         }
 
         func handleMenuEnded() {
+            #if os(tvOS) && DEBUG
+            PlaybackScrubDiagnostics.log(
+                "back-ended scrubbing=\(containerState.isScrubbing) focused=\(containerState.isProgressBarFocused) current=\(manager.seconds) pending=\(containerState.scrubbedSeconds.value)"
+            )
+            #endif
             #if DEBUG
             EpisodePlaybackDiagnostics.logEpisodesBack(
                 manager.episodePlaybackDiagnosticID,
@@ -1268,6 +1286,67 @@ extension VideoPlayer {
 // MARK: - tvOS PressEvent
 
 #if os(tvOS)
+extension VideoPlayer.UIVideoPlayerContainerViewController: UIGestureRecognizerDelegate {
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        let isPlaybackSwipe = gestureRecognizer is UISwipeGestureRecognizer || otherGestureRecognizer is UISwipeGestureRecognizer
+        let horizontalPan = (gestureRecognizer as? DirectionalPanGestureRecognizer) ??
+            (otherGestureRecognizer as? DirectionalPanGestureRecognizer)
+
+        guard isPlaybackSwipe,
+              let horizontalPan,
+              horizontalPan.direction == .horizontal,
+              containerState.isPresentingOverlay,
+              containerState.isProgressBarFocused,
+              !containerState.isScrubbing,
+              !containerState.isPresentingSupplement,
+              !containerState.isPresentingPlaybackDropdown,
+              !containerState.isPresentingPlaybackEpisodes,
+              !containerState.isPresentingSegmentOverlay
+        else { return false }
+
+        let velocity = horizontalPan.velocity(in: horizontalPan.view)
+        let isHorizontalIntent = abs(velocity.x) > abs(velocity.y)
+        #if DEBUG
+        PlaybackScrubDiagnostics.log(
+            "gesture-arbitration horizontalPan=true horizontalIntent=\(isHorizontalIntent) velocityX=\(velocity.x) velocityY=\(velocity.y)"
+        )
+        #endif
+        return isHorizontalIntent
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer is UISwipeGestureRecognizer else {
+            return true
+        }
+
+        guard !containerState.isPresentingSegmentOverlay,
+              !containerState.isPresentingSupplement,
+              !hasPresentedChild(in: self)
+        else { return false }
+
+        if containerState.isPresentingPlaybackDropdown {
+            if containerState.isPlaybackDropdownTopNavigationFocused {
+                return true
+            }
+            if containerState.playbackDropdownSectionIndex == 0 {
+                return true
+            }
+            return containerState.playbackDropdownSectionIndex == 1 &&
+                containerState.isPlaybackDropdownSettingFocused
+        }
+
+        return true
+    }
+
+    private func hasPresentedChild(in controller: UIViewController) -> Bool {
+        controller.presentedViewController != nil || controller.children.contains { hasPresentedChild(in: $0) }
+    }
+}
+
 extension VideoPlayer.UIVideoPlayerContainerViewController {
 
     struct PressEvent {

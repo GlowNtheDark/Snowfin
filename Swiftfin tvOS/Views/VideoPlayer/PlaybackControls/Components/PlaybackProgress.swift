@@ -131,9 +131,14 @@ extension VideoPlayer.PlaybackControls {
                     }
                 ),
                 total: 100,
-                isScrollingEnabled: manager.playbackRequestStatus == .paused && manager.state != .loadingItem
+                isScrollingEnabled: manager.state != .loadingItem
             )
             .onEditingChanged { isEditing in
+                #if DEBUG
+                PlaybackScrubDiagnostics.log(
+                    "editing-changed active=\(isEditing) pending=\(scrubbedSecondsBox.value) current=\(manager.seconds)"
+                )
+                #endif
                 guard isEditing else { return } // Release ends the gesture; Select commits the pending seek.
                 isScrubbing = true
             }

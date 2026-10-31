@@ -153,6 +153,12 @@ extension VideoPlayer.PlaybackControls {
                 containerState.isPlaybackDropdownTopNavigationFocused = true
             }
             .onChange(of: focusedTarget) {
+                if case .setting = focusedTarget {
+                    containerState.isPlaybackDropdownSettingFocused = true
+                } else {
+                    containerState.isPlaybackDropdownSettingFocused = false
+                }
+
                 guard let focusedTarget else {
                     containerState.isPlaybackDropdownTopNavigationFocused = false
                     return
@@ -172,6 +178,9 @@ extension VideoPlayer.PlaybackControls {
                     containerState.playbackDropdownSettingIndex = setting.index
                     containerState.playbackDropdownFocusRequest = .setting(setting.index)
                 }
+            }
+            .onDisappear {
+                containerState.isPlaybackDropdownSettingFocused = false
             }
             .onChange(of: containerState.playbackDropdownSectionIndex) { _, index in
                 guard Section.allCases.indices.contains(index) else { return }

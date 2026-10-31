@@ -35,6 +35,7 @@ struct VideoPlayerSlider<Value: BinaryFloatingPoint>: View {
             value: $value,
             total: total,
             isScrollingEnabled: isScrollingEnabled,
+            decelerates: false,
             onEditingChanged: onEditingChanged
         ) {
             VideoPlayerSliderContent()

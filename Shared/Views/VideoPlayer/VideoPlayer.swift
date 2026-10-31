@@ -39,9 +39,11 @@ struct VideoPlayer: View {
     #if os(tvOS)
     #endif
 
+    #if !os(tvOS)
     // TODO: move behavior to `PlaybackProgress`?
     @State
     private var scrubbingStartTime: CFTimeInterval? = nil
+    #endif
     @State
     private var subtitleOffset: Duration = .zero
 
@@ -143,6 +145,7 @@ struct VideoPlayer: View {
                 proxy.setAspectFill(containerState.isAspectFilled)
             }
         }
+        #if !os(tvOS)
         .onChange(of: containerState.isScrubbing) {
             if containerState.isScrubbing {
                 scrubbingStartTime = CACurrentMediaTime()
@@ -158,6 +161,7 @@ struct VideoPlayer: View {
             manager.seconds = scrubbedSeconds
             proxy.setSeconds(scrubbedSeconds)
         }
+        #endif
         .onChange(of: subtitleOffset) {
             if let proxy = proxy as? MediaPlayerOffsetConfigurable {
                 proxy.setSubtitleOffset(subtitleOffset)

@@ -164,7 +164,7 @@ class VideoPlayerContainerState: ObservableObject {
     let centerOffsetBox: PublishedBox<CGFloat> = .init(initialValue: 0)
     let jumpProgressObserver: JumpProgressObserver = .init()
     let scrubbedSeconds: PublishedBox<Duration> = .init(initialValue: .zero)
-    let timer: PokeIntervalTimer = .init(defaultInterval: UIDevice.isTV ? 10 : 5)
+    let timer: PokeIntervalTimer = .init(defaultInterval: 5)
     let toastProxy: ToastProxy = .init()
 
     weak var containerView: VideoPlayer.UIVideoPlayerContainerViewController?
@@ -219,6 +219,10 @@ class VideoPlayerContainerState: ObservableObject {
     @Published
     var isPlaybackDropdownTopNavigationFocused: Bool = false
 
+    /// True while focus is on a playback setting card.
+    @Published
+    var isPlaybackDropdownSettingFocused: Bool = false
+
     /// True while focus is inside the dropdown's Technical Details rows.
     @Published
     var isTechnicalDetailsContentFocused = false
@@ -256,14 +260,33 @@ class VideoPlayerContainerState: ObservableObject {
     #endif
 
     func commitScrub() {
+        #if os(tvOS) && DEBUG
+        PlaybackScrubDiagnostics.log(
+            "commit-request scrubbing=\(isScrubbing) current=\(manager?.seconds ?? .zero) pending=\(scrubbedSeconds.value)"
+        )
+        #endif
         guard isScrubbing else { return }
 
-        manager?.proxy?.setSeconds(scrubbedSeconds.value)
-        manager?.setPlaybackRequestStatus(status: .playing)
+        manager?.seconds = scrubbedSeconds.value
+        if let proxy = manager?.proxy {
+            proxy.setSeconds(scrubbedSeconds.value)
+            #if os(tvOS) && DEBUG
+            PlaybackScrubDiagnostics.log("commit-issued target=\(scrubbedSeconds.value)")
+            #endif
+        } else {
+            #if os(tvOS) && DEBUG
+            PlaybackScrubDiagnostics.log("commit-no-proxy target=\(scrubbedSeconds.value)")
+            #endif
+        }
         isScrubbing = false
     }
 
     func cancelScrub() {
+        #if os(tvOS) && DEBUG
+        PlaybackScrubDiagnostics.log(
+            "cancel-request scrubbing=\(isScrubbing) current=\(manager?.seconds ?? .zero) pending=\(scrubbedSeconds.value)"
+        )
+        #endif
         guard isScrubbing else { return }
 
         if let manager {
