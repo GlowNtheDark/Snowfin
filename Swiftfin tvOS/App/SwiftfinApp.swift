@@ -15,6 +15,10 @@ struct SwiftfinApp: App {
     init() {
         Self.configure()
 
+        #if DEBUG
+        ScreenTopShelfFilesystemProbe.runOnce()
+        #endif
+
         UINavigationBar.appearance().titleTextAttributes = [.foregroundColor: UIColor.label]
     }
 

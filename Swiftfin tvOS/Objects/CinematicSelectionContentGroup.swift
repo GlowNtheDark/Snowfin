@@ -10,6 +10,15 @@ import Combine
 import JellyfinAPI
 import SwiftUI
 
+#if DEBUG
+import OSLog
+
+private let topShelfDiagnosticsLogger = Logger(
+    subsystem: "com.snowfin.tvos",
+    category: "TopShelf"
+)
+#endif
+
 struct CinematicSelectionContentGroup: ContentGroup, HomeCollectionInvalidatableContentGroup {
 
     static let homeGroupID = "cinematic-selection"
@@ -113,14 +122,25 @@ final class CinematicSelectionContentGroupViewModel: ViewModel, WithRefresh {
             }
             .store(in: &cancellables)
 
-        resumeViewModel.$elements
+        let topShelfPublisher = resumeViewModel.$elements
             .dropFirst()
             .sink { elements in
+                let items = Self.deduplicatedContinueItems(Array(elements))
+                #if DEBUG
+                topShelfDiagnosticsLogger.debug(
+                    "[SCREEN_TOP_SHELF] Home Continue Watching publisher emitted elements=\(elements.count, privacy: .public) items=\(items.count, privacy: .public)"
+                )
+                #endif
                 ScreenTopShelfSnapshotWriter.update(
-                    items: Self.deduplicatedContinueItems(Array(elements))
+                    items: items
                 )
             }
-            .store(in: &cancellables)
+        topShelfPublisher.store(in: &cancellables)
+        #if DEBUG
+        topShelfDiagnosticsLogger.debug(
+            "[SCREEN_TOP_SHELF] Home Continue Watching publisher subscription established currentElements=\(self.resumeViewModel.elements.count, privacy: .public)"
+        )
+        #endif
     }
 
     func refresh() {
