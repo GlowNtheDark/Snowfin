@@ -312,7 +312,7 @@ final class ItemContentGroupProvider: ViewModel, ContentGroupProvider {
 
         #if os(tvOS)
         let shouldShowGenreAndStudioGroups = item.type != .series
-        let shouldShowGenreGroup = item.type != .episode && item.type != .series
+        let shouldShowGenreGroup = false
         #else
         let shouldShowGenreAndStudioGroups = true
         let shouldShowGenreGroup = true

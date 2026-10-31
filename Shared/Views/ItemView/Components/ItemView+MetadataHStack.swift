@@ -22,12 +22,6 @@ extension ItemView {
                     Text(premiereYear)
                 }
 
-                if item.type != .episode,
-                   let firstGenre = item.genres?.first
-                {
-                    Text(firstGenre)
-                }
-
                 if let seasonEpisodeLabel = item.seasonEpisodeLabel {
                     Text(seasonEpisodeLabel)
                 }
